@@ -1,0 +1,27 @@
+[package]
+name = "gnss-protos"
+version = "0.4.2"
+license = "MPL-2.0"
+authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
+description = "GNSS protos encoder and decoder"
+homepage = "https://github.com/rtk-rs"
+repository = "https://github.com/rtk-rs/gnss-protos"
+keywords = ["geo", "gps", "galileo"]
+categories = ["science", "science::geo", "parsing"]
+edition = "2021"
+rust-version = "1.64"
+
+exclude = [
+    "data/*",
+]
+
+[features]
+default = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
+
+[dependencies]
+log = "0.4"
+thiserror = "2"
