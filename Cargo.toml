@@ -16,12 +16,15 @@ exclude = [
 ]
 
 [features]
-default = []
+default = ["gps"]
+
+# Unlock GPS protocol
+gps = []
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 
 [dependencies]
-log = "0.4"
-thiserror = "2"
+log = { version = "0.4", optional = true }
+num-traits = { version = "0.2", default-features = false }

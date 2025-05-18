@@ -1,0 +1,40 @@
+use crate::gps::GpsError;
+
+pub(crate) const GPS_TLM_PREAMBLE_MASK: u32 = 0x8b0000;
+const GPS_TLM_MESSAGE_MASK: u32 = 0x00fff8;
+const GPS_TLM_MESSAGE_SHIFT: u32 = 3;
+const GPS_TLM_INTEGRITY_BIT_MASK: u32 = 0x000004;
+const GPS_TLM_RESERVED_BIT_MASK: u32 = 0x000002;
+
+impl GpsQzssTelemetry {
+    pub(crate) fn decode(dword: u32) -> Result<Self, GpsError> {
+        // preamble verification
+        if dword & GPS_TLM_PREAMBLE_MASK == GPS_TLM_PREAMBLE_MASK {
+            return Err(GpsError::InvalidPreamble);
+        }
+
+        let tlm_message = ((dword & GPS_TLM_MESSAGE_MASK) >> GPS_TLM_MESSAGE_SHIFT) as u16;
+        let integrity = (dword & GPS_TLM_INTEGRITY_BIT_MASK) > 0;
+        let reserved = (dword & GPS_TLM_RESERVED_BIT_MASK) > 0;
+
+        Ok(Self {
+            tlm_message,
+            integrity,
+            reserved,
+        })
+    }
+}
+
+/// [GpsQzssTelemetry] marks the beginning of each frame
+#[derive(Debug, Default, Clone)]
+pub struct GpsQzssTelemetry {
+    /// TLM Message
+    pub tlm_message: u16,
+
+    /// Integrity bit is asserted means the conveying signal is provided
+    /// with an enhanced level of integrity assurance.
+    pub integrity: bool,
+
+    /// Reserved bit
+    pub reserved: bool,
+}
