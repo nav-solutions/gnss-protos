@@ -1,15 +1,18 @@
 use crate::twos_complement;
 
-const WORD3_WEEK_MASK: u32 = 0xffC000;
-const WORD3_WEEK_SHIFT: u32 = 14; // remaining payload bits
-const WORD3_CA_P_L2_MASK: u32 = 0x003000;
-const WORD3_CA_P_L2_SHIFT: u32 = 12;
-const WORD3_URA_MASK: u32 = 0x000f00;
-const WORD3_URA_SHIFT: u32 = 8;
-const WORD3_HEALTH_MASK: u32 = 0x0000fc;
-const WORD3_HEALTH_SHIFT: u32 = 2;
-const WORD3_IODC_MASK: u32 = 0x000003;
-const WORD3_IODC_SHIFT: u32 = 0;
+#[cfg(feature = "log")]
+use log::trace;
+
+const WORD3_WEEK_MASK: u32 = 0xffc00000;
+const WORD3_WEEK_SHIFT: u32 = 22;
+const WORD3_CA_P_L2_MASK: u32 = 0x00300000;
+const WORD3_CA_P_L2_SHIFT: u32 = 20;
+const WORD3_URA_MASK: u32 = 0x000f0000;
+const WORD3_URA_SHIFT: u32 = 16;
+const WORD3_HEALTH_MASK: u32 = 0x0000fc00;
+const WORD3_HEALTH_SHIFT: u32 = 10;
+const WORD3_IODC_MASK: u32 = 0x000000c0;
+const WORD3_IODC_SHIFT: u32 = 6;
 
 const WORD4_L2P_DATA_MASK: u32 = 0x800000;
 const WORD4_RESERVED_MASK: u32 = 0x7fffff;
@@ -38,7 +41,7 @@ const WORD10_AF0_MASK: u32 = 0x3fffff;
 const WORD10_AF0_SHIFT: u32 = 0;
 
 /// GPS / QZSS Frame #1 interpretation
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct GpsQzssFrame1 {
     /// 10-bit week counter (no rollover compensation).
     pub week: u16,
@@ -107,7 +110,7 @@ pub struct GpsQzssFrame1 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word3 {
+pub struct Word3 {
     /// 10-bit week counter
     pub week: u16,
 
@@ -124,12 +127,12 @@ pub struct GpsUnscaledEph1Word3 {
     pub iodc_msb: u8,
 }
 
-impl GpsUnscaledEph1Word3 {
+impl Word3 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word3 dword=0x{:08x}", dword);
 
         let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
-
         let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
         let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
         let health = ((dword & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
@@ -146,14 +149,16 @@ impl GpsUnscaledEph1Word3 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word4 {
+pub struct Word4 {
     pub l2_p_data_flag: bool,
     pub reserved: u32,
 }
 
-impl GpsUnscaledEph1Word4 {
+impl Word4 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word4 dword=0x{:08x}", dword);
+
         let l2_p_data_flag = (dword & WORD4_L2P_DATA_MASK) > 0;
         let reserved = ((dword & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
         Self {
@@ -164,35 +169,39 @@ impl GpsUnscaledEph1Word4 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word5 {
+pub struct Word5 {
     /// 24-bit reserved
     pub reserved: u32,
 }
 
-impl GpsUnscaledEph1Word5 {
+impl Word5 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word5 dword=0x{:08x}", dword);
+
         let reserved = dword & WORD5_RESERVED_MASK;
         Self { reserved }
     }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word6 {
+pub struct Word6 {
     /// 24-bit reserved
     pub reserved: u32,
 }
 
-impl GpsUnscaledEph1Word6 {
+impl Word6 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word6 dword=0x{:08x}", dword);
+
         let reserved = dword & WORD6_RESERVED_MASK;
         Self { reserved }
     }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word7 {
+pub struct Word7 {
     /// 16-bit reserved
     pub reserved: u16,
 
@@ -200,9 +209,11 @@ pub struct GpsUnscaledEph1Word7 {
     pub tgd: i8,
 }
 
-impl GpsUnscaledEph1Word7 {
+impl Word7 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word7 dword=0x{:08x}", dword);
+
         let reserved = ((dword & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
         let tgd = ((dword & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
         Self { reserved, tgd }
@@ -210,7 +221,7 @@ impl GpsUnscaledEph1Word7 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word8 {
+pub struct Word8 {
     /// 8-bit IODC LSB to associate with Word # 3
     pub iodc_lsb: u8,
 
@@ -218,9 +229,11 @@ pub struct GpsUnscaledEph1Word8 {
     pub toc: u16,
 }
 
-impl GpsUnscaledEph1Word8 {
+impl Word8 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word8 dword=0x{:08x}", dword);
+
         let iodc_lsb = ((dword & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
         let toc = ((dword & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
         Self { iodc_lsb, toc }
@@ -228,7 +241,7 @@ impl GpsUnscaledEph1Word8 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word9 {
+pub struct Word9 {
     /// 8 bit af2
     pub af2: i8,
 
@@ -236,9 +249,11 @@ pub struct GpsUnscaledEph1Word9 {
     pub af1: i16,
 }
 
-impl GpsUnscaledEph1Word9 {
+impl Word9 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword);
+        #[cfg(feature = "log")]
+        trace!("GPS Word9 dword=0x{:08x}", dword);
+
         let af2 = ((dword & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
         let af1 = ((dword & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
         Self { af2, af1 }
@@ -246,17 +261,73 @@ impl GpsUnscaledEph1Word9 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GpsUnscaledEph1Word10 {
+pub struct Word10 {
     /// 22-bit af0
     pub af0: i32,
 }
 
-impl GpsUnscaledEph1Word10 {
+impl Word10 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dword = gps_qzss_bitmask(dword) >> 2;
+        #[cfg(feature = "log")]
+        trace!("GPS Word10 dword=0x{:08x}", dword);
+
         let af0 = ((dword & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
         let af0 = twos_complement(af0, 0x3fffff, 0x200000);
 
         Self { af0 }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct UnscaledFrame {
+    pub word3: Word3,
+    pub word4: Word4,
+    pub word5: Word5,
+    pub word6: Word6,
+    pub word7: Word7,
+    pub word8: Word8,
+    pub word9: Word9,
+    pub word10: Word10,
+}
+
+impl UnscaledFrame {
+    pub fn scale(&self) -> GpsQzssFrame1 {
+        GpsQzssFrame1 {
+            week: self.word3.week,
+            ca_or_p_l2: self.word3.ca_or_p_l2,
+            ura: self.word3.ura,
+            health: self.word3.health,
+            reserved_word4: self.word4.reserved,
+            reserved_word5: self.word5.reserved,
+            reserved_word6: self.word6.reserved,
+            reserved_word7: self.word7.reserved,
+
+            iodc: {
+                let mut iodc = self.word3.iodc_msb as u16;
+                iodc <<= 8;
+                iodc |= self.word8.iodc_lsb as u16;
+                iodc
+            },
+
+            l2_p_data_flag: self.word4.l2_p_data_flag,
+
+            tgd_s: (self.word7.tgd as f64) / 2.0_f64.powi(31),
+            toc_s: (self.word8.toc as u32) * 16,
+            af2_s_s2: (self.word9.af2 as f64) / 2.0_f64.powi(55),
+            af1_s_s: (self.word9.af1 as f64) / 2.0_f64.powi(43),
+            af0_s: (self.word10.af0 as f64) / 2.0_f64.powi(31),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn word3_decoding() {
+        let dword = 0xA55AA55A;
+        let decoded = Word3::decode(dword);
+        assert_eq!(decoded.week, 0x00);
     }
 }

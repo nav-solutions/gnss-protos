@@ -1,7 +1,13 @@
 #[cfg(feature = "log")]
 use log::{error, trace};
 
-use crate::gps::{GpsQzssFrame, GpsQzssHow, GpsQzssTelemetry, GPS_BITMASK};
+use crate::gps::{
+    frame1::{
+        Word10 as Frame1Word10, Word3 as Frame1Word3, Word4 as Frame1Word4, Word5 as Frame1Word5,
+        Word6 as Frame1Word6, Word7 as Frame1Word7, Word8 as Frame1Word8, Word9 as Frame1Word9,
+    },
+    GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, UnscaledSubframe, GPS_BITMASK,
+};
 
 #[derive(Debug, Copy, Clone, Default)]
 enum State {
@@ -33,6 +39,9 @@ pub struct GpsQzssDecoder {
     /// Latest [GpsQzssHow]
     how: GpsQzssHow,
 
+    /// Pending [UnscaledSubframe]
+    subframe: UnscaledSubframe,
+
     /// True if parity verification is requested
     parity_check: bool,
 }
@@ -41,12 +50,13 @@ impl Default for GpsQzssDecoder {
     /// Creates a default [GpsQzssDecoder] with parity bit verification
     fn default() -> Self {
         Self {
+            parity_check: true,
             state: Default::default(),
             ptr: Default::default(),
             dword: Default::default(),
             tlm: Default::default(),
             how: Default::default(),
-            parity_check: true,
+            subframe: Default::default(),
         }
     }
 }
@@ -97,7 +107,7 @@ impl GpsQzssDecoder {
                     match how {
                         Ok(how) => {
                             self.how = how;
-                            self.state = State::Word(0);
+                            self.state = State::Word(3);
                         },
                         #[cfg(feature = "log")]
                         Err(e) => {
@@ -109,28 +119,74 @@ impl GpsQzssDecoder {
                 },
 
                 State::Word(word) => match word {
-                    0 => {
-                        self.state = State::Word(1);
-                    },
-                    1 => {
-                        self.state = State::Word(2);
-                    },
-                    2 => {
-                        self.state = State::Word(3);
-                    },
                     3 => {
+                        let word3 = Frame1Word3::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word3 = word3,
+                        }
+
                         self.state = State::Word(4);
                     },
                     4 => {
+                        let word4 = Frame1Word4::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word4 = word4,
+                        }
+
                         self.state = State::Word(5);
                     },
                     5 => {
+                        let word5 = Frame1Word5::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word5 = word5,
+                        }
+
                         self.state = State::Word(6);
                     },
                     6 => {
+                        let word6 = Frame1Word6::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word6 = word6,
+                        }
+
+                        self.state = State::Word(7);
+                    },
+                    7 => {
+                        let word7 = Frame1Word7::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word7 = word7,
+                        }
+                        self.state = State::Word(8);
+                    },
+                    8 => {
+                        let word8 = Frame1Word8::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word8 = word8,
+                        }
+
+                        self.state = State::Word(9);
+                    },
+                    9 => {
+                        let word9 = Frame1Word9::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word9 = word9,
+                        }
+                        self.state = State::Word(10);
+                    },
+                    10 => {
+                        let word10 = Frame1Word10::decode(self.dword);
+                        match &mut self.subframe {
+                            UnscaledSubframe::Eph1(frame1) => frame1.word10 = word10,
+                        }
+
                         ret = Some(GpsQzssFrame {
-                            telemetry: self.tlm.clone(),
                             how: self.how.clone(),
+                            telemetry: self.tlm.clone(),
+                            subframe: match &self.subframe {
+                                UnscaledSubframe::Eph1(frame1) => {
+                                    GpsQzssSubframe::Eph1(frame1.scale())
+                                },
+                            },
                         });
 
                         self.reset();
@@ -165,6 +221,7 @@ impl GpsQzssDecoder {
             parity_check: false,
             tlm: self.tlm.clone(),
             how: self.how.clone(),
+            subframe: self.subframe.clone(),
         }
     }
 
@@ -178,7 +235,7 @@ impl GpsQzssDecoder {
 
 #[cfg(test)]
 mod test {
-    use crate::gps::GpsQzssDecoder;
+    use crate::{gps::GpsQzssDecoder, GpsQzssSubframe};
 
     #[cfg(feature = "std")]
     use crate::tests::init_logger;
@@ -250,21 +307,33 @@ mod test {
         let mut found = false;
 
         let bytes = [
-            0x8B, 0x00, 0x00, 0x00, // TLM
-            0x00, 0x00, 0x01, 0x00, // HOW
-            0x00, 0x00, 0x01, 0x00, // Word 3
-            0x00, 0x00, 0x01, 0x00, // Word 4
-            0x00, 0x00, 0x01, 0x00, // Word 5
-            0x00, 0x00, 0x01, 0x00, // Word 6
-            0x00, 0x00, 0x01, 0x00, // Word 7
-            0x00, 0x00, 0x01, 0x00, // Word 8
-            0x00, 0x00, 0x01, 0x00, // Word 9
+            // TLM
+            0x8B, 0x04, 0xF8, 0x00, 0x54, 0x9F, 0x25, 0x00, 0x13, 0xE4, 0x00, 0x04, // WORD3
+            0x10, 0x4F, 0x5D, 0x31, // WORD4
+            0x97, 0x44, 0xE6, 0xE7, // WORD5
+            0x07, 0x75, 0x57, 0x83, // WORD6
+            0x33, 0x0C, 0x80, 0xB5, // WORD7
+            0x92, 0x50, 0x42, 0xA1, // WORD8
+            0x80, 0x00, 0x16, 0x84, // WORD9
+            0x31, 0x2C, 0x30, 0x33, // WORD10
         ];
 
         let mut decoder = GpsQzssDecoder::default();
 
         for byte in bytes {
             if let Some(frame) = decoder.parse(byte) {
+                match frame.subframe {
+                    GpsQzssSubframe::Eph1(frame1) => {
+                        assert_eq!(frame1.af2_s_s2, 0.0);
+                        assert!((frame1.af1_s_s - 1.023181539495e-011).abs() < 1e-14);
+                        assert!((frame1.af0_s - -4.524961113930e-004).abs() < 1.0e-11);
+                        assert_eq!(frame1.week, 318);
+                        assert_eq!(frame1.toc_s, 266_400);
+                        assert_eq!(frame1.health, 0);
+                    },
+                    _ => panic!("incorrect subframe decoded!"),
+                }
+
                 found = true;
             }
         }

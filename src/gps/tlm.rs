@@ -1,10 +1,10 @@
 use crate::gps::GpsError;
 
-pub(crate) const GPS_TLM_PREAMBLE_MASK: u32 = 0x8b0000;
-const GPS_TLM_MESSAGE_MASK: u32 = 0x00fff8;
-const GPS_TLM_MESSAGE_SHIFT: u32 = 3;
-const GPS_TLM_INTEGRITY_BIT_MASK: u32 = 0x000004;
-const GPS_TLM_RESERVED_BIT_MASK: u32 = 0x000002;
+pub(crate) const GPS_TLM_PREAMBLE_MASK: u32 = 0x8b000000;
+const GPS_TLM_MESSAGE_MASK: u32 = 0x00fff800;
+const GPS_TLM_MESSAGE_SHIFT: u32 = 11;
+const GPS_TLM_INTEGRITY_BIT_MASK: u32 = 0x00000400;
+const GPS_TLM_RESERVED_BIT_MASK: u32 = 0x00000200;
 
 #[cfg(feature = "log")]
 use log::trace;

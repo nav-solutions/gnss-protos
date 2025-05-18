@@ -6,6 +6,13 @@ use crate::gps::GpsQzssTelemetry;
 #[cfg(feature = "log")]
 use log::trace;
 
+const TOW_MASK: u32 = 0xffff8000;
+const TOW_SHIFT: u32 = 15;
+const ALERT_MASK: u32 = 0x00004000;
+const AS_MASK: u32 = 0x00002000;
+const FRAMEID_MASK: u32 = 0x00001C00;
+const FRAMEID_SHIFT: u32 = 10;
+
 /// [GpsQzssHow] marks the beginning of each frame, following [GpsQzssTelemetry]
 #[derive(Debug, Default, Clone)]
 /// [GpsHowWord]
@@ -29,12 +36,12 @@ impl GpsQzssHow {
         #[cfg(feature = "log")]
         trace!("GPS HOW dword=0x{:08x}", dword);
 
-        let tow = ((dword & 0x3fffe000) >> 13) as u32;
+        let tow = ((dword & TOW_MASK) >> TOW_SHIFT) as u32;
 
-        let frame_id = GpsQzssFrameId::decode(((dword >> (GPS_PARITY_SIZE + 2)) & 0x07) as u8)?;
+        let frame_id = GpsQzssFrameId::decode(((dword & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
 
-        let anti_spoofing = (dword & 0x08) > 0;
-        let alert = (dword & 0x10) > 0;
+        let anti_spoofing = (dword & ALERT_MASK) > 0;
+        let alert = (dword & AS_MASK) > 0;
 
         Ok(Self {
             alert,
