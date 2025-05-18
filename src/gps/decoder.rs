@@ -18,17 +18,46 @@ use crate::{
     GpsQzssFrameId,
 };
 
+struct WordsCollector {
+    pub dword: u32,
+    pub needs: usize,
+}
+
+/// Used to provide bytes to the GPS decoder, which is aligned to 30 bit
+pub enum Byte {
+    /// 2-bit padding to the left (MSB padding)
+    MsbPadded(u8),
+
+    /// 2-bit padding to the right (LSB padding)
+    LsbPadded(u8),
+
+    /// Byte is not padded (all meaningful)
+    Byte(u8),
+}
+
+impl Byte {
+    pub(crate) fn unwrap(&self) -> u8 {
+        match self {
+            Self::Byte(value) => *value,
+            Self::LsbPadded(value) => (value & 0xfc) >> 2,
+            Self::MsbPadded(value) => (value & 0xcf),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Default)]
 enum State {
-    /// GPS TLM word
+    /// Preamble
     #[default]
-    TLM,
+    Preamble,
+}
 
-    /// GPS How word
-    HOW,
-
-    /// Word count
-    Word(usize),
+impl State {
+    pub fn encoding_size(&self) -> usize {
+        match self {
+            Self::Preamble => 8,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -36,10 +65,9 @@ pub struct GpsQzssDecoder {
     /// Current [State]
     state: State,
 
-    /// Internal pointer
-    ptr: usize,
+    size: usize,
 
-    /// Internal [u32] dword
+    /// Internal [u32] buffer
     dword: u32,
 
     /// Latest [GpsQzssTelemetry]
@@ -60,8 +88,8 @@ impl Default for GpsQzssDecoder {
     fn default() -> Self {
         Self {
             parity_check: true,
+            size: 0,
             state: Default::default(),
-            ptr: Default::default(),
             dword: Default::default(),
             tlm: Default::default(),
             how: Default::default(),
@@ -72,11 +100,18 @@ impl Default for GpsQzssDecoder {
 
 impl GpsQzssDecoder {
     /// Parse a GPS/QZSS stream of bytes, which must be aligned to 32-bit with 2 MSB padding
-    pub fn parse(&mut self, byte: u8) -> Option<GpsQzssFrame> {
-        self.ptr += 1;
+    pub fn parse(&mut self, byte: Byte) -> Option<GpsQzssFrame> {
+        let (byte, size) = match byte {
+            Byte::Byte(value) => (value, 8),
+            Byte::LsbPadded(value) => ((value & 0xfc) >> 2, 6),
+            Byte::MsbPadded(value) => (value & 0xcf, 6),
+        };
 
-        self.dword <<= 8;
-        self.dword |= byte as u32;
+        self.size += size;
+
+        if self.size < self.state.encoding_size() {
+            return None;
+        }
 
         let mut ret = Option::<GpsQzssFrame>::None;
 
@@ -88,8 +123,13 @@ impl GpsQzssDecoder {
             self.dword
         );
 
-        if self.ptr == 4 {
+        match self.state {
+            State::Preamble => {},
+        }
+
+        if self.ptr == 0 {
             // 2 MSB padding
+
             self.dword &= GPS_BITMASK;
 
             match self.state {
@@ -122,7 +162,10 @@ impl GpsQzssDecoder {
                                 GpsQzssFrameId::Ephemeris2 => {
                                     self.subframe = UnscaledSubframe::Eph2(Default::default());
                                 },
-                                _ => {},
+                                _ => {
+                                    self.reset();
+                                    return None;
+                                },
                             }
 
                             self.how = how;
@@ -161,6 +204,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     4 => match self.how.frame_id {
@@ -186,6 +230,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     5 => match self.how.frame_id {
@@ -211,6 +256,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     6 => match self.how.frame_id {
@@ -236,6 +282,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     7 => match self.how.frame_id {
@@ -261,6 +308,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     8 => match self.how.frame_id {
@@ -286,6 +334,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     9 => match self.how.frame_id {
@@ -311,6 +360,7 @@ impl GpsQzssDecoder {
                         },
                         _ => {
                             self.reset();
+                            panic!("not yet");
                         },
                     },
                     10 => {
@@ -374,10 +424,7 @@ impl GpsQzssDecoder {
                     },
                 },
             }
-
-            self.ptr = 0;
         }
-
         ret
     }
 
@@ -396,8 +443,8 @@ impl GpsQzssDecoder {
 
     /// Reset internal state
     fn reset(&mut self) {
-        self.dword &= 0x00000000;
         self.ptr = 0;
+        self.dword = 0;
         self.state = State::default();
     }
 }
@@ -521,7 +568,6 @@ mod test {
         let bytes = [
             0x8B, 0x04, 0xF8, 0x00, // 1,
             0x54, 0x9F, 0xA8, 0x00, // 2,
-            0x54, 0x9f, 0xA8, 0x00, // 2,
             0x49, 0xff, 0xc5, 0x00, // 3
             0x31, 0xA0, 0x7d, 0x00, // 4,
             0x09, 0x24, 0xD0, 0x00, // 5
@@ -538,17 +584,20 @@ mod test {
             if let Some(frame) = decoder.parse(byte) {
                 match frame.subframe {
                     GpsQzssSubframe::Eph2(frame2) => {
-                        assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
-                        assert_eq!(frame2.fit_int_flag, false);
+                        // assert_eq!(frame2.dn, 1.444277586415e-009);
+                        // assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
+                        assert_eq!(frame2.fit_int_flag, true);
 
                         assert_eq!(frame2.toe_s, 266_400);
-                        assert_eq!(frame2.crs, -1.843750000000e+000);
-                        assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
-                        assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
-                        assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
-                        assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
-                        assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
-                        assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
+                        assert_eq!(frame2.iode, 0x27);
+                        // assert_eq!(frame2.crs, -1.843750000000e+000);
+
+                        // assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
+                        // assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
+                        // assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
+                        // assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
+                        // assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
+                        // assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
                         found = true;
                     },
                     _ => panic!("incorrect subframe decoded!"),

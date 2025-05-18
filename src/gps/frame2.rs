@@ -1,3 +1,6 @@
+#[cfg(feature = "log")]
+use log::trace;
+
 const WORD3_IODE_MASK: u32 = 0x3fc00000;
 const WORD3_IODE_SHIFT: u32 = 22;
 const WORD3_CRS_MASK: u32 = 0x003fffc0;
@@ -73,13 +76,22 @@ pub struct GpsQzssFrame2 {
 #[derive(Debug, Default, Clone)]
 pub struct Word3 {
     pub iode: u8,
-    pub crs: u16,
+    pub crs: i16,
 }
 
 impl Word3 {
     pub(crate) fn decode(dword: u32) -> Self {
         let iode = ((dword & WORD3_IODE_MASK) >> WORD3_IODE_SHIFT) as u8;
-        let crs = ((dword & WORD3_CRS_MASK) >> WORD3_CRS_SHIFT) as u16;
+        let crs = ((dword & WORD3_CRS_MASK) >> WORD3_CRS_SHIFT) as i16;
+
+        #[cfg(feature = "log")]
+        trace!(
+            "GPS Word3 dword=0x{:08x} iode=0x{:02} crs=0x{:04x}",
+            dword,
+            iode,
+            crs
+        );
+
         Self { iode, crs }
     }
 }
@@ -87,7 +99,7 @@ impl Word3 {
 #[derive(Debug, Default, Clone)]
 pub struct Word4 {
     /// Delta n
-    pub dn: u16,
+    pub dn: i16,
 
     /// M0 (8) msb, you need to associate this to Subframe #2 Word #5
     pub m0_msb: u8,
@@ -95,8 +107,12 @@ pub struct Word4 {
 
 impl Word4 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let dn = ((dword & WORD4_DELTA_N_MASK) >> WORD4_DELTA_N_SHIFT) as u16;
+        let dn = ((dword & WORD4_DELTA_N_MASK) >> WORD4_DELTA_N_SHIFT) as i16;
         let m0_msb = ((dword & WORD4_M0_MSB_MASK) >> WORD4_M0_MSB_SHIFT) as u8;
+
+        #[cfg(feature = "log")]
+        trace!("GPS Word3 dword=0x{:08x} dn=0x{:04x}", dword, dn);
+
         Self { dn, m0_msb }
     }
 }
@@ -116,7 +132,7 @@ impl Word5 {
 
 #[derive(Debug, Default, Clone)]
 pub struct Word6 {
-    pub cuc: u16,
+    pub cuc: i16,
 
     /// MSB(8) eccentricity, you need to associate this to Subframe #2 Word #7
     pub e_msb: u8,
@@ -124,7 +140,7 @@ pub struct Word6 {
 
 impl Word6 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let cuc = ((dword & WORD6_CUC_MASK) >> WORD6_CUC_SHIFT) as u16;
+        let cuc = ((dword & WORD6_CUC_MASK) >> WORD6_CUC_SHIFT) as i16;
         let e_msb = ((dword & WORD6_E_MSB_MASK) >> WORD6_E_MSB_SHIFT) as u8;
         Self { cuc, e_msb }
     }
@@ -145,7 +161,7 @@ impl Word7 {
 
 #[derive(Debug, Default, Clone)]
 pub struct Word8 {
-    pub cus: u16,
+    pub cus: i16,
 
     /// MSB(8) A⁻¹: you need to associate this to Subframe #2 Word #9
     pub sqrt_a_msb: u8,
@@ -153,7 +169,7 @@ pub struct Word8 {
 
 impl Word8 {
     pub(crate) fn decode(dword: u32) -> Self {
-        let cus = ((dword & WORD8_CUS_MASK) >> WORD8_CUS_SHIFT) as u16;
+        let cus = ((dword & WORD8_CUS_MASK) >> WORD8_CUS_SHIFT) as i16;
         let sqrt_a_msb = ((dword & WORD8_SQRTA_MSB_MASK) >> WORD8_SQRTA_MSB_SHIFT) as u8;
         Self { cus, sqrt_a_msb }
     }
@@ -189,6 +205,8 @@ impl Word10 {
         let toe = ((dword & WORD10_TOE_MASK) >> WORD10_TOE_SHIFT) as u16;
         let fitint = (dword & WORD10_FITINT_MASK) > 0;
         let aodo = ((dword & WORD10_AODO_MASK) >> WORD10_AODO_SHIFT) as u8;
+        #[cfg(feature = "log")]
+        trace!("GPS Word10 dword=0x{:08x} toe=0x{:04x}", dword, toe);
         Self { toe, fitint, aodo }
     }
 }
