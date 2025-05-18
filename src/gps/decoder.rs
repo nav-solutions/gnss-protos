@@ -308,7 +308,8 @@ mod test {
 
         let bytes = [
             // TLM
-            0x8B, 0x04, 0xF8, 0x00, 0x54, 0x9F, 0x25, 0x00, 0x13, 0xE4, 0x00, 0x04, // WORD3
+            0x8B, 0x04, 0xF8, 0x00, 0x54, 0x9F, 0x25, 0x00, //HOW
+            0x13, 0xE4, 0x00, 0x04, // WORD3
             0x10, 0x4F, 0x5D, 0x31, // WORD4
             0x97, 0x44, 0xE6, 0xE7, // WORD5
             0x07, 0x75, 0x57, 0x83, // WORD6
@@ -330,11 +331,10 @@ mod test {
                         assert_eq!(frame1.week, 318);
                         assert_eq!(frame1.toc_s, 266_400);
                         assert_eq!(frame1.health, 0);
+                        found = true;
                     },
                     _ => panic!("incorrect subframe decoded!"),
                 }
-
-                found = true;
             }
         }
 

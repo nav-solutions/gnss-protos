@@ -3,42 +3,44 @@ use crate::twos_complement;
 #[cfg(feature = "log")]
 use log::trace;
 
-const WORD3_WEEK_MASK: u32 = 0xffc00000;
-const WORD3_WEEK_SHIFT: u32 = 22;
-const WORD3_CA_P_L2_MASK: u32 = 0x00300000;
-const WORD3_CA_P_L2_SHIFT: u32 = 20;
-const WORD3_URA_MASK: u32 = 0x000f0000;
-const WORD3_URA_SHIFT: u32 = 16;
-const WORD3_HEALTH_MASK: u32 = 0x0000fc00;
-const WORD3_HEALTH_SHIFT: u32 = 10;
+const WORD3_WEEK_MASK: u32 = 0x3ff00000;
+const WORD3_WEEK_SHIFT: u32 = 20;
+const WORD3_CA_P_L2_MASK: u32 = 0x000C0000;
+const WORD3_CA_P_L2_SHIFT: u32 = 18;
+const WORD3_URA_MASK: u32 = 0x0003C000;
+const WORD3_URA_SHIFT: u32 = 14;
+const WORD3_HEALTH_MASK: u32 = 0x00003f00;
+const WORD3_HEALTH_SHIFT: u32 = 8;
 const WORD3_IODC_MASK: u32 = 0x000000c0;
 const WORD3_IODC_SHIFT: u32 = 6;
 
-const WORD4_L2P_DATA_MASK: u32 = 0x800000;
-const WORD4_RESERVED_MASK: u32 = 0x7fffff;
-const WORD4_RESERVED_SHIFT: u32 = 0;
+const WORD4_L2P_DATA_MASK: u32 = 0x20000000;
+const WORD4_RESERVED_MASK: u32 = 0x1fffffc0;
+const WORD4_RESERVED_SHIFT: u32 = 6;
 
-const WORD5_RESERVED_MASK: u32 = 0xffffff;
+const WORD5_RESERVED_MASK: u32 = 0x3fffffc0;
+const WORD5_RESERVED_SHIFT: u32 = 6;
 
-const WORD6_RESERVED_MASK: u32 = 0xffffff;
+const WORD6_RESERVED_MASK: u32 = 0x3fffffc0;
+const WORD6_RESERVED_SHIFT: u32 = 6;
 
-const WORD7_RESERVED_MASK: u32 = 0xffff00;
-const WORD7_RESERVED_SHIFT: u32 = 8;
-const WORD7_TGD_MASK: u32 = 0x0000ff;
-const WORD7_TGD_SHIFT: u32 = 0;
+const WORD7_RESERVED_MASK: u32 = 0x3fffc000;
+const WORD7_RESERVED_SHIFT: u32 = 14;
+const WORD7_TGD_MASK: u32 = 0x00003fc0;
+const WORD7_TGD_SHIFT: u32 = 6;
 
-const WORD8_IODC_MASK: u32 = 0xff0000;
-const WORD8_IODC_SHIFT: u32 = 16;
-const WORD8_TOC_MASK: u32 = 0x00ffff;
-const WORD8_TOC_SHIFT: u32 = 0;
+const WORD8_IODC_MASK: u32 = 0x3fc00000;
+const WORD8_IODC_SHIFT: u32 = 22;
+const WORD8_TOC_MASK: u32 = 0x003fffc0;
+const WORD8_TOC_SHIFT: u32 = 6;
 
-const WORD9_AF2_MASK: u32 = 0xff0000;
-const WORD9_AF2_SHIFT: u32 = 16;
-const WORD9_AF1_MASK: u32 = 0x00ffff;
-const WORD9_AF1_SHIFT: u32 = 0;
+const WORD9_AF2_MASK: u32 = 0x3fc00000;
+const WORD9_AF2_SHIFT: u32 = 22;
+const WORD9_AF1_MASK: u32 = 0x003fffc0;
+const WORD9_AF1_SHIFT: u32 = 6;
 
-const WORD10_AF0_MASK: u32 = 0x3fffff;
-const WORD10_AF0_SHIFT: u32 = 0;
+const WORD10_AF0_MASK: u32 = 0x3fffff00;
+const WORD10_AF0_SHIFT: u32 = 8;
 
 /// GPS / QZSS Frame #1 interpretation
 #[derive(Debug, Default, Clone)]
@@ -131,7 +133,6 @@ impl Word3 {
     pub(crate) fn decode(dword: u32) -> Self {
         #[cfg(feature = "log")]
         trace!("GPS Word3 dword=0x{:08x}", dword);
-
         let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
         let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
         let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
@@ -158,7 +159,6 @@ impl Word4 {
     pub(crate) fn decode(dword: u32) -> Self {
         #[cfg(feature = "log")]
         trace!("GPS Word4 dword=0x{:08x}", dword);
-
         let l2_p_data_flag = (dword & WORD4_L2P_DATA_MASK) > 0;
         let reserved = ((dword & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
         Self {
@@ -178,8 +178,7 @@ impl Word5 {
     pub(crate) fn decode(dword: u32) -> Self {
         #[cfg(feature = "log")]
         trace!("GPS Word5 dword=0x{:08x}", dword);
-
-        let reserved = dword & WORD5_RESERVED_MASK;
+        let reserved = (dword & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
         Self { reserved }
     }
 }
@@ -194,8 +193,7 @@ impl Word6 {
     pub(crate) fn decode(dword: u32) -> Self {
         #[cfg(feature = "log")]
         trace!("GPS Word6 dword=0x{:08x}", dword);
-
-        let reserved = dword & WORD6_RESERVED_MASK;
+        let reserved = (dword & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
         Self { reserved }
     }
 }
@@ -270,10 +268,8 @@ impl Word10 {
     pub(crate) fn decode(dword: u32) -> Self {
         #[cfg(feature = "log")]
         trace!("GPS Word10 dword=0x{:08x}", dword);
-
         let af0 = ((dword & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
         let af0 = twos_complement(af0, 0x3fffff, 0x200000);
-
         Self { af0 }
     }
 }
@@ -317,17 +313,5 @@ impl UnscaledFrame {
             af1_s_s: (self.word9.af1 as f64) / 2.0_f64.powi(43),
             af0_s: (self.word10.af0 as f64) / 2.0_f64.powi(31),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn word3_decoding() {
-        let dword = 0xA55AA55A;
-        let decoded = Word3::decode(dword);
-        assert_eq!(decoded.week, 0x00);
     }
 }
