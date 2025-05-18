@@ -1,7 +1,7 @@
 //! GPS / QZSS protocol
 
 mod frame1;
-// mod frame2;
+mod frame2;
 // mod frame3;
 mod decoder;
 mod errors;
@@ -16,20 +16,21 @@ pub use how::GpsQzssHow;
 pub use tlm::GpsQzssTelemetry;
 
 pub use frame1::GpsQzssFrame1;
+pub use frame2::GpsQzssFrame2;
 
 use frame1::UnscaledFrame as UnscaledFrame1;
+use frame2::UnscaledFrame as UnscaledFrame2;
 
 const GPS_BITMASK: u32 = 0x3fffffff;
-const GPS_PARITY_SIZE: u32 = 6;
 
 /// Unscaled subframe
 #[derive(Debug, Clone)]
 pub(crate) enum UnscaledSubframe {
     /// GPS Ephemeris Frame #1
     Eph1(UnscaledFrame1),
-    // /// GPS Ephemeris Frame #2
-    // Eph2(GpsQzssFrame2),
 
+    /// GPS Ephemeris Frame #2
+    Eph2(UnscaledFrame2),
     // /// GPS Ephemeris Frame #3
     // Eph3(GpsQzssFrame3),
 }
@@ -44,6 +45,7 @@ impl UnscaledSubframe {
     pub fn scale(&self) -> GpsQzssSubframe {
         match self {
             Self::Eph1(frame1) => GpsQzssSubframe::Eph1(frame1.scale()),
+            Self::Eph2(frame2) => GpsQzssSubframe::Eph2(frame2.scale()),
         }
     }
 }
@@ -66,9 +68,9 @@ pub struct GpsQzssFrame {
 pub enum GpsQzssSubframe {
     /// GPS Ephemeris Frame #1
     Eph1(GpsQzssFrame1),
-    // /// GPS Ephemeris Frame #2
-    // Eph2(GpsQzssFrame2),
 
+    /// GPS Ephemeris Frame #2
+    Eph2(GpsQzssFrame2),
     // /// GPS Ephemeris Frame #3
     // Eph3(GpsQzssFrame3),
 }
