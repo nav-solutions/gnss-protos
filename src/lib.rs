@@ -20,6 +20,9 @@ mod gps;
 #[cfg(feature = "gps")]
 pub use gps::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Two's complement parsing & interpretation.
 /// ## Input
 /// - raw bytes as [u32]

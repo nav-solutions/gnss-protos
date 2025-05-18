@@ -24,3 +24,21 @@ impl GpsQzssFrameId {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::GpsQzssFrameId;
+
+    #[test]
+    fn frame_id_decoding() {
+        for (value, expected) in [
+            (1, GpsQzssFrameId::Ephemeris1),
+            (2, GpsQzssFrameId::Ephemeris2),
+            (3, GpsQzssFrameId::Ephemeris3),
+        ] {
+            let frame_id = GpsQzssFrameId::decode(value).unwrap();
+
+            assert_eq!(frame_id, expected);
+        }
+    }
+}

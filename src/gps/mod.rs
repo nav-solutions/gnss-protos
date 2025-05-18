@@ -3,17 +3,17 @@
 // mod frame1;
 // mod frame2;
 // mod frame3;
-mod tlm;
-mod how;
-mod frame_id;
-mod errors;
 mod decoder;
+mod errors;
+mod frame_id;
+mod how;
+mod tlm;
 
 pub use decoder::GpsQzssDecoder;
-pub use tlm::GpsQzssTelemetry;
-pub use how::GpsQzssHow;
-pub use frame_id::GpsQzssFrameId;
 pub use errors::GpsError;
+pub use frame_id::GpsQzssFrameId;
+pub use how::GpsQzssHow;
+pub use tlm::GpsQzssTelemetry;
 
 // pub use frame1::GpsQzssFrame1;
 // pub use frame2::GpsQzssFrame2;
@@ -43,7 +43,6 @@ pub struct GpsQzssFrame {
 
     /// [GpsQzssHow] describes following frame.
     pub how: GpsQzssHow,
-
     // /// [GpsQzssSubframe] depends on associated How.
     // pub subframe: GpsQzssSubframe,
 }

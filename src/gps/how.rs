@@ -1,7 +1,10 @@
-use crate::gps::{GpsQzssFrameId, GpsError};
+use crate::gps::{GpsError, GpsQzssFrameId, GPS_PARITY_SIZE};
 
 #[cfg(doc)]
 use crate::gps::GpsQzssTelemetry;
+
+#[cfg(feature = "log")]
+use log::trace;
 
 /// [GpsQzssHow] marks the beginning of each frame, following [GpsQzssTelemetry]
 #[derive(Debug, Default, Clone)]
@@ -22,10 +25,13 @@ pub struct GpsQzssHow {
 }
 
 impl GpsQzssHow {
-    pub(crate) fn decode(dword: u32) -> Result<Self, GpsError> {
+    pub(crate) fn decode(dword: u32, _: bool) -> Result<Self, GpsError> {
+        #[cfg(feature = "log")]
+        trace!("GPS HOW dword=0x{:08x}", dword);
+
         let tow = ((dword & 0x3fffe000) >> 13) as u32;
 
-        let frame_id = GpsQzssFrameId::decode(((dword >> 8) & 0x07) as u8)?;
+        let frame_id = GpsQzssFrameId::decode(((dword >> (GPS_PARITY_SIZE + 2)) & 0x07) as u8)?;
 
         let anti_spoofing = (dword & 0x08) > 0;
         let alert = (dword & 0x10) > 0;

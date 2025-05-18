@@ -6,8 +6,14 @@ const GPS_TLM_MESSAGE_SHIFT: u32 = 3;
 const GPS_TLM_INTEGRITY_BIT_MASK: u32 = 0x000004;
 const GPS_TLM_RESERVED_BIT_MASK: u32 = 0x000002;
 
+#[cfg(feature = "log")]
+use log::trace;
+
 impl GpsQzssTelemetry {
-    pub(crate) fn decode(dword: u32) -> Result<Self, GpsError> {
+    pub(crate) fn decode(dword: u32, _: bool) -> Result<Self, GpsError> {
+        #[cfg(feature = "log")]
+        trace!("GPS TLM dword=0x{:08x}", dword);
+
         // preamble verification
         if dword & GPS_TLM_PREAMBLE_MASK == GPS_TLM_PREAMBLE_MASK {
             return Err(GpsError::InvalidPreamble);
