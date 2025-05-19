@@ -21,35 +21,6 @@ pub use frame2::GpsQzssFrame2;
 use frame1::UnscaledFrame as UnscaledFrame1;
 use frame2::UnscaledFrame as UnscaledFrame2;
 
-const GPS_BITMASK: u32 = 0x3fffffff;
-
-/// Unscaled subframe
-#[derive(Debug, Clone)]
-pub(crate) enum UnscaledSubframe {
-    /// GPS Ephemeris Frame #1
-    Eph1(UnscaledFrame1),
-
-    /// GPS Ephemeris Frame #2
-    Eph2(UnscaledFrame2),
-    // /// GPS Ephemeris Frame #3
-    // Eph3(GpsQzssFrame3),
-}
-
-impl Default for UnscaledSubframe {
-    fn default() -> Self {
-        Self::Eph1(UnscaledFrame1::default())
-    }
-}
-
-impl UnscaledSubframe {
-    pub fn scale(&self) -> GpsQzssSubframe {
-        match self {
-            Self::Eph1(frame1) => GpsQzssSubframe::Eph1(frame1.scale()),
-            Self::Eph2(frame2) => GpsQzssSubframe::Eph2(frame2.scale()),
-        }
-    }
-}
-
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Clone)]
 pub struct GpsQzssFrame {
@@ -71,6 +42,44 @@ pub enum GpsQzssSubframe {
 
     /// GPS Ephemeris Frame #2
     Eph2(GpsQzssFrame2),
-    // /// GPS Ephemeris Frame #3
-    // Eph3(GpsQzssFrame3),
+}
+
+impl Default for GpsQzssSubframe {
+    fn default() -> Self {
+        Self::Eph1(Default::default())
+    }
+}
+
+impl GpsQzssSubframe {
+    /// Unwraps self as [GpsQzssFrame1] reference (if feasible)
+    pub fn as_eph1(&self) -> Option<&GpsQzssFrame1> {
+        match self {
+            Self::Eph1(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as mutable [GpsQzssFrame1] reference (if feasible)
+    pub fn as_mut_eph1(&mut self) -> Option<&mut GpsQzssFrame1> {
+        match self {
+            Self::Eph1(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    pub fn as_eph2(&self) -> Option<&GpsQzssFrame2> {
+        match self {
+            Self::Eph2(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
+        match self {
+            Self::Eph2(frame) => Some(frame),
+            _ => None,
+        }
+    }
 }

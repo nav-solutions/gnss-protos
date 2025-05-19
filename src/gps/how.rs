@@ -17,8 +17,8 @@ const FRAMEID_SHIFT: u32 = 10;
 #[derive(Debug, Default, Clone)]
 /// [GpsHowWord]
 pub struct GpsQzssHow {
-    /// TOW in seconds
-    pub tow_s: u32,
+    /// TOW (in seconds)
+    pub tow: u32,
 
     /// Following Frame ID (to decode following data words)
     pub frame_id: GpsQzssFrameId,
@@ -45,7 +45,7 @@ impl GpsQzssHow {
             alert,
             frame_id,
             anti_spoofing,
-            tow_s: tow * 6,
+            tow: tow * 6,
         })
     }
 }
