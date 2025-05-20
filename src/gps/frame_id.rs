@@ -1,6 +1,6 @@
 use crate::gps::GpsError;
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Copy, Clone)]
 pub enum GpsQzssFrameId {
     #[default]
     /// GPS / QZSS Ephemeris subframe #1

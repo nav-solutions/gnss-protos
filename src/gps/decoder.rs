@@ -1,50 +1,13 @@
-#[cfg(feature = "log")]
-use log::{debug, error, trace};
-
 use crate::{
     bitstream::{BitStream, Byte},
     gps::{
-        frame1::{
-            Word10 as Frame1Word10, Word3 as Frame1Word3, Word4 as Frame1Word4,
-            Word5 as Frame1Word5, Word6 as Frame1Word6, Word7 as Frame1Word7, Word8 as Frame1Word8,
-            Word9 as Frame1Word9,
-        },
-        frame2::{
-            Word10 as Frame2Word10, Word3 as Frame2Word3, Word4 as Frame2Word4,
-            Word5 as Frame2Word5, Word6 as Frame2Word6, Word7 as Frame2Word7, Word8 as Frame2Word8,
-            Word9 as Frame2Word9,
-        },
-        GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+        GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, State,
+        GPS_PREAMBLE_MASK,
     },
-    GpsQzssFrameId,
 };
 
-const GPS_PREAMBLE_MASK: u8 = 0x8b;
-const GPS_DATAWORD_SIZE: usize = 30;
-
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub enum State {
-    #[default]
-    Preamble,
-    TlmIntegrity,
-    Parity,
-    Tow,
-    FrameId,
-    DataWord,
-}
-
-impl State {
-    pub fn encoding_size(&self) -> usize {
-        match self {
-            Self::Preamble => 8,
-            Self::TlmIntegrity => 16,
-            Self::Parity => 6,
-            Self::Tow => 17,
-            Self::FrameId => 7,
-            Self::DataWord => GPS_DATAWORD_SIZE - 6,
-        }
-    }
-}
+#[cfg(feature = "log")]
+use log::{debug, trace};
 
 pub struct GpsQzssDecoder {
     /// Frame counter
@@ -85,13 +48,29 @@ impl Default for GpsQzssDecoder {
             tlm: Default::default(),
             how: Default::default(),
             subframe: Default::default(),
-            bitstream: BitStream::msbf().with_collection_size(state.encoding_size()),
+            bitstream: BitStream::msbf().with_collection_size(state.bin_size()),
         }
     }
 }
 
 impl GpsQzssDecoder {
-    /// Parse a GPS/QZSS stream of bytes, which must be aligned to 32-bit with 2 MSB padding
+    /// Parses a GPS/QZSS stream of bytes, returns a [GpsQzssFrame] when
+    /// one is identified and the last data word has been correctly processed.
+    ///
+    /// GPS binary streams are made 30 bit MSBF data words, so they are not aligned.   
+    /// This API allows you to consider both real (unaligned) GPS data streams and
+    /// streams that were padded to a convenient format.
+    ///
+    /// 1. Let's say you only have _actual_ GPS data from a binary file.
+    /// Simply forward all bytes and wrap them as plain [Byte::Byte]s.   
+    /// Even in that scenario, the stream is most likely terminated by some padding
+    /// during the file encoding process. Emphasize that with one last [Byte::LsbPadded],
+    /// and we are able to process all data frames.   
+    ///
+    /// 2. When working with padded data words (usually 32-bit padded),
+    /// like when using U-Blox raw data streams for instance, that insert a 2-MSB bit padding.
+    /// Since GPS expects MSB first, then streams would start with a single [Byte::MsbPadded], and follow
+    /// with 3 plain data [Byte::Byte]s. Remember that GPS expects MSB first!
     pub fn parse(&mut self, byte: Byte) -> Option<GpsQzssFrame> {
         let dword = self.bitstream.collect(byte)?;
 
@@ -113,47 +92,27 @@ impl GpsQzssDecoder {
                     State::Preamble
                 }
             },
-            State::TlmIntegrity => State::Parity,
-            State::Parity => {
-                match self.prev_state {
-                    State::TlmIntegrity => State::Tow,
-                    State::FrameId => {
-                        self.ptr = 0;
-                        State::DataWord
-                    },
-                    _ => {
-                        // invalid case!
-                        State::default()
-                    },
-                }
-            },
-            State::Tow => {
-                let tow = (dword & 0x1ffff) * 6;
-                self.how.tow = tow;
+            State::TlmIntegrity => {
+                self.tlm = GpsQzssTelemetry {
+                    message: (dword >> 2) as u16,
+                    integrity: (dword & 0x02) > 0,
+                    reserved_bits: (dword & 0x01) > 0,
+                };
 
                 #[cfg(feature = "log")]
-                debug!("GPS TOW - value={} (s)", tow);
+                debug!("decoded tlm {:?}", self.tlm);
 
-                State::FrameId
+                State::Parity
             },
-            State::FrameId => {
-                self.how.alert = (dword & 0x80) > 0;
-                self.how.anti_spoofing = (dword & 0x40) > 0;
-
-                if let Ok(frame_id) = GpsQzssFrameId::decode((dword & 0x7) as u8) {
-                    #[cfg(feature = "log")]
-                    debug!("GPS FRAMEID - value={:?}", frame_id);
-
-                    self.how.frame_id = frame_id;
-
-                    State::Parity
-                } else {
-                    #[cfg(feature = "log")]
-                    error!("GPS invalid frame id=0x{:02X}", dword & 0x7);
-                    State::default()
-                }
+            State::Parity => State::How,
+            State::How => State::HowParity,
+            State::HowParity => {
+                panic!("done");
             },
-            State::DataWord => self.data_word_decoding(dword),
+            State::DataWord => State::DataWordParity,
+            State::DataWordParity => {
+                panic!("done");
+            },
         };
 
         if next_state != self.state {
@@ -187,7 +146,7 @@ impl GpsQzssDecoder {
     fn new_state(&mut self, state: State) {
         self.prev_state = self.state;
         self.state = state;
-        self.bitstream.set_size_to_collect(state.encoding_size());
+        self.bitstream.set_size_to_collect(state.bin_size());
 
         #[cfg(feature = "log")]
         trace!("GPS new state={:?}", self.state);
@@ -323,8 +282,7 @@ mod test {
         let bytes = [
             // TLM
             0x8B, 0x04, 0xF8, 0x00, // HOW
-            0x54, 0x9F, 0x25, 0x00, //HOW
-            0x13, 0xE4, 0x00, 0x04, // WORD3
+            0x54, 0x9F, 0x25, 0x00, 0x13, 0xE4, 0x00, 0x04, // WORD3
             0x10, 0x4F, 0x5D, 0x31, // WORD4
             0x97, 0x44, 0xE6, 0xE7, // WORD5
             0x07, 0x75, 0x57, 0x83, // WORD6
@@ -340,11 +298,11 @@ mod test {
             if let Some(frame) = decoder.parse(Byte::byte(byte)) {
                 match frame.subframe {
                     GpsQzssSubframe::Eph1(frame1) => {
-                        assert_eq!(frame1.af2_s_s2, 0.0);
-                        assert!((frame1.af1_s_s - 1.023181539495e-011).abs() < 1e-14);
-                        assert!((frame1.af0_s - -4.524961113930e-004).abs() < 1.0e-11);
+                        assert_eq!(frame1.af2, 0.0);
+                        assert!((frame1.af1 - 1.023181539495e-011).abs() < 1e-14);
+                        assert!((frame1.af0 - -4.524961113930e-004).abs() < 1.0e-11);
                         assert_eq!(frame1.week, 318);
-                        assert_eq!(frame1.toc_s, 266_400);
+                        assert_eq!(frame1.toc, 266_400);
                         assert_eq!(frame1.health, 0);
                         found = true;
                     },

@@ -1,3 +1,6 @@
+#[cfg(feature = "log")]
+use log::debug;
+
 pub enum Byte {
     Byte(u8),
     LsbPadded((usize, u8)),
@@ -49,15 +52,15 @@ pub struct BitStream {
     msbf: bool,
 
     /// Bitwise!
-    needs: usize,
+    pub needs: usize,
 
-    dword: u32,
+    pub dword: u32,
 
-    /// BItwise!
-    collected: usize,
+    /// Bitwise!
+    pub collected: usize,
 
     /// Size of the next shift to the left (buffer is right aligned)
-    next_shift: usize,
+    pub next_shift: usize,
 }
 
 impl BitStream {
@@ -92,31 +95,38 @@ impl BitStream {
 
         let (bits_left_aligned, new_size) = match byte {
             Byte::Byte(value) => (value, 8),
-            Byte::LsbPadded((padding, value)) => ((value & 0xfc) >> 2, 6),
-            Byte::MsbPadded((padding, value)) => (value & 0x3f, 6),
+            Byte::LsbPadded((_, _)) => panic!("LSB padding not supported yet!"),
+            Byte::MsbPadded((_, _)) => panic!("MSB padding not supported yet!"),
         };
 
         self.dword |= bits_left_aligned as u32;
+
         self.next_shift = new_size;
         self.collected += new_size;
 
-        let ret = if self.collected >= self.needs {
-            // mask
-            let mask = 2u32.pow(self.needs as u32) - 1;
-            let ret = self.dword & mask;
+        if self.collected >= self.needs {
+            let discarded_saved = self.collected - self.needs;
+            let mask = 2u32.pow((self.needs + discarded_saved) as u32) - 1;
+            let ret = (self.dword & mask) >> discarded_saved;
 
-            // publish
-            let shift_size = 0;
-
-            self.dword >>= self.needs;
+            self.dword &= mask;
             self.collected -= self.needs;
+            self.next_shift = discarded_saved;
+
+            if self.collected == 0 {
+                self.dword &= 0;
+            }
+
+            #[cfg(feature = "log")]
+            debug!(
+                "dword={} | collected={} | needs={}",
+                self.dword, self.collected, self.needs
+            );
 
             Some(ret)
         } else {
             None
-        };
-
-        ret
+        }
     }
 }
 
@@ -124,6 +134,9 @@ impl BitStream {
 mod test {
 
     use super::{BitStream, Byte};
+
+    #[cfg(feature = "log")]
+    use crate::tests::init_logger;
 
     #[test]
     fn test_bit_stream_byte_collecter() {
@@ -140,20 +153,34 @@ mod test {
         }
     }
 
-    // #[test]
-    // fn test_bit_stream_msb_byte_collecter() {
+    #[test]
+    fn test_raw_stream_collecter() {
+        #[cfg(feature = "log")]
+        init_logger();
 
-    //     let mut bitstream = BitStream::msbf()
-    //         .with_collection_size(8);
+        let mut bitstream = BitStream::msbf().with_collection_size(8);
 
-    //     // collect N bytes, verify we obtain the correct value
-    //     let byte = Byte::msb_padded(0x01);
+        let collected = bitstream.collect(Byte::byte(1)).unwrap();
 
-    //     assert!(bitstream.collect(byte).is_none());
+        assert_eq!(collected, 1);
+        assert_eq!(bitstream.next_shift, 0);
+        assert_eq!(bitstream.collected, 0);
+        assert_eq!(bitstream.dword, 0);
 
-    //     let byte = Byte::msb_padded(0x02);
+        bitstream.set_size_to_collect(6);
 
-    //     let collected = bitstream.collect(byte).unwrap();
-    //     assert_eq!(collected,
-    // }
+        let collected = bitstream.collect(Byte::byte(0x02)).unwrap();
+
+        assert_eq!(bitstream.next_shift, 2);
+        assert_eq!(bitstream.collected, 2);
+        assert_eq!(bitstream.dword, 0x2);
+
+        bitstream.set_size_to_collect(4);
+
+        let collected = bitstream.collect(Byte::byte(0x03)).unwrap();
+
+        assert_eq!(bitstream.next_shift, 6);
+        assert_eq!(bitstream.collected, 6);
+        assert_eq!(bitstream.dword, 0x0B);
+    }
 }

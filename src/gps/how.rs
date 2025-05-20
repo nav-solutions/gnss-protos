@@ -14,14 +14,11 @@ const FRAMEID_MASK: u32 = 0x00001C00;
 const FRAMEID_SHIFT: u32 = 10;
 
 /// [GpsQzssHow] marks the beginning of each frame, following [GpsQzssTelemetry]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 /// [GpsHowWord]
 pub struct GpsQzssHow {
     /// TOW (in seconds)
     pub tow: u32,
-
-    /// Following Frame ID (to decode following data words)
-    pub frame_id: GpsQzssFrameId,
 
     /// When alert is asserted, the SV URA may be worse than indicated in subframe 1
     /// and user shall use this SV at their own risk.
@@ -29,9 +26,39 @@ pub struct GpsQzssHow {
 
     /// A-S mode is ON in that SV
     pub anti_spoofing: bool,
+
+    /// Following Frame ID (to decode following data words)
+    pub frame_id: GpsQzssFrameId,
 }
 
 impl GpsQzssHow {
+    pub fn ephemeris1() -> Self {
+        Self {
+            tow: 0,
+            alert: false,
+            anti_spoofing: false,
+            frame_id: GpsQzssFrameId::Ephemeris1,
+        }
+    }
+
+    pub fn ephemeris2() -> Self {
+        Self {
+            tow: 0,
+            alert: false,
+            anti_spoofing: false,
+            frame_id: GpsQzssFrameId::Ephemeris2,
+        }
+    }
+
+    pub fn ephemeris3() -> Self {
+        Self {
+            tow: 0,
+            alert: false,
+            anti_spoofing: false,
+            frame_id: GpsQzssFrameId::Ephemeris3,
+        }
+    }
+
     pub(crate) fn decode(dword: u32, _: bool) -> Result<Self, GpsError> {
         let tow = ((dword & TOW_MASK) >> TOW_SHIFT) as u32;
         let frame_id = GpsQzssFrameId::decode(((dword & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;

@@ -5,4 +5,7 @@ pub enum GpsError {
 
     /// Frame Type is either invalid or not supported
     UnknownFrameType,
+
+    /// Size is too small to encode a correct data frame
+    WouldNotFit,
 }

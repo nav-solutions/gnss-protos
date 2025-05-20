@@ -43,7 +43,7 @@ const WORD10_AF0_MASK: u32 = 0x3fffff00;
 const WORD10_AF0_SHIFT: u32 = 8;
 
 /// GPS / QZSS Frame #1 interpretation
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame1 {
     /// 10-bit week counter (no rollover compensation).
     pub week: u16,
@@ -81,20 +81,20 @@ pub struct GpsQzssFrame1 {
     /// 10-bit IODC.  
     pub iodc: u16,
 
-    /// Time of clock (s)
-    pub toc_s: u32,
+    /// Time of clock (in seconds)
+    pub toc: u32,
 
     /// 8-bit TGD (in seconds)
-    pub tgd_s: f64,
+    pub tgd: f64,
 
-    /// af2 (s.s⁻²)
-    pub af2_s_s2: f64,
+    /// af2 (in seconds per s^-^&)
+    pub af2: f64,
 
-    /// af1 (s.s⁻1)
-    pub af1_s_s: f64,
+    /// af1 (in seconds per seconds)
+    pub af1: f64,
 
-    /// af0 (s)
-    pub af0_s: f64,
+    /// af0 (in seconds)
+    pub af0: f64,
 
     /// 32-bit reserved word #4
     pub reserved_word4: u32,
@@ -109,6 +109,48 @@ pub struct GpsQzssFrame1 {
 
     ///16-bit reserved word #7
     pub reserved_word7: u16,
+}
+
+impl GpsQzssFrame1 {
+    pub fn with_week(mut self, week: u16) -> Self {
+        self.week = week;
+        self
+    }
+
+    pub fn with_health(mut self, health: u8) -> Self {
+        self.health = health;
+        self
+    }
+
+    pub fn with_toc(mut self, toc: u32) -> Self {
+        self.toc = toc;
+        self
+    }
+
+    pub fn with_tgd(mut self, tgd: f64) -> Self {
+        self.tgd = tgd;
+        self
+    }
+
+    pub fn with_ura(mut self, ura: u8) -> Self {
+        self.ura = ura;
+        self
+    }
+
+    pub fn with_af0(mut self, af0: f64) -> Self {
+        self.af0 = af0;
+        self
+    }
+
+    pub fn with_af1(mut self, af1: f64) -> Self {
+        self.af1 = af1;
+        self
+    }
+
+    pub fn with_af2(mut self, af2: f64) -> Self {
+        self.af2 = af2;
+        self
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -127,26 +169,6 @@ pub struct Word3 {
 
     /// 2-bit (MSB) IODC, you will have to associate this to Word # 8
     pub iodc_msb: u8,
-}
-
-impl Word3 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word3 dword=0x{:08x}", dword);
-        let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
-        let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
-        let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
-        let health = ((dword & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
-        let iodc_msb = ((dword & WORD3_IODC_MASK) >> WORD3_IODC_SHIFT) as u8;
-
-        Self {
-            week,
-            ca_or_p_l2,
-            ura,
-            health,
-            iodc_msb,
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -307,11 +329,11 @@ impl UnscaledFrame {
 
             l2_p_data_flag: self.word4.l2_p_data_flag,
 
-            tgd_s: (self.word7.tgd as f64) / 2.0_f64.powi(31),
-            toc_s: (self.word8.toc as u32) * 16,
-            af2_s_s2: (self.word9.af2 as f64) / 2.0_f64.powi(55),
-            af1_s_s: (self.word9.af1 as f64) / 2.0_f64.powi(43),
-            af0_s: (self.word10.af0 as f64) / 2.0_f64.powi(31),
+            tgd: (self.word7.tgd as f64) / 2.0_f64.powi(31),
+            toc: (self.word8.toc as u32) * 16,
+            af2: (self.word9.af2 as f64) / 2.0_f64.powi(55),
+            af1: (self.word9.af1 as f64) / 2.0_f64.powi(43),
+            af0: (self.word10.af0 as f64) / 2.0_f64.powi(31),
         }
     }
 }
