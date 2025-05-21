@@ -14,9 +14,6 @@ use crate::gps::GpsQzssFrameId;
 #[cfg(doc)]
 use crate::gps::GpsQzssTelemetry;
 
-#[cfg(feature = "log")]
-use log::trace;
-
 /// [GpsQzssHow] marks the beginning of each frame, following [GpsQzssTelemetry]
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 /// [GpsHowWord]

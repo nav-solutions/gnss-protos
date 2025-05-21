@@ -17,10 +17,8 @@ use crate::gps::{
     GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
 };
 
-pub(crate) const GPS_PARITY_MASK: u32 = 0x3f;
-
 #[cfg(feature = "log")]
-use log::{debug, error, trace};
+use log::{error, trace};
 
 #[derive(Default, Debug, Copy, Clone, PartialEq)]
 enum State {

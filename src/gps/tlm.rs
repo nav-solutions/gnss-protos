@@ -1,4 +1,4 @@
-use crate::gps::{decoder::GPS_PARITY_MASK, GpsError};
+use crate::gps::GpsError;
 
 const PREAMBLE_MASK: u32 = 0x42C00000;
 
@@ -7,9 +7,6 @@ const MESSAGE_SHIFT: u32 = 8;
 
 const INTEGRITY_BIT_MASK: u32 = 0x00000080;
 const RESERVED_BIT_MASK: u32 = 0x00000040;
-
-#[cfg(feature = "log")]
-use log::debug;
 
 /// [GpsQzssTelemetry] marks the beginning of each frame
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
