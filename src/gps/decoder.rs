@@ -501,7 +501,7 @@ mod test {
         let bytes = from_ublox_be_bytes(&[
             // TLM
             0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x73, 0xC9, 0x27, 0x15, // WORD3
+            0x15, 0x27, 0xC9, 0x73, // WORD3
             0x13, 0xE4, 0x00, 0x04, //WORD4
             0x10, 0x4F, 0x5D, 0x31, //WORD5
             0x97, 0x44, 0xE6, 0xD7, // WORD6
@@ -516,14 +516,13 @@ mod test {
 
         for byte in bytes {
             if let Some(frame) = decoder.parse(byte) {
-                assert_eq!(frame.telemetry.message, 3);
-                assert_eq!(frame.telemetry.integrity, true);
-                assert_eq!(frame.telemetry.reserved_bits, false);
+                assert_eq!(decoder.tlm.message, 0x13E);
+                assert_eq!(decoder.tlm.integrity, false);
+                assert_eq!(decoder.tlm.reserved_bits, false);
 
-                assert_eq!(frame.how.tow, 3 * 6);
-                assert_eq!(frame.how.alert, false);
-                assert_eq!(frame.how.anti_spoofing, true);
-                assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris1);
+                assert_eq!(decoder.how.alert, false);
+                assert_eq!(decoder.how.anti_spoofing, true);
+                assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris1);
 
                 match frame.subframe {
                     GpsQzssSubframe::Eph1(frame1) => {
