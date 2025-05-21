@@ -83,15 +83,6 @@ impl Word3 {
     pub(crate) fn decode(dword: u32) -> Self {
         let iode = ((dword & WORD3_IODE_MASK) >> WORD3_IODE_SHIFT) as u8;
         let crs = ((dword & WORD3_CRS_MASK) >> WORD3_CRS_SHIFT) as i16;
-
-        #[cfg(feature = "log")]
-        trace!(
-            "GPS Word3 dword=0x{:08x} iode=0x{:02} crs=0x{:04x}",
-            dword,
-            iode,
-            crs
-        );
-
         Self { iode, crs }
     }
 }

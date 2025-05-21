@@ -4,8 +4,12 @@ use crate::gps::{
         Word5 as Ephemeris1Word5, Word6 as Ephemeris1Word6, Word7 as Ephemeris1Word7,
         Word8 as Ephemeris1Word8, Word9 as Ephemeris1Word9,
     },
+    frame2::{
+        Word10 as Ephemeris2Word10, Word3 as Ephemeris2Word3, Word4 as Ephemeris2Word4,
+        Word5 as Ephemeris2Word5, Word6 as Ephemeris2Word6, Word7 as Ephemeris2Word7,
+        Word8 as Ephemeris2Word8, Word9 as Ephemeris2Word9,
+    },
     GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
-    GPS_PREAMBLE_MASK,
 };
 
 pub(crate) const GPS_PARITY_MASK: u32 = 0x3f;
@@ -160,74 +164,114 @@ impl GpsQzssDecoder {
 
             State::DataWord => {
                 match self.how.frame_id {
-                    GpsQzssFrameId::Ephemeris1 => {
-                        match self.ptr {
-                            3 => {
-                                let word = Ephemeris1Word3::decode(self.dword);
+                    GpsQzssFrameId::Ephemeris1 => match self.ptr {
+                        3 => {
+                            let word = Ephemeris1Word3::decode(self.dword);
 
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
 
-                                frame.week = word.week;
-                                frame.ura = word.ura;
-                                frame.ca_or_p_l2 = word.ca_or_p_l2;
-                                frame.health = word.health;
-                                frame.iodc |= (word.iodc_msb as u16) << 8;
-                                trace!("GPS - EPH #1 Word#3 {:?}", word);
-                            },
-                            4 => {
-                                let word = Ephemeris1Word4::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.l2_p_data_flag = word.l2_p_data_flag;
-                                frame.reserved_word4 = word.reserved;
-                                trace!("GPS - EPH #1 Word#4 {:?}", word);
-                            },
-                            5 => {
-                                // TODO word3.iodc_msb
-                                let word = Ephemeris1Word5::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.reserved_word5 = word.reserved;
-                                trace!("GPS - EPH #1 Word#5 {:?}", word);
-                            },
-                            6 => {
-                                let word = Ephemeris1Word6::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.reserved_word6 = word.reserved;
-                                trace!("GPS - EPH #1 Word#6 {:?}", word);
-                            },
-                            7 => {
-                                let word = Ephemeris1Word7::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.tgd = (word.tgd as f64) / 2_f64.powi(31);
-                                frame.reserved_word7 = word.reserved;
-                                trace!("GPS - EPH #1 Word#7 {:?}", word);
-                            },
-                            8 => {
-                                let word = Ephemeris1Word8::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.toc = (word.toc as u32) * 16;
-                                frame.iodc |= word.iodc_lsb as u16;
-                                trace!("GPS - EPH #1 Word#8 {:?}", word);
-                            },
-                            9 => {
-                                let word = Ephemeris1Word9::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
-                                frame.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
-                                trace!("GPS - EPH #1 Word#9 {:?}", word);
-                            },
-                            10 => {
-                                let word = Ephemeris1Word10::decode(self.dword);
-                                let frame = self.subframe.as_mut_eph1().expect("internal error");
-                                frame.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
-                                trace!("GPS - EPH #1 Word#10 {:?}", word);
-                            },
-                            _ => {
-                                unreachable!("invalid state");
-                            },
-                        }
+                            frame.week = word.week;
+                            frame.ura = word.ura;
+                            frame.ca_or_p_l2 = word.ca_or_p_l2;
+                            frame.health = word.health;
+                            frame.iodc |= (word.iodc_msb as u16) << 8;
+                            trace!("GPS - EPH #1 Word#3 {:?}", word);
+                        },
+                        4 => {
+                            let word = Ephemeris1Word4::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.l2_p_data_flag = word.l2_p_data_flag;
+                            frame.reserved_word4 = word.reserved;
+                            trace!("GPS - EPH #1 Word#4 {:?}", word);
+                        },
+                        5 => {
+                            let word = Ephemeris1Word5::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.reserved_word5 = word.reserved;
+                            trace!("GPS - EPH #1 Word#5 {:?}", word);
+                        },
+                        6 => {
+                            let word = Ephemeris1Word6::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.reserved_word6 = word.reserved;
+                            trace!("GPS - EPH #1 Word#6 {:?}", word);
+                        },
+                        7 => {
+                            let word = Ephemeris1Word7::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.tgd = (word.tgd as f64) / 2_f64.powi(31);
+                            frame.reserved_word7 = word.reserved;
+                            trace!("GPS - EPH #1 Word#7 {:?}", word);
+                        },
+                        8 => {
+                            let word = Ephemeris1Word8::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.toc = (word.toc as u32) * 16;
+                            frame.iodc |= word.iodc_lsb as u16;
+                            trace!("GPS - EPH #1 Word#8 {:?}", word);
+                        },
+                        9 => {
+                            let word = Ephemeris1Word9::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
+                            frame.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
+                            trace!("GPS - EPH #1 Word#9 {:?}", word);
+                        },
+                        10 => {
+                            let word = Ephemeris1Word10::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph1().expect("internal error");
+                            frame.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
+                            trace!("GPS - EPH #1 Word#10 {:?}", word);
+                        },
+                        _ => {
+                            unreachable!("invalid state");
+                        },
                     },
-                    GpsQzssFrameId::Ephemeris2 => {
-                        panic!("not yet");
+                    GpsQzssFrameId::Ephemeris2 => match self.ptr {
+                        3 => {
+                            let word = Ephemeris2Word3::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+
+                            trace!("GPS - EPH #2 Word#3 {:?}", word);
+                        },
+                        4 => {
+                            let word = Ephemeris2Word4::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#4 {:?}", word);
+                        },
+                        5 => {
+                            let word = Ephemeris2Word5::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #1 Word#5 {:?}", word);
+                        },
+                        6 => {
+                            let word = Ephemeris2Word6::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#6 {:?}", word);
+                        },
+                        7 => {
+                            let word = Ephemeris2Word7::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#7 {:?}", word);
+                        },
+                        8 => {
+                            let word = Ephemeris2Word8::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#8 {:?}", word);
+                        },
+                        9 => {
+                            let word = Ephemeris2Word9::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#9 {:?}", word);
+                        },
+                        10 => {
+                            let word = Ephemeris2Word10::decode(self.dword);
+                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            trace!("GPS - EPH #2 Word#10 {:?}", word);
+                        },
+                        _ => {
+                            unreachable!("invalid state");
+                        },
                     },
                     GpsQzssFrameId::Ephemeris3 => {
                         panic!("not yet");
@@ -532,6 +576,51 @@ mod test {
                         assert_eq!(frame1.week, 318);
                         assert_eq!(frame1.toc, 266_400);
                         assert_eq!(frame1.health, 0);
+                        found = true;
+                    },
+                    _ => panic!("incorrect subframe decoded!"),
+                }
+            }
+        }
+
+        assert!(found, "GPS decoding failed!");
+    }
+
+    #[test]
+    fn test_eph2_frame() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let mut found = false;
+
+        let bytes = from_ublox_be_bytes(&[
+            // TLM
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x15, 0x27, 0xEA, 0x1B, // WORD3
+            0x12, 0x7F, 0xF1, 0x65, //WORD4
+            0x8C, 0x68, 0x1F, 0x7C, //WORD5
+            0x02, 0x49, 0x34, 0x15, // WORD6
+            0xBF, 0xF8, 0x81, 0x1E, //WORD7
+            0x99, 0x1B, 0x81, 0x14, // WORD8
+            0x6E, 0x68, 0x3E, 0x04, // WORD9
+            0x83, 0x34, 0x72, 0x21, //WORD10
+            0x7B, 0x9F, 0x42, 0x90,
+        ]);
+
+        let mut decoder = GpsQzssDecoder::default().without_parity_verification();
+
+        for byte in bytes {
+            if let Some(frame) = decoder.parse(byte) {
+                assert_eq!(decoder.tlm.message, 0x13E);
+                assert_eq!(decoder.tlm.integrity, false);
+                assert_eq!(decoder.tlm.reserved_bits, false);
+
+                assert_eq!(decoder.how.alert, false);
+                assert_eq!(decoder.how.anti_spoofing, true);
+                assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris2);
+
+                match frame.subframe {
+                    GpsQzssSubframe::Eph2(frame2) => {
                         found = true;
                     },
                     _ => panic!("incorrect subframe decoded!"),
