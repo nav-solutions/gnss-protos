@@ -20,14 +20,8 @@ mod gps;
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-mod bitstream;
-
 #[cfg(test)]
 mod tests;
-
-pub mod prelude {
-    pub use crate::bitstream::Byte;
-}
 
 /// Two's complement parsing & interpretation.
 /// ## Input

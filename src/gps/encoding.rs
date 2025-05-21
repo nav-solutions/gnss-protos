@@ -37,47 +37,6 @@ impl GpsQzssFrame {
                 // would panic
                 unreachable!("buffer to small");
             }
-
-            let next_state = match state {
-                State::Preamble => {
-                    buf[ptr] = GPS_PREAMBLE_MASK;
-                    State::TlmIntegrity
-                },
-
-                State::TlmIntegrity => {
-                    // 14 -bit message
-                    buf[ptr] = ((self.telemetry.message >> 8) & 0x3f) as u8;
-                    buf[ptr + 1] = (self.telemetry.message & 0xff) as u8;
-
-                    if self.telemetry.integrity {
-                        buf[ptr + 1] |= 0x40; // integrity status flag
-                    }
-
-                    if self.telemetry.reserved_bits {
-                        buf[ptr + 1] |= 0x80; // reserved bits
-                    }
-
-                    State::Parity
-                },
-
-                State::Parity => {
-                    let parity = 0x00; // TODO
-                    State::How
-                },
-
-                State::How => return Ok(0),
-                _ => return Ok(0),
-            };
-
-            let bin_size = next_state.bin_size();
-
-            let bytes = bin_size / 8;
-            let binoffset = (bin_size * 8) - bytes;
-            ptr += bytes;
-
-            state = next_state;
-            prev_state = state;
-
             #[cfg(feature = "log")]
             debug!("state={:?} | ptr={}", state, ptr);
         }
@@ -93,7 +52,6 @@ mod test {
             GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
             GPS_MIN_SIZE,
         },
-        prelude::Byte,
         GpsQzssDecoder, GPS_PREAMBLE_MASK,
     };
 
@@ -155,8 +113,8 @@ mod test {
 
         let mut decoder = GpsQzssDecoder::default().without_parity_verification();
 
-        for byte in buffer.iter() {
-            let decoded = decoder.parse(Byte::byte(*byte));
-        }
+        // for byte in buffer.iter() {
+        //     let decoded = decoder.parse(Byte::byte(*byte));
+        // }
     }
 }

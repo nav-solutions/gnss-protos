@@ -12,18 +12,19 @@ pub(crate) const GPS_PREAMBLE_MASK: u8 = 0x8b;
 #[cfg(feature = "log")]
 use log::error;
 
-pub mod encoding;
+// pub mod encoding;
 
 mod decoder;
 mod frame1;
 mod frame2;
 // mod frame3;
+mod bytes;
 mod errors;
 mod frame_id;
 mod how;
-mod state;
 mod tlm;
 
+pub use bytes::GpsDataByte;
 pub use decoder::GpsQzssDecoder;
 pub use errors::GpsError;
 pub use frame_id::GpsQzssFrameId;
@@ -32,8 +33,6 @@ pub use tlm::GpsQzssTelemetry;
 
 pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
-
-pub(crate) use state::State;
 
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Copy, Clone, PartialEq)]

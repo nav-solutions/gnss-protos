@@ -1,8 +1,5 @@
 use crate::twos_complement;
 
-#[cfg(feature = "log")]
-use log::trace;
-
 const WORD3_WEEK_MASK: u32 = 0x3ff00000;
 const WORD3_WEEK_SHIFT: u32 = 20;
 const WORD3_CA_P_L2_MASK: u32 = 0x000C0000;
@@ -171,6 +168,24 @@ pub struct Word3 {
     pub iodc_msb: u8,
 }
 
+impl Word3 {
+    pub(crate) fn decode(dword: u32) -> Self {
+        let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
+        let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
+        let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
+        let health = ((dword & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
+        let iodc_msb = ((dword & WORD3_IODC_MASK) >> WORD3_IODC_SHIFT) as u8;
+
+        Self {
+            week,
+            ca_or_p_l2,
+            ura,
+            health,
+            iodc_msb,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Word4 {
     pub l2_p_data_flag: bool,
@@ -179,8 +194,6 @@ pub struct Word4 {
 
 impl Word4 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word4 dword=0x{:08x}", dword);
         let l2_p_data_flag = (dword & WORD4_L2P_DATA_MASK) > 0;
         let reserved = ((dword & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
         Self {
@@ -198,8 +211,6 @@ pub struct Word5 {
 
 impl Word5 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word5 dword=0x{:08x}", dword);
         let reserved = (dword & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
         Self { reserved }
     }
@@ -213,8 +224,6 @@ pub struct Word6 {
 
 impl Word6 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word6 dword=0x{:08x}", dword);
         let reserved = (dword & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
         Self { reserved }
     }
@@ -231,9 +240,6 @@ pub struct Word7 {
 
 impl Word7 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word7 dword=0x{:08x}", dword);
-
         let reserved = ((dword & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
         let tgd = ((dword & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
         Self { reserved, tgd }
@@ -251,9 +257,6 @@ pub struct Word8 {
 
 impl Word8 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word8 dword=0x{:08x}", dword);
-
         let iodc_lsb = ((dword & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
         let toc = ((dword & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
         Self { iodc_lsb, toc }
@@ -271,9 +274,6 @@ pub struct Word9 {
 
 impl Word9 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word9 dword=0x{:08x}", dword);
-
         let af2 = ((dword & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
         let af1 = ((dword & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
         Self { af2, af1 }
@@ -288,8 +288,6 @@ pub struct Word10 {
 
 impl Word10 {
     pub(crate) fn decode(dword: u32) -> Self {
-        #[cfg(feature = "log")]
-        trace!("GPS Word10 dword=0x{:08x}", dword);
         let af0 = ((dword & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
         let af0 = twos_complement(af0, 0x3fffff, 0x200000);
         Self { af0 }

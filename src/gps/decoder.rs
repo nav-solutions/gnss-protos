@@ -1,26 +1,46 @@
-use crate::{
-    bitstream::{BitStream, Byte},
-    gps::{
-        GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, State,
-        GPS_PREAMBLE_MASK,
+use crate::gps::{
+    frame1::{
+        Word10 as Ephemeris1Word10, Word3 as Ephemeris1Word3, Word4 as Ephemeris1Word4,
+        Word5 as Ephemeris1Word5, Word6 as Ephemeris1Word6, Word7 as Ephemeris1Word7,
+        Word8 as Ephemeris1Word8, Word9 as Ephemeris1Word9,
     },
+    GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+    GPS_PREAMBLE_MASK,
 };
 
+pub(crate) const GPS_PARITY_MASK: u32 = 0x3f;
+
 #[cfg(feature = "log")]
-use log::{debug, trace};
+use log::{debug, error, trace};
+
+#[derive(Default, Debug, Copy, Clone, PartialEq)]
+enum State {
+    /// Telemetry dword parsing
+    #[default]
+    Telemetry,
+
+    /// How dword parsing
+    How,
+
+    /// Data word parsing
+    DataWord,
+}
 
 pub struct GpsQzssDecoder {
     /// Frame counter
     ptr: usize,
 
+    /// data word storage
+    pub(crate) dword: u32,
+
+    /// total number of bits collected
+    pub(crate) collected: usize,
+
+    /// next shift to the right
+    next_shift: usize,
+
     /// Current [State]
     state: State,
-
-    /// Previous [State]
-    prev_state: State,
-
-    /// [BitStream] collecter
-    bitstream: BitStream,
 
     /// Latest [GpsQzssTelemetry]
     tlm: GpsQzssTelemetry,
@@ -43,80 +63,195 @@ impl Default for GpsQzssDecoder {
         Self {
             state,
             ptr: 0,
-            prev_state: state,
+            dword: 0,
+            collected: 0,
+            next_shift: 0,
             parity_check: true,
             tlm: Default::default(),
             how: Default::default(),
             subframe: Default::default(),
-            bitstream: BitStream::msbf().with_collection_size(state.bin_size()),
         }
     }
 }
 
 impl GpsQzssDecoder {
-    /// Parses a GPS/QZSS stream of bytes, returns a [GpsQzssFrame] when
+    /// Parses a GPS/QZSS stream of [GpsDataByte]s, returns a [GpsQzssFrame] when
     /// one is identified and the last data word has been correctly processed.
-    ///
-    /// GPS binary streams are made 30 bit MSBF data words, so they are not aligned.   
-    /// This API allows you to consider both real (unaligned) GPS data streams and
-    /// streams that were padded to a convenient format.
-    ///
-    /// 1. Let's say you only have _actual_ GPS data from a binary file.
-    /// Simply forward all bytes and wrap them as plain [Byte::Byte]s.   
-    /// Even in that scenario, the stream is most likely terminated by some padding
-    /// during the file encoding process. Emphasize that with one last [Byte::LsbPadded],
-    /// and we are able to process all data frames.   
-    ///
-    /// 2. When working with padded data words (usually 32-bit padded),
-    /// like when using U-Blox raw data streams for instance, that insert a 2-MSB bit padding.
-    /// Since GPS expects MSB first, then streams would start with a single [Byte::MsbPadded], and follow
-    /// with 3 plain data [Byte::Byte]s. Remember that GPS expects MSB first!
-    pub fn parse(&mut self, byte: Byte) -> Option<GpsQzssFrame> {
-        let dword = self.bitstream.collect(byte)?;
-
-        let mut ret = Option::<GpsQzssFrame>::None;
+    pub fn parse(&mut self, byte: GpsDataByte) -> Option<GpsQzssFrame> {
+        // collect bytes
+        match byte {
+            GpsDataByte::LsbPadded(byte) => {
+                self.collected += 6;
+                self.dword <<= 6;
+                self.dword |= (byte as u32) >> 2;
+            },
+            GpsDataByte::MsbPadded(byte) => {
+                self.collected += 6;
+                self.dword <<= 6;
+                self.dword |= (byte & 0x3f) as u32;
+            },
+            GpsDataByte::Byte(byte) => {
+                self.collected += 8;
+                self.dword <<= 8;
+                self.dword |= byte as u32;
+            },
+        }
 
         #[cfg(feature = "log")]
         trace!(
-            "GPS - state={:?} - ptr={} dword=0x{:08x}",
-            self.state,
+            "GPS - data collection - ptr={} dword=0x{:08x}",
             self.ptr,
+            self.dword
+        );
+
+        if self.collected < 30 {
+            // Can't proceed
+            return None;
+        }
+
+        // data word processing
+        let dword = self.dword;
+
+        let mut ret = Option::<GpsQzssFrame>::None;
+
+        // buffer decoding attempt
+        #[cfg(feature = "log")]
+        trace!(
+            "GPS - state={:?} - decoding dword=0x{:08x}",
+            self.state,
             dword
         );
 
-        let next_state = match self.state {
-            State::Preamble => {
-                if dword as u8 == GPS_PREAMBLE_MASK {
-                    State::TlmIntegrity
-                } else {
-                    State::Preamble
+        match self.state {
+            State::Telemetry => match GpsQzssTelemetry::decode(dword) {
+                Ok(tlm) => {
+                    self.tlm = tlm;
+                    self.state = State::How;
+                    trace!("GPS - TLM {:?}", tlm);
+                },
+                Err(e) => {
+                    error!("GPS - TLM decoding error: {:?}", e);
+                },
+            },
+
+            State::How => match GpsQzssHow::decode(dword) {
+                Ok(how) => {
+                    self.how = how;
+                    self.state = State::DataWord;
+                    self.ptr = 3;
+
+                    match how.frame_id {
+                        GpsQzssFrameId::Ephemeris1 => {
+                            self.subframe = GpsQzssSubframe::Eph1(Default::default());
+                        },
+                        GpsQzssFrameId::Ephemeris2 => {
+                            self.subframe = GpsQzssSubframe::Eph2(Default::default());
+                        },
+                        GpsQzssFrameId::Ephemeris3 => {
+                            panic!("not yet");
+                        },
+                    }
+                    trace!("GPS - HOW {:?}", how);
+                },
+                Err(e) => {
+                    error!("GPS - HOW decoding error: {:?}", e);
+                },
+            },
+
+            State::DataWord => {
+                match self.how.frame_id {
+                    GpsQzssFrameId::Ephemeris1 => {
+                        match self.ptr {
+                            3 => {
+                                let word = Ephemeris1Word3::decode(self.dword);
+
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+
+                                frame.week = word.week;
+                                frame.ura = word.ura;
+                                frame.ca_or_p_l2 = word.ca_or_p_l2;
+                                frame.health = word.health;
+                                frame.iodc |= (word.iodc_msb as u16) << 8;
+                                trace!("GPS - EPH #1 Word#3 {:?}", word);
+                            },
+                            4 => {
+                                let word = Ephemeris1Word4::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.l2_p_data_flag = word.l2_p_data_flag;
+                                frame.reserved_word4 = word.reserved;
+                                trace!("GPS - EPH #1 Word#4 {:?}", word);
+                            },
+                            5 => {
+                                // TODO word3.iodc_msb
+                                let word = Ephemeris1Word5::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.reserved_word5 = word.reserved;
+                                trace!("GPS - EPH #1 Word#5 {:?}", word);
+                            },
+                            6 => {
+                                let word = Ephemeris1Word6::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.reserved_word6 = word.reserved;
+                                trace!("GPS - EPH #1 Word#6 {:?}", word);
+                            },
+                            7 => {
+                                let word = Ephemeris1Word7::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.tgd = (word.tgd as f64) / 2_f64.powi(31);
+                                frame.reserved_word7 = word.reserved;
+                                trace!("GPS - EPH #1 Word#7 {:?}", word);
+                            },
+                            8 => {
+                                let word = Ephemeris1Word8::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.toc = (word.toc as u32) * 16;
+                                frame.iodc |= word.iodc_lsb as u16;
+                                trace!("GPS - EPH #1 Word#8 {:?}", word);
+                            },
+                            9 => {
+                                let word = Ephemeris1Word9::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
+                                frame.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
+                                trace!("GPS - EPH #1 Word#9 {:?}", word);
+                            },
+                            10 => {
+                                let word = Ephemeris1Word10::decode(self.dword);
+                                let frame = self.subframe.as_mut_eph1().expect("internal error");
+                                frame.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
+                                trace!("GPS - EPH #1 Word#10 {:?}", word);
+                            },
+                            _ => {
+                                unreachable!("invalid state");
+                            },
+                        }
+                    },
+                    GpsQzssFrameId::Ephemeris2 => {
+                        panic!("not yet");
+                    },
+                    GpsQzssFrameId::Ephemeris3 => {
+                        panic!("not yet");
+                    },
                 }
-            },
-            State::TlmIntegrity => {
-                self.tlm = GpsQzssTelemetry {
-                    message: (dword >> 2) as u16,
-                    integrity: (dword & 0x02) > 0,
-                    reserved_bits: (dword & 0x01) > 0,
-                };
 
-                #[cfg(feature = "log")]
-                debug!("decoded tlm {:?}", self.tlm);
+                self.ptr += 1;
+            },
+        }
 
-                State::Parity
-            },
-            State::Parity => State::How,
-            State::How => State::HowParity,
-            State::HowParity => {
-                panic!("done");
-            },
-            State::DataWord => State::DataWordParity,
-            State::DataWordParity => {
-                panic!("done");
-            },
-        };
+        // reset
+        self.collected = 0;
+        self.dword = 0;
+        self.next_shift = 0;
 
-        if next_state != self.state {
-            self.new_state(next_state);
+        if self.ptr == 11 {
+            ret = Some(GpsQzssFrame {
+                how: self.how,
+                telemetry: self.tlm,
+                subframe: self.subframe,
+            });
+
+            self.ptr = 0;
+            self.state = State::Telemetry;
         }
 
         ret
@@ -126,110 +261,181 @@ impl GpsQzssDecoder {
     pub fn without_parity_verification(&self) -> Self {
         Self {
             ptr: self.ptr,
+            collected: 0,
+            dword: 0,
+            next_shift: 0,
             state: self.state,
             parity_check: false,
             tlm: self.tlm.clone(),
             how: self.how.clone(),
-            prev_state: self.prev_state,
-            bitstream: self.bitstream,
             subframe: self.subframe.clone(),
         }
-    }
-
-    /// Reset internal state
-    fn reset(&mut self) {
-        self.ptr = 0;
-        self.new_state(State::default());
-    }
-
-    /// Update [State]
-    fn new_state(&mut self, state: State) {
-        self.prev_state = self.state;
-        self.state = state;
-        self.bitstream.set_size_to_collect(state.bin_size());
-
-        #[cfg(feature = "log")]
-        trace!("GPS new state={:?}", self.state);
-    }
-
-    fn data_word_decoding(&mut self, dword: u32) -> State {
-        match self.how.frame_id {
-            GpsQzssFrameId::Ephemeris1 => self.eph1_word_decoding(dword),
-            GpsQzssFrameId::Ephemeris2 => self.eph2_word_decoding(dword),
-            GpsQzssFrameId::Ephemeris3 => self.eph3_word_decoding(dword),
-        }
-    }
-
-    fn eph1_word_decoding(&mut self, dword: u32) -> State {
-        let next_state = match self.ptr {
-            0 => {
-                if let Some(frame1) = self.subframe.as_mut_eph1() {
-                    // let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
-                    // let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
-                    // let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
-                    // let health = ((dword & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
-                    // let iodc_msb = ((dword & WORD3_IODC_MASK) >> WORD3_IODC_SHIFT) as u8;
-
-                    // frame1.week = word3.week;
-                    // frame1.ca_or_p_l2 = word3.ca_or_p_l2;
-                    // frame1.ura = word3.ura;
-                    // frame1.health = word3.health;
-
-                    // self.iodc_msb = word3.iodc_msb;
-                    State::default()
-                } else {
-                    State::default()
-                }
-            },
-            1 => State::default(),
-            2 => State::default(),
-            3 => State::default(),
-            4 => State::default(),
-            5 => State::default(),
-            _ => State::default(),
-        };
-
-        self.ptr += 1;
-        next_state
-    }
-
-    fn eph2_word_decoding(&mut self, dword: u32) -> State {
-        State::default()
-    }
-
-    fn eph3_word_decoding(&mut self, dword: u32) -> State {
-        State::default()
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsQzssDecoder, GpsQzssSubframe},
-        prelude::Byte,
+        gps::{GpsDataByte, GpsQzssDecoder, GpsQzssSubframe},
+        GpsQzssFrameId,
     };
 
-    #[cfg(feature = "std")]
+    use crate::tests::from_ublox_be_bytes;
+
+    #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
 
     #[test]
-    fn test_incomplete_frame() {
-        #[cfg(feature = "std")]
+    fn test_tlm_decoding() {
+        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        let mut found = false;
-
         let bytes = [
-            0x8B, 0x00, 0x00, 0x00, // TLM
-            0x00, 0x00, 0x01, 0x00, // HOW
-            0x00, 0x00, 0x01, 0x00, // Word 3
-            0x00, 0x00, 0x01, 0x00, // Word 4
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // TLM
         ];
 
         let mut decoder = GpsQzssDecoder::default();
 
         for byte in bytes {
-            if let Some(_) = decoder.parse(Byte::byte(byte)) {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 3);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, true);
+    }
+
+    #[test]
+    fn test_ublox_tlm_decoding() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let bytes = [
+            GpsDataByte::msb_padded(0x22),
+            GpsDataByte::Byte(0xC1),
+            GpsDataByte::Byte(0x3E),
+            GpsDataByte::Byte(0x1B), // TLM
+        ];
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 0x13E);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, false);
+
+        let bytes = [0x22, 0xC1, 0x3E, 0x1B];
+        let bytes = from_ublox_be_bytes(&bytes);
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 0x13E);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, false);
+    }
+
+    #[test]
+    fn test_tlmhow_decoding() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let bytes = [
+            GpsDataByte::msb_padded(0x22),
+            GpsDataByte::Byte(0xC1),
+            GpsDataByte::Byte(0x3E),
+            GpsDataByte::Byte(0x1B), // TLM
+            GpsDataByte::msb_padded(0x73),
+            GpsDataByte::Byte(0xC9),
+            GpsDataByte::Byte(0x27),
+            GpsDataByte::Byte(0x15), // HOW
+        ];
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 0x13E);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, false);
+    }
+
+    #[test]
+    fn test_ublox_tlmhow_decoding() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let bytes = [
+            GpsDataByte::MsbPadded(0x22),
+            GpsDataByte::Byte(0xC1),
+            GpsDataByte::Byte(0x3E),
+            GpsDataByte::Byte(0x1B), // TLM
+            GpsDataByte::MsbPadded(0x15),
+            GpsDataByte::Byte(0x27),
+            GpsDataByte::Byte(0xC9),
+            GpsDataByte::Byte(0x73), // HOW
+        ];
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 0x13E);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, false);
+
+        assert_eq!(decoder.how.alert, false);
+        assert_eq!(decoder.how.anti_spoofing, true);
+        assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris1);
+
+        let bytes = from_ublox_be_bytes(&[0x22, 0xC1, 0x3E, 0x1B, 0x15, 0x27, 0xC9, 0x73]);
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            let _ = decoder.parse(byte);
+        }
+
+        assert_eq!(decoder.tlm.message, 0x13E);
+        assert_eq!(decoder.tlm.integrity, false);
+        assert_eq!(decoder.tlm.reserved_bits, false);
+
+        assert_eq!(decoder.how.alert, false);
+        assert_eq!(decoder.how.anti_spoofing, true);
+        assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris1);
+    }
+
+    #[test]
+    fn test_incomplete_frame() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let mut found = false;
+
+        let bytes = [
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // TLM
+        ];
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for byte in bytes {
+            if let Some(_) = decoder.parse(byte) {
                 found = true;
             }
         }
@@ -237,65 +443,88 @@ mod test {
         assert!(!found, "Invalid GPS frame decoded!");
 
         let bytes = [
-            0x8Bu8, 0x00u8, 0x00u8, 0x00u8, // TLM
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // TLM
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // HOW
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD3
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD4
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD5
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD6
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD7
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
+            GpsDataByte::lsb_padded(0x00), // WORD8
+            GpsDataByte::Byte(0x8B),
+            GpsDataByte::Byte(0x00),
+            GpsDataByte::Byte(0x0D),
         ];
 
         let mut decoder = GpsQzssDecoder::default();
 
         for byte in bytes {
-            if let Some(_) = decoder.parse(Byte::byte(byte)) {
+            if let Some(_) = decoder.parse(byte) {
                 found = true;
             }
         }
 
         assert!(!found, "Invalid GPS frame decoded");
-
-        let bytes = [
-            0x8B, 0x00, 0x00, 0x00, // TLM
-            0x00, 0x00, 0x01, 0x00, // HOW
-            0x00, 0x00, 0x01, 0x00, // Word 1
-            0x00, 0x00, 0x01, 0x00, // Word 2
-            0x00, 0x00, 0x01, 0x00, // Word 3
-            0x00, 0x00, 0x01, 0x00, // Word 4
-            0x00, 0x00, 0x01, 0x00, // Word 5
-            0x00, 0x00, 0x01, // Word 6
-        ];
-
-        let mut decoder = GpsQzssDecoder::default();
-
-        for byte in bytes {
-            if let Some(_) = decoder.parse(Byte::byte(byte)) {
-                found = true;
-            }
-        }
-
-        assert!(!found, "Invalid GPS frame decoded!");
     }
 
     #[test]
     fn test_eph1_frame() {
-        #[cfg(feature = "std")]
+        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
         let mut found = false;
 
-        let bytes = [
+        let bytes = from_ublox_be_bytes(&[
             // TLM
-            0x8B, 0x04, 0xF8, 0x00, // HOW
-            0x54, 0x9F, 0x25, 0x00, 0x13, 0xE4, 0x00, 0x04, // WORD3
-            0x10, 0x4F, 0x5D, 0x31, // WORD4
-            0x97, 0x44, 0xE6, 0xE7, // WORD5
-            0x07, 0x75, 0x57, 0x83, // WORD6
-            0x33, 0x0C, 0x80, 0xB5, // WORD7
-            0x92, 0x50, 0x42, 0xA1, // WORD8
-            0x80, 0x00, 0x16, 0x84, // WORD9
-            0x31, 0x2C, 0x30, 0x33, // WORD10
-        ];
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x73, 0xC9, 0x27, 0x15, // WORD3
+            0x13, 0xE4, 0x00, 0x04, //WORD4
+            0x10, 0x4F, 0x5D, 0x31, //WORD5
+            0x97, 0x44, 0xE6, 0xD7, // WORD6
+            0x07, 0x75, 0x57, 0x83, //WORD7
+            0x33, 0x0C, 0x80, 0xB5, // WORD8
+            0x92, 0x50, 0x42, 0xA1, // WORD9
+            0x80, 0x00, 0x16, 0x84, //WORD10
+            0x31, 0x2C, 0x30, 0x33,
+        ]);
 
         let mut decoder = GpsQzssDecoder::default().without_parity_verification();
 
         for byte in bytes {
-            if let Some(frame) = decoder.parse(Byte::byte(byte)) {
+            if let Some(frame) = decoder.parse(byte) {
+                assert_eq!(frame.telemetry.message, 3);
+                assert_eq!(frame.telemetry.integrity, true);
+                assert_eq!(frame.telemetry.reserved_bits, false);
+
+                assert_eq!(frame.how.tow, 3 * 6);
+                assert_eq!(frame.how.alert, false);
+                assert_eq!(frame.how.anti_spoofing, true);
+                assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris1);
+
                 match frame.subframe {
                     GpsQzssSubframe::Eph1(frame1) => {
                         assert_eq!(frame1.af2, 0.0);
@@ -310,56 +539,7 @@ mod test {
                 }
             }
         }
+
         assert!(found, "GPS decoding failed!");
     }
 }
-//     #[test]
-//     fn test_eph2_frame() {
-//         #[cfg(feature = "std")]
-//         init_logger();
-
-//         let mut found = false;
-
-//         let bytes = [
-//             0x8B, 0x04, 0xF8, 0x00, // 1,
-//             0x54, 0x9F, 0xA8, 0x00, // 2,
-//             0x49, 0xff, 0xc5, 0x00, // 3
-//             0x31, 0xA0, 0x7d, 0x00, // 4,
-//             0x09, 0x24, 0xD0, 0x00, // 5
-//             0xFF, 0xE2, 0x04, 0x00, // 6
-//             0x64, 0x6E, 0x04, 0x00, // 7
-//             0x10, 0xF9, 0xA1, 0x00, // 8
-//             0x0C, 0xD1, 0xC8, 0x00, // 9
-//             0x41, 0x0A, 0x7d, 0x00, // 10
-//         ];
-
-//         let mut decoder = GpsQzssDecoder::default().without_parity_verification();
-
-//         for byte in bytes {
-//             if let Some(frame) = decoder.parse(byte) {
-//                 match frame.subframe {
-//                     GpsQzssSubframe::Eph2(frame2) => {
-//                         // assert_eq!(frame2.dn, 1.444277586415e-009);
-//                         // assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
-//                         assert_eq!(frame2.fit_int_flag, true);
-
-//                         assert_eq!(frame2.toe_s, 266_400);
-//                         assert_eq!(frame2.iode, 0x27);
-//                         // assert_eq!(frame2.crs, -1.843750000000e+000);
-
-//                         // assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
-//                         // assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
-//                         // assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
-//                         // assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
-//                         // assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
-//                         // assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
-//                         found = true;
-//                     },
-//                     _ => panic!("incorrect subframe decoded!"),
-//                 }
-//             }
-//         }
-
-//         assert!(found, "GPS decoding failed!");
-//     }
-// }
