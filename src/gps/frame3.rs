@@ -27,10 +27,10 @@ const WORD8_OMEGA_SHIFT: u32 = 6;
 const WORD9_OMEGADOT_MASK: u32 = 0x3fffffc0;
 const WORD9_OMEGADOT_SHIFT: u32 = 6;
 
-const WORD10_IODE_MASK: u32 = 0x3fffc000;
-const WORD10_IODE_SHIFT: u32 = 14;
-const WORD10_IDOT_MASK: u32 = 0x00003fc0;
-const WORD10_IDOT_SHIFT: u32 = 6;
+const WORD10_IODE_MASK: u32 = 0x3fc00000;
+const WORD10_IODE_SHIFT: u32 = 22;
+const WORD10_IDOT_MASK: u32 = 0x003fff00;
+const WORD10_IDOT_SHIFT: u32 = 8;
 
 /// GPS / QZSS Frame #3 interpretation
 #[derive(Debug, Default, Copy, Clone, PartialEq)]

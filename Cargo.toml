@@ -1,6 +1,6 @@
 [package]
 name = "gnss-protos"
-version = "0.0.1"
+version = "0.0.2"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS protos encoder and decoder"
