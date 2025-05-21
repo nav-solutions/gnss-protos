@@ -153,13 +153,13 @@ impl GpsQzssDecoder {
 
                     match how.frame_id {
                         GpsQzssFrameId::Ephemeris1 => {
-                            self.subframe = GpsQzssSubframe::Eph1(Default::default());
+                            self.subframe = GpsQzssSubframe::Ephemeris1(Default::default());
                         },
                         GpsQzssFrameId::Ephemeris2 => {
-                            self.subframe = GpsQzssSubframe::Eph2(Default::default());
+                            self.subframe = GpsQzssSubframe::Ephemeris2(Default::default());
                         },
                         GpsQzssFrameId::Ephemeris3 => {
-                            self.subframe = GpsQzssSubframe::Eph3(Default::default());
+                            self.subframe = GpsQzssSubframe::Ephemeris3(Default::default());
                         },
                     }
                     #[cfg(feature = "log")]
@@ -725,7 +725,7 @@ mod test {
                 assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris1);
 
                 match frame.subframe {
-                    GpsQzssSubframe::Eph1(frame1) => {
+                    GpsQzssSubframe::Ephemeris1(frame1) => {
                         assert_eq!(frame1.af2, 0.0);
                         assert!((frame1.af1 - 1.023181539495e-011).abs() < 1e-14);
                         assert!((frame1.af0 - -4.524961113930e-004).abs() < 1.0e-11);
@@ -776,7 +776,7 @@ mod test {
                 assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris2);
 
                 match frame.subframe {
-                    GpsQzssSubframe::Eph2(frame2) => {
+                    GpsQzssSubframe::Ephemeris2(frame2) => {
                         assert_eq!(frame2.toe, 266_400);
                         assert_eq!(frame2.crs, -1.843750000000e+000);
                         assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
@@ -823,7 +823,7 @@ mod test {
                 assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris3);
 
                 match frame.subframe {
-                    GpsQzssSubframe::Eph3(frame3) => {
+                    GpsQzssSubframe::Ephemeris3(frame3) => {
                         assert!((frame3.cic - 8.009374141693e-008).abs() < 1e-9);
                         assert!((frame3.cis - -1.955777406693e-007).abs() < 1E-9);
                         assert!((frame3.crc - 2.225625000000e+002).abs() < 1E-9);

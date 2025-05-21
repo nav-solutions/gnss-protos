@@ -16,7 +16,7 @@ exclude = [
 ]
 
 [features]
-default = ["gps"]
+default = []
 
 # STD support. Currently only used in test mode.
 std = []
