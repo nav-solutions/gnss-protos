@@ -157,7 +157,6 @@ pub struct Word8 {
 impl Word8 {
     pub(crate) fn decode(dword: u32) -> Self {
         let cus = ((dword & WORD8_CUS_MASK) >> WORD8_CUS_SHIFT) as u32;
-        println!("CUS={:08x}", cus);
 
         let cus = twos_complement(cus, 0xffff, 0x8000);
         let sqrt_a_msb = ((dword & WORD8_SQRTA_MSB_MASK) >> WORD8_SQRTA_MSB_SHIFT) as u8;
