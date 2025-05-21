@@ -14,12 +14,12 @@ use log::error;
 
 // pub mod encoding;
 
+mod bytes;
 mod decoder;
+mod errors;
 mod frame1;
 mod frame2;
-// mod frame3;
-mod bytes;
-mod errors;
+mod frame3;
 mod frame_id;
 mod how;
 mod tlm;
@@ -33,6 +33,7 @@ pub use tlm::GpsQzssTelemetry;
 
 pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
+pub use frame3::GpsQzssFrame3;
 
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -55,6 +56,9 @@ pub enum GpsQzssSubframe {
 
     /// GPS Ephemeris Frame #2
     Eph2(GpsQzssFrame2),
+
+    /// GPS Ephemeris Frame #3
+    Eph3(GpsQzssFrame3),
 }
 
 impl Default for GpsQzssSubframe {
@@ -92,6 +96,22 @@ impl GpsQzssSubframe {
     pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
         match self {
             Self::Eph2(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    pub fn as_eph3(&self) -> Option<&GpsQzssFrame3> {
+        match self {
+            Self::Eph3(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
+        match self {
+            Self::Eph3(frame) => Some(frame),
             _ => None,
         }
     }
