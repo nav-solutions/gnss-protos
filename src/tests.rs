@@ -4,7 +4,8 @@ use std::sync::Once;
 #[cfg(feature = "std")]
 use log::LevelFilter;
 
-use crate::GpsDataByte;
+#[cfg(feature = "gps")]
+use crate::gps::GpsDataByte;
 
 #[cfg(feature = "std")]
 static INIT: Once = Once::new();
@@ -19,6 +20,7 @@ pub fn init_logger() {
     });
 }
 
+#[cfg(feature = "gps")]
 pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> {
     let mut ret = Vec::new();
     let mut word32 = 0u32;
@@ -35,6 +37,7 @@ pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> 
 }
 
 #[test]
+#[cfg(feature = "gps")]
 fn test_from_ublox_be_bytes() {
     let bytes = [
         // TLM

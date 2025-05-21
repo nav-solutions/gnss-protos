@@ -28,6 +28,7 @@ mod tests;
 /// - raw bytes as [u32]
 /// - bits_mask: masking u32
 /// - sign_bit_mask: sign bit
+#[cfg(feature = "gps")]
 pub(crate) fn twos_complement(value: u32, bits_mask: u32, sign_bit_mask: u32) -> i32 {
     let value = value & bits_mask;
 
@@ -41,6 +42,7 @@ pub(crate) fn twos_complement(value: u32, bits_mask: u32, sign_bit_mask: u32) ->
 }
 
 #[cfg(test)]
+#[cfg(feature = "gps")]
 mod test {
     use crate::twos_complement;
 
