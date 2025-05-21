@@ -10,11 +10,11 @@
 GNSS-Protos
 ===========
 
-Available on `gps` crate feature.
+Ths library offers small and efficient decoders for GNSS protocols.
 
 This library currently supports the following protos:
 
-- `GPS`
+- `GPS`: available on `gps` crate feature.
 
 GPS proto
 =========
