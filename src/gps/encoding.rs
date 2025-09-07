@@ -37,6 +37,7 @@ impl GpsQzssFrame {
                 // would panic
                 unreachable!("buffer to small");
             }
+
             #[cfg(feature = "log")]
             debug!("state={:?} | ptr={}", state, ptr);
         }
@@ -67,7 +68,7 @@ mod test {
         init_logger();
 
         let frame = GpsQzssFrame {
-            how: crate::GpsQzssHow {
+            how: GpsQzssHow {
                 tow: 1,
                 alert: true,
                 anti_spoofing: false,
@@ -78,7 +79,7 @@ mod test {
                 integrity: true,
                 reserved_bits: false,
             },
-            subframe: GpsQzssSubframe::Eph1(crate::GpsQzssFrame1 {
+            subframe: GpsQzssSubframe::Eph1(GpsQzssFrame1 {
                 week: 11,
                 ca_or_p_l2: 4,
                 ura: 5,

@@ -40,6 +40,26 @@ pub struct GpsQzssFrame {
     pub subframe: GpsQzssSubframe,
 }
 
+impl GpsQzssFrame {
+    /// Copies and returns with updated [GpsQzssHow] data word
+    pub fn with_how_word(mut self, how: GpsQzssHow) -> Self {
+        self.how = how;
+        self
+    }
+
+    /// Copies and returns with updated [GpsQzssTelemetry] data word
+    pub fn with_telemetry(mut self, telemetry: GpsQzssTelemetry) -> Self {
+        self.telemetry = telemetry;
+        self
+    }
+
+    /// Copies and returns an updated [GpsQzssSubframe]
+    pub fn with_subframe(mut self, subframe: GpsQzssSubframe) -> Self {
+        self.subframe = subframe;
+        self
+    }
+}
+
 /// GPS / QZSS Interpreted subframes
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum GpsQzssSubframe {
@@ -54,6 +74,7 @@ pub enum GpsQzssSubframe {
 }
 
 impl Default for GpsQzssSubframe {
+    /// Builds a default [GpsQzssSubFrame::Ephemeris1]
     fn default() -> Self {
         Self::Ephemeris1(Default::default())
     }

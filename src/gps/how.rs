@@ -33,6 +33,30 @@ pub struct GpsQzssHow {
 }
 
 impl GpsQzssHow {
+    /// Copies and returns [GpsQzssHow] with updated TOW in seconds
+    pub fn with_tow_seconds(mut self, tow_seconds: u32) -> Self {
+        self.tow = tow_seconds;
+        self
+    }
+
+    /// Copies and returns [GpsQzssHow] with updated [GpsQzssFrameId]
+    pub fn with_frame_id(mut self, frame_id: GpsQzssFrameId) -> Self {
+        self.frame_id = frame_id;
+        self
+    }
+    /// Copies and returns [GpsQzssHow] with updated alert bit
+    pub fn with_alert_bit(mut self, alert: bool) -> Self {
+        self.alert = alert;
+        self
+    }
+
+    /// Copies and returns [GpsQzssHow] with updated A/S bit
+    pub fn with_anti_spoofing(mut self, anti_spoofing: bool) -> Self {
+        self.anti_spoofing = anti_spoofing;
+        self
+    }
+
+    /// Builds an Ephemeris #1 [GpsQzssHow]
     pub fn ephemeris1() -> Self {
         Self {
             tow: 0,
@@ -42,6 +66,7 @@ impl GpsQzssHow {
         }
     }
 
+    /// Builds an Ephemeris #2 [GpsQzssHow]
     pub fn ephemeris2() -> Self {
         Self {
             tow: 0,
@@ -51,6 +76,7 @@ impl GpsQzssHow {
         }
     }
 
+    /// Builds an Ephemeris #3 [GpsQzssHow]
     pub fn ephemeris3() -> Self {
         Self {
             tow: 0,

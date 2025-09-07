@@ -1,11 +1,11 @@
 [package]
 name = "gnss-protos"
-version = "0.0.2"
+version = "0.1.0"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS protos encoder and decoder"
-homepage = "https://github.com/rtk-rs"
-repository = "https://github.com/rtk-rs/gnss-protos"
+homepage = "https://github.com/nav-solutions"
+repository = "https://github.com/nav-solutions/gnss-protos"
 keywords = ["geo", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
 edition = "2021"
