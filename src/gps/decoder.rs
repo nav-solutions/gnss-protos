@@ -33,6 +33,7 @@ enum State {
     DataWord,
 }
 
+#[derive(Clone, Copy)]
 pub struct GpsQzssDecoder {
     /// Frame counter
     ptr: usize,
@@ -65,25 +66,42 @@ pub struct GpsQzssDecoder {
 impl Default for GpsQzssDecoder {
     /// Creates a default [GpsQzssDecoder] with parity bit verification
     fn default() -> Self {
-        let state = State::default();
-
         Self {
-            state,
             ptr: 0,
             dword: 0,
-            collected: 0,
             storage: 0,
+            collected: 0,
             parity_check: true,
             tlm: Default::default(),
             how: Default::default(),
+            state: Default::default(),
             subframe: Default::default(),
         }
     }
 }
 
 impl GpsQzssDecoder {
-    /// Parses a GPS/QZSS stream of [GpsDataByte]s, returns a [GpsQzssFrame] when
-    /// one is identified and the last data word has been correctly processed.
+    /// Resets this [GpsQzssDecoder]
+    fn reset(mut self) {
+        self.ptr = 0;
+        self.dword = 0;
+        self.collected = 0;
+        self.state = Default::default();
+        self.how = Default::default();
+        self.subframe = Default::default();
+    }
+
+    /// Processes a [GpsDataByte] from a GPS-QZSS data stream,
+    /// returns a [GpsQzssFrame] when a correct frame has entirely been identified and decoded.
+    ///
+    /// ## Input
+    /// - byte: [GpsDataByte] wrapper to describe whether your stream of byte
+    /// is padded or not
+    ///
+    /// ## Output
+    /// - [Option::None] in most cases.
+    /// - [GpsQzssFrame] once all 10 sucessive GPS data words were correctly identified
+    /// and decoded.
     pub fn parse(&mut self, byte: GpsDataByte) -> Option<GpsQzssFrame> {
         // collect bytes
         match byte {
@@ -181,67 +199,100 @@ impl GpsQzssDecoder {
                     GpsQzssFrameId::Ephemeris1 => match self.ptr {
                         3 => {
                             let word = Ephemeris1Word3::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word3(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#3 {:?}", word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word3(&word);
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#3 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         4 => {
                             let word = Ephemeris1Word4::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word4(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#4 {:?}", word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word4(&word);
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#4 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         5 => {
                             let word = Ephemeris1Word5::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word5(&word);
-
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#5 {:?}", word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word5(&word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#5 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         6 => {
                             let word = Ephemeris1Word6::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word6(&word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word6(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#6 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#6 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         7 => {
                             let word = Ephemeris1Word7::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word7(&word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word7(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#7 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#7 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         8 => {
                             let word = Ephemeris1Word8::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word8(&word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word8(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#8 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#8 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         9 => {
                             let word = Ephemeris1Word9::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word9(&word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word9(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#9 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#9 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         10 => {
                             let word = Ephemeris1Word10::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph1().expect("internal error");
-                            frame.set_word10(&word);
+                            if let Some(frame) = self.subframe.as_mut_eph1() {
+                                frame.set_word10(&word);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #1 Word#10 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #1 Word#10 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         _ => {
                             unreachable!("invalid state");
