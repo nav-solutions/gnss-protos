@@ -30,5 +30,5 @@ We support the following GPS frames:
 License
 =======
 
-This library is part of the [RTK-rs framework](https://github.com/nav-solutions) which
-is delivered under the [Mozilla V2 Public](https://www.mozilla.org/en-US/MPL/2.0) license.
+This library is part of the [Nav-solutions framework](https://github.com/nav-solutions) and is
+licensed under [Mozilla V2 Public](https://www.mozilla.org/en-US/MPL/2.0) license.
