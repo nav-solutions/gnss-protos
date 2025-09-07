@@ -1,4 +1,4 @@
-use crate::twos_complement;
+use crate::{gps::GpsError, twos_complement};
 
 const WORD3_WEEK_MASK: u32 = 0x3ff00000;
 const WORD3_WEEK_SHIFT: u32 = 20;
@@ -157,8 +157,47 @@ impl GpsQzssFrame1 {
         self
     }
 
+    pub(crate) fn decode_word(&mut self, ptr: usize, dword: u32) -> Result<(), GpsError> {
+        match ptr {
+            3 => {
+                let word = Word3::decode(dword);
+                self.set_word3(word);
+            },
+            4 => {
+                let word = Word4::decode(dword);
+                self.set_word4(word);
+            },
+            5 => {
+                let word = Word5::decode(dword);
+                self.set_word5(word);
+            },
+            6 => {
+                let word = Word6::decode(dword);
+                self.set_word6(word);
+            },
+            7 => {
+                let word = Word7::decode(dword);
+                self.set_word7(word);
+            },
+            8 => {
+                let word = Word8::decode(dword);
+                self.set_word8(word);
+            },
+            9 => {
+                let word = Word9::decode(dword);
+                self.set_word9(word);
+            },
+            10 => {
+                let word = Word10::decode(dword);
+                self.set_word10(word);
+            },
+            _ => return Err(GpsError::InternalFSM),
+        }
+        Ok(())
+    }
+
     /// Updates scaled content from [Word3]
-    pub(crate) fn set_word3(&mut self, word: &Word3) {
+    fn set_word3(&mut self, word: Word3) {
         self.week = word.week;
         self.ura = word.ura;
         self.ca_or_p_l2 = word.ca_or_p_l2;
@@ -178,7 +217,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word4]
-    pub(crate) fn set_word4(&mut self, word: &Word4) {
+    fn set_word4(&mut self, word: Word4) {
         self.l2_p_data_flag = word.l2_p_data_flag;
         self.reserved_word4 = word.reserved;
     }
@@ -192,7 +231,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word5]
-    pub(crate) fn set_word5(&mut self, word: &Word5) {
+    fn set_word5(&mut self, word: Word5) {
         self.reserved_word5 = word.reserved;
     }
 
@@ -204,7 +243,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word6]
-    pub(crate) fn set_word6(&mut self, word: &Word6) {
+    fn set_word6(&mut self, word: Word6) {
         self.reserved_word6 = word.reserved;
     }
 
@@ -216,7 +255,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word7]
-    pub(crate) fn set_word7(&mut self, word: &Word7) {
+    fn set_word7(&mut self, word: Word7) {
         self.reserved_word7 = word.reserved;
         self.tgd = (word.tgd as f64) / 2.0_f64.powi(31);
     }
@@ -230,7 +269,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word8]
-    pub(crate) fn set_word8(&mut self, word: &Word8) {
+    fn set_word8(&mut self, word: Word8) {
         self.toc = (word.toc as u32) * 16;
         self.iodc |= word.iodc_lsb as u16;
     }
@@ -244,7 +283,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word9]
-    pub(crate) fn set_word9(&mut self, word: &Word9) {
+    fn set_word9(&mut self, word: Word9) {
         self.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
         self.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
     }
@@ -258,7 +297,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Updates scaled content from [Word10]
-    pub(crate) fn set_word10(&mut self, word: &Word10) {
+    fn set_word10(&mut self, word: Word10) {
         self.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
     }
 

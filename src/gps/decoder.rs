@@ -196,107 +196,25 @@ impl GpsQzssDecoder {
 
             State::DataWord => {
                 match self.how.frame_id {
-                    GpsQzssFrameId::Ephemeris1 => match self.ptr {
-                        3 => {
-                            let word = Ephemeris1Word3::decode(self.dword);
+                    GpsQzssFrameId::Ephemeris1 => {
+                        if let Some(frame) = self.subframe.as_mut_eph1() {
+                            match frame.decode_word(self.ptr, self.dword) {
+                                Ok(_) => {
+                                    #[cfg(feature = "log")]
+                                    trace!("GPS - EPH #1 Word#{} {:?}", self.ptr, self.dword);
+                                },
+                                Err(e) => {
+                                    #[cfg(feature = "log")]
+                                    trace!("GPS error: {}", e);
 
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word3(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#3 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
+                                    self.reset();
+                                    return None;
+                                },
                             }
-                        },
-                        4 => {
-                            let word = Ephemeris1Word4::decode(self.dword);
-
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word4(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#4 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        5 => {
-                            let word = Ephemeris1Word5::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word5(&word);
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#5 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        6 => {
-                            let word = Ephemeris1Word6::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word6(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#6 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        7 => {
-                            let word = Ephemeris1Word7::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word7(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#7 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        8 => {
-                            let word = Ephemeris1Word8::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word8(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#8 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        9 => {
-                            let word = Ephemeris1Word9::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word9(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#9 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        10 => {
-                            let word = Ephemeris1Word10::decode(self.dword);
-                            if let Some(frame) = self.subframe.as_mut_eph1() {
-                                frame.set_word10(&word);
-
-                                #[cfg(feature = "log")]
-                                trace!("GPS - EPH #1 Word#10 {:?}", word);
-                            } else {
-                                self.reset();
-                                return None;
-                            }
-                        },
-                        _ => {
-                            unreachable!("invalid state");
-                        },
+                        } else {
+                            self.reset();
+                            return None;
+                        }
                     },
                     GpsQzssFrameId::Ephemeris2 => match self.ptr {
                         3 => {
@@ -819,8 +737,8 @@ mod test {
                 match frame.subframe {
                     GpsQzssSubframe::Ephemeris1(frame1) => {
                         assert_eq!(frame1.af2, 0.0);
-                        assert!((frame1.af1 - 1.023181539495e-011).abs() < 1e-14);
-                        assert!((frame1.af0 - -4.524961113930e-004).abs() < 1.0e-11);
+                        assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
+                        assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
                         assert_eq!(frame1.week, 318);
                         assert_eq!(frame1.toc, 266_400);
                         assert_eq!(frame1.health, 0);

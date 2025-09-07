@@ -202,6 +202,20 @@ impl GpsQzssFrame3 {
             idot: (self.idot * 2.0_f64.powi(43)).round() as i32,
         }
     }
+
+    /// Encodes this [GpsQzssFrame3] as burst of 8 32-bit data words
+    pub(crate) fn encode(&self) -> [u32; 8] {
+        [
+            self.word3().encode(),
+            self.word4().encode(),
+            self.word5().encode(),
+            self.word6().encode(),
+            self.word7().encode(),
+            self.word8().encode(),
+            self.word9().encode(),
+            self.word10().encode(),
+        ]
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -219,6 +233,10 @@ impl Word3 {
         let omega0_msb = ((dword & WORD3_OMEGA0_MASK) >> WORD3_OMEGA0_SHIFT) as u8;
         Self { cic, omega0_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -231,6 +249,10 @@ impl Word4 {
     pub(crate) fn decode(dword: u32) -> Self {
         let omega0_lsb = ((dword & WORD4_OMEGA0_MASK) >> WORD4_OMEGA0_SHIFT) as u32;
         Self { omega0_lsb }
+    }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
     }
 }
 #[derive(Debug, Default, Clone)]
@@ -248,6 +270,10 @@ impl Word5 {
         let i0_msb = ((dword & WORD5_I0_MASK) >> WORD5_I0_SHIFT) as u8;
         Self { cis, i0_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -260,6 +286,10 @@ impl Word6 {
     pub(crate) fn decode(dword: u32) -> Self {
         let i0_lsb = ((dword & WORD6_I0_MASK) >> WORD6_I0_SHIFT) as u32;
         Self { i0_lsb }
+    }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
     }
 }
 
@@ -278,6 +308,10 @@ impl Word7 {
         let omega_msb = ((dword & WORD7_OMEGA_MASK) >> WORD7_OMEGA_SHIFT) as u8;
         Self { crc, omega_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -290,6 +324,10 @@ impl Word8 {
     pub(crate) fn decode(dword: u32) -> Self {
         let omega_lsb = ((dword & WORD8_OMEGA_MASK) >> WORD8_OMEGA_SHIFT) as u32;
         Self { omega_lsb }
+    }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
     }
 }
 
@@ -304,6 +342,10 @@ impl Word9 {
         let omega_dot = ((dword & WORD9_OMEGADOT_MASK) >> WORD9_OMEGADOT_SHIFT) as u32;
         let omega_dot = twos_complement(omega_dot, 0xffffff, 0x800000);
         Self { omega_dot }
+    }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
     }
 }
 
@@ -325,5 +367,9 @@ impl Word10 {
         let idot = twos_complement(idot, 0x3fff, 0x2000);
 
         Self { iode, idot }
+    }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
     }
 }
