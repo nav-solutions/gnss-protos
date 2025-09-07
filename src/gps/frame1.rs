@@ -109,49 +109,184 @@ pub struct GpsQzssFrame1 {
 }
 
 impl GpsQzssFrame1 {
+    /// Copies and updates Week number
     pub fn with_week(mut self, week: u16) -> Self {
         self.week = week;
         self
     }
 
+    /// Copies and updates health mask
     pub fn with_health(mut self, health: u8) -> Self {
         self.health = health;
         self
     }
 
+    /// Copies and updates time of clock
     pub fn with_toc(mut self, toc: u32) -> Self {
         self.toc = toc;
         self
     }
 
+    /// Copies and updates Total Group Delay (TGD)
     pub fn with_tgd(mut self, tgd: f64) -> Self {
         self.tgd = tgd;
         self
     }
 
+    /// Copies and updates User Range Accuracy (URA)
     pub fn with_ura(mut self, ura: u8) -> Self {
         self.ura = ura;
         self
     }
 
+    /// Copies and updates clock correction (0) term
     pub fn with_af0(mut self, af0: f64) -> Self {
         self.af0 = af0;
         self
     }
 
+    /// Copies and updates clock correction (1) term
     pub fn with_af1(mut self, af1: f64) -> Self {
         self.af1 = af1;
         self
     }
 
+    /// Copies and updates clock correction (quadratic) term
     pub fn with_af2(mut self, af2: f64) -> Self {
         self.af2 = af2;
         self
     }
+
+    /// Updates scaled content from [Word3]
+    pub(crate) fn set_word3(&mut self, word: &Word3) {
+        self.week = word.week;
+        self.ura = word.ura;
+        self.ca_or_p_l2 = word.ca_or_p_l2;
+        self.health = word.health;
+        self.iodc = (word.iodc_msb as u16) << 8;
+    }
+
+    /// Encodes a [Word3] from [GpsQzssFrame1]
+    fn word3(&self) -> Word3 {
+        Word3 {
+            week: self.week,
+            ca_or_p_l2: self.ca_or_p_l2,
+            ura: self.ura,
+            health: self.health,
+            iodc_msb: ((self.iodc & 0x300) >> 8) as u8,
+        }
+    }
+
+    /// Updates scaled content from [Word4]
+    pub(crate) fn set_word4(&mut self, word: &Word4) {
+        self.l2_p_data_flag = word.l2_p_data_flag;
+        self.reserved_word4 = word.reserved;
+    }
+
+    /// Encodes a [Word4] from [GpsQzssFrame1]
+    fn word4(&self) -> Word4 {
+        Word4 {
+            reserved: self.reserved_word4,
+            l2_p_data_flag: self.l2_p_data_flag,
+        }
+    }
+
+    /// Updates scaled content from [Word5]
+    pub(crate) fn set_word5(&mut self, word: &Word5) {
+        self.reserved_word5 = word.reserved;
+    }
+
+    /// Encodes a [Word5] from [GpsQzssFrame1]
+    fn word5(&self) -> Word5 {
+        Word5 {
+            reserved: self.reserved_word5,
+        }
+    }
+
+    /// Updates scaled content from [Word6]
+    pub(crate) fn set_word6(&mut self, word: &Word6) {
+        self.reserved_word6 = word.reserved;
+    }
+
+    /// Encodes a [Word6] from [GpsQzssFrame1]
+    fn word6(&self) -> Word6 {
+        Word6 {
+            reserved: self.reserved_word6,
+        }
+    }
+
+    /// Updates scaled content from [Word7]
+    pub(crate) fn set_word7(&mut self, word: &Word7) {
+        self.reserved_word7 = word.reserved;
+        self.tgd = (word.tgd as f64) / 2.0_f64.powi(31);
+    }
+
+    /// Encodes a [Word7] from [GpsQzssFrame1]
+    fn word7(&self) -> Word7 {
+        Word7 {
+            reserved: self.reserved_word7,
+            tgd: (self.tgd * 2.0_f64.powi(31)).round() as i8,
+        }
+    }
+
+    /// Updates scaled content from [Word8]
+    pub(crate) fn set_word8(&mut self, word: &Word8) {
+        self.toc = (word.toc as u32) * 16;
+        self.iodc |= word.iodc_lsb as u16;
+    }
+
+    /// Encodes a [Word8] from [GpsQzssFrame1]
+    fn word8(&self) -> Word8 {
+        Word8 {
+            toc: (self.toc / 16) as u16,
+            iodc_lsb: (self.iodc & 0xff) as u8,
+        }
+    }
+
+    /// Updates scaled content from [Word9]
+    pub(crate) fn set_word9(&mut self, word: &Word9) {
+        self.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
+        self.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
+    }
+
+    /// Encodes a [Word9] from [GpsQzssFrame1]
+    fn word9(&self) -> Word9 {
+        Word9 {
+            af2: (self.af2 * 2.0_f64.powi(43)).round() as i8,
+            af1: (self.af1 * 2.0_f64.powi(55)).round() as i16,
+        }
+    }
+
+    /// Updates scaled content from [Word10]
+    pub(crate) fn set_word10(&mut self, word: &Word10) {
+        self.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
+    }
+
+    /// Encodes a [Word10] from [GpsQzssFrame1]
+    fn word10(&self) -> Word10 {
+        Word10 {
+            af0: (self.af0 * 2.0_f64.powi(31)).round() as i32,
+        }
+    }
+
+    /// Encodes this [GpsQzssFrame1] as a burst of 8 [u32] data words
+    /// starting from [Word3] to [Word10].
+    pub(crate) fn encode(&self) -> [u32; 8] {
+        [
+            self.word3().encode(),
+            self.word4().encode(),
+            self.word5().encode(),
+            self.word6().encode(),
+            self.word7().encode(),
+            self.word8().encode(),
+            self.word9().encode(),
+            self.word10().encode(),
+        ]
+    }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct Word3 {
+#[derive(Debug, Copy, Default, Clone)]
+pub(crate) struct Word3 {
     /// 10-bit week counter
     pub week: u16,
 
@@ -169,7 +304,7 @@ pub struct Word3 {
 }
 
 impl Word3 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let week = ((dword & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
         let ca_or_p_l2 = ((dword & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
         let ura = ((dword & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
@@ -184,16 +319,20 @@ impl Word3 {
             iodc_msb,
         }
     }
+
+    pub fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word4 {
+pub(crate) struct Word4 {
     pub l2_p_data_flag: bool,
     pub reserved: u32,
 }
 
 impl Word4 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let l2_p_data_flag = (dword & WORD4_L2P_DATA_MASK) > 0;
         let reserved = ((dword & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
         Self {
@@ -201,36 +340,48 @@ impl Word4 {
             reserved,
         }
     }
+
+    pub fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word5 {
+pub(crate) struct Word5 {
     /// 24-bit reserved
     pub reserved: u32,
 }
 
 impl Word5 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let reserved = (dword & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
         Self { reserved }
+    }
+
+    pub fn encode(&self) -> u32 {
+        0
     }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word6 {
+pub(crate) struct Word6 {
     /// 24-bit reserved
     pub reserved: u32,
 }
 
 impl Word6 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let reserved = (dword & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
         Self { reserved }
+    }
+
+    pub fn encode(&self) -> u32 {
+        0
     }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word7 {
+pub(crate) struct Word7 {
     /// 16-bit reserved
     pub reserved: u16,
 
@@ -239,15 +390,19 @@ pub struct Word7 {
 }
 
 impl Word7 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let reserved = ((dword & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
         let tgd = ((dword & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
         Self { reserved, tgd }
     }
+
+    pub fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word8 {
+pub(crate) struct Word8 {
     /// 8-bit IODC LSB to associate with Word # 3
     pub iodc_lsb: u8,
 
@@ -256,15 +411,19 @@ pub struct Word8 {
 }
 
 impl Word8 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let iodc_lsb = ((dword & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
         let toc = ((dword & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
         Self { iodc_lsb, toc }
     }
+
+    pub fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word9 {
+pub(crate) struct Word9 {
     /// 8 bit af2
     pub af2: i8,
 
@@ -273,23 +432,31 @@ pub struct Word9 {
 }
 
 impl Word9 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let af2 = ((dword & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
         let af1 = ((dword & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
         Self { af2, af1 }
     }
+
+    pub fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word10 {
+pub(crate) struct Word10 {
     /// 22-bit af0
     pub af0: i32,
 }
 
 impl Word10 {
-    pub(crate) fn decode(dword: u32) -> Self {
+    pub fn decode(dword: u32) -> Self {
         let af0 = ((dword & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
         let af0 = twos_complement(af0, 0x3fffff, 0x200000);
         Self { af0 }
+    }
+
+    pub fn encode(&self) -> u32 {
+        0
     }
 }
