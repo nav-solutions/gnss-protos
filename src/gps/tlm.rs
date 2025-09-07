@@ -87,6 +87,8 @@ mod tlm {
         for (dword, message, integrity, reserved_bit) in [
             (0x22C13E00, 0x13E, false, false),
             (0x22C13F80, 0x13F, true, false),
+            (0x22C13FC0, 0x13F, true, true),
+            (0x22C13F40, 0x13F, false, true),
         ] {
             let tlm = GpsQzssTelemetry::decode(dword).unwrap_or_else(|e| {
                 panic!("failed to decode gps-tlm from 0x{:08X} - {}", dword, e);

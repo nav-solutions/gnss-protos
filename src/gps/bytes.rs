@@ -1,15 +1,15 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 /// [GpsDataByte] aligned to 32 bits
 pub enum GpsDataByte {
     /// 2-bit MSB padding.
-    /// Usually used at the beginning or stream termination by computers.
+    /// Usually used at the beginning or end of GPS word to align GPS stream correctly.
     MsbPadded(u8),
 
     /// 2-bit LSB padding.
-    /// Usually used at the beginning or stream termination by computers.
+    /// Usually used at the beginning or end of GPS word to align GPS stream correctly.
     LsbPadded(u8),
 
-    /// Plain byte
+    /// Plain byte (no padding)
     Byte(u8),
 }
 
