@@ -23,6 +23,15 @@ impl GpsQzssFrameId {
             _ => Err(GpsError::UnknownFrameType),
         }
     }
+
+    /// Encodes this [GpsQzssFrameId] as [u8]
+    pub fn encode(&self) -> u8 {
+        match self {
+            Self::Ephemeris1 => 1,
+            Self::Ephemeris2 => 2,
+            Self::Ephemeris3 => 3,
+        }
+    }
 }
 
 #[cfg(test)]

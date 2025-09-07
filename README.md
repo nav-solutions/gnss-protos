@@ -11,22 +11,27 @@
 GNSS-Protos
 ===========
 
-Ths library offers small and efficient decoders for GNSS protocols.
+The idea behind this library is to offer an easy to use, efficient and regrouped
+framework to encode & decode GNSS protocols.
 
-This library currently supports the following protos:
+You can use this API to learn and go deeper into each protocol, as we strive to document
+each data bit correctly (refer to the online API).
 
-- `GPS`: available on `gps` crate feature.
+All protocols are gated under a library feature, so you can narrow it down to your use case.
 
-GPS proto
-=========
+Supported protocols
+===================
 
-Available on `gps` crate feature.
+- `GPS (+QZSS)`: available on `gps` crate feature, activated by default
 
-We support the following GPS frames:
+GPS and QZSS protocol
+=====================
 
-- Ephemeris #1
-- Ephemeris #2
-- Ephemeris #3
+The `gps` library feature activates support of part of the GPS and QZSS protocol.  
+
+Currently we support Ephemeris frames 1, 2 and 3, which is sufficient for real-time
+navigation. We're still lacking support for Almanach frames, which help converge faster
+in case you are doing all the work manually.
 
 License
 =======

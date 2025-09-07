@@ -44,6 +44,7 @@ impl GpsQzssHow {
         self.frame_id = frame_id;
         self
     }
+
     /// Copies and returns [GpsQzssHow] with updated alert bit
     pub fn with_alert_bit(mut self, alert: bool) -> Self {
         self.alert = alert;
@@ -98,5 +99,50 @@ impl GpsQzssHow {
             anti_spoofing,
             tow: tow * 6,
         })
+    }
+
+    /// Encodes this [GpsQzssHow] word as [u32]
+    pub(crate) fn encode(&self) -> u32 {
+        let mut value = (self.tow << TOW_SHIFT) & TOW_MASK;
+        value |= (self.frame_id as u32) << FRAMEID_SHIFT;
+
+        if self.alert {
+            value |= ALERT_MASK;
+        }
+
+        if self.anti_spoofing {
+            value |= AS_MASK;
+        }
+
+        value
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::gps::{GpsQzssFrameId, GpsQzssHow};
+
+    #[test]
+    fn how_encoding() {
+        for (dword, tow, frame_id, alert, anti_spoofing) in
+            [(0x1B3EC122, 334788, GpsQzssFrameId::Ephemeris1, false, false)]
+        {
+            let decoded = GpsQzssHow::decode(dword).unwrap_or_else(|e| {
+                panic!("failed to decode gps-how from 0x{:08X} : {}", dword, e);
+            });
+
+            assert_eq!(decoded.tow, tow);
+            assert_eq!(decoded.frame_id, frame_id);
+            assert_eq!(decoded.alert, alert);
+            assert_eq!(decoded.anti_spoofing, anti_spoofing);
+
+            let encoded = decoded.encode();
+
+            assert_eq!(
+                encoded, dword,
+                "{:?} encoding failed - 0x{:08X} but 0x{:08X} is expected",
+                decoded, encoded, dword
+            );
+        }
     }
 }
