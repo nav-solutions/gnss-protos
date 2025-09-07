@@ -90,12 +90,13 @@ pub struct GpsQzssFrame1 {
     /// af1 (in seconds per seconds)
     pub af1: f64,
 
-    /// af0 (in seconds)
+    /// 22-bit af0 (in seconds)
     pub af0: f64,
 
-    /// 32-bit reserved word #4
+    /// 23-bit reserved word #4
     pub reserved_word4: u32,
 
+    /// 1-bit flag
     pub l2_p_data_flag: bool,
 
     /// 24-bit reserved word #5
@@ -104,7 +105,7 @@ pub struct GpsQzssFrame1 {
     /// 24-bit reserved word #6
     pub reserved_word6: u32,
 
-    ///16-bit reserved word #7
+    /// 16-bit reserved word #7
     pub reserved_word7: u16,
 }
 
@@ -324,7 +325,7 @@ impl GpsQzssFrame1 {
     }
 }
 
-#[derive(Debug, Copy, Default, Clone)]
+#[derive(Debug, Copy, Default, Clone, PartialEq)]
 pub(crate) struct Word3 {
     /// 10-bit week counter
     pub week: u16,
@@ -360,11 +361,19 @@ impl Word3 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+
+        value |= ((self.week & 0x3ff) as u32) << WORD3_WEEK_SHIFT;
+        value |= ((self.ca_or_p_l2 & 0x3) as u32) << WORD3_CA_P_L2_SHIFT;
+        value |= ((self.ura & 0x07) as u32) << WORD3_URA_SHIFT;
+        value |= ((self.health & 0x3f) as u32) << WORD3_HEALTH_SHIFT;
+        value |= ((self.iodc_msb & 0x03) as u32) << WORD3_IODC_SHIFT;
+
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word4 {
     pub l2_p_data_flag: bool,
     pub reserved: u32,
@@ -381,11 +390,19 @@ impl Word4 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+
+        if self.l2_p_data_flag {
+            value |= WORD4_L2P_DATA_MASK;
+        }
+
+        value |= (self.reserved & 0x7fffff) << WORD4_RESERVED_SHIFT;
+
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word5 {
     /// 24-bit reserved
     pub reserved: u32,
@@ -398,11 +415,13 @@ impl Word5 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= (self.reserved & 0x0ffffff) << WORD5_RESERVED_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub(crate) struct Word6 {
     /// 24-bit reserved
     pub reserved: u32,
@@ -415,11 +434,13 @@ impl Word6 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= (self.reserved & 0x0ffffff) << WORD6_RESERVED_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word7 {
     /// 16-bit reserved
     pub reserved: u16,
@@ -436,11 +457,14 @@ impl Word7 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= ((self.reserved as u32) & 0x0ffff) << WORD7_RESERVED_SHIFT;
+        value |= ((self.tgd as u32) & 0xff) << WORD7_TGD_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word8 {
     /// 8-bit IODC LSB to associate with Word # 3
     pub iodc_lsb: u8,
@@ -457,11 +481,14 @@ impl Word8 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= ((self.iodc_lsb as u32) & 0xff) << WORD8_IODC_SHIFT;
+        value |= ((self.toc as u32) & 0x0ffff) << WORD8_TOC_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word9 {
     /// 8 bit af2
     pub af2: i8,
@@ -478,11 +505,14 @@ impl Word9 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= ((self.af2 as u32) & 0x0ff) << WORD9_AF2_SHIFT;
+        value |= ((self.af1 as u32) & 0x0ffff) << WORD9_AF1_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word10 {
     /// 22-bit af0
     pub af0: i32,
@@ -496,6 +526,170 @@ impl Word10 {
     }
 
     pub fn encode(&self) -> u32 {
-        0
+        ((self.af0 & 0x3fffff) as u32) << WORD10_AF0_SHIFT
+    }
+}
+
+#[cfg(test)]
+mod frame1 {
+    use super::*;
+
+    #[test]
+    fn dword3_encoding() {
+        for dword3 in [
+            Word3 {
+                week: 1,
+                ca_or_p_l2: 0,
+                ura: 0,
+                health: 0,
+                iodc_msb: 0,
+            },
+            Word3 {
+                week: 0,
+                ca_or_p_l2: 1,
+                ura: 0,
+                health: 0,
+                iodc_msb: 0,
+            },
+            Word3 {
+                week: 0,
+                ca_or_p_l2: 0,
+                ura: 1,
+                health: 0,
+                iodc_msb: 0,
+            },
+            Word3 {
+                week: 0,
+                ca_or_p_l2: 0,
+                ura: 0,
+                health: 1,
+                iodc_msb: 0,
+            },
+            Word3 {
+                week: 0,
+                ca_or_p_l2: 0,
+                ura: 0,
+                health: 0,
+                iodc_msb: 1,
+            },
+            Word3 {
+                week: 1,
+                ca_or_p_l2: 2,
+                ura: 5,
+                health: 1,
+                iodc_msb: 0,
+            },
+        ] {
+            let encoded = dword3.encode();
+            let decoded = Word3::decode(encoded);
+            assert_eq!(decoded, dword3);
+        }
+    }
+
+    #[test]
+    fn dword4_encoding() {
+        for dword4 in [
+            Word4 {
+                l2_p_data_flag: true,
+                reserved: 0,
+            },
+            Word4 {
+                l2_p_data_flag: false,
+                reserved: 1,
+            },
+            Word4 {
+                l2_p_data_flag: true,
+                reserved: 123,
+            },
+        ] {
+            let encoded = dword4.encode();
+            let decoded = Word4::decode(encoded);
+            assert_eq!(decoded, dword4);
+        }
+    }
+
+    #[test]
+    fn dword5_encoding() {
+        for dword5 in [Word5 { reserved: 0 }, Word5 { reserved: 120 }] {
+            let encoded = dword5.encode();
+            let decoded = Word5::decode(encoded);
+            assert_eq!(decoded, dword5);
+        }
+    }
+
+    #[test]
+    fn dword6_encoding() {
+        for dword6 in [Word6 { reserved: 0 }, Word6 { reserved: 120 }] {
+            let encoded = dword6.encode();
+            let decoded = Word6::decode(encoded);
+            assert_eq!(decoded, dword6);
+        }
+    }
+
+    #[test]
+    fn dword7_encoding() {
+        for dword7 in [
+            Word7 {
+                reserved: 0,
+                tgd: 1,
+            },
+            Word7 {
+                reserved: 120,
+                tgd: 0,
+            },
+            Word7 {
+                reserved: 120,
+                tgd: 23,
+            },
+        ] {
+            let encoded = dword7.encode();
+            let decoded = Word7::decode(encoded);
+            assert_eq!(decoded, dword7);
+        }
+    }
+
+    #[test]
+    fn dword8_encoding() {
+        for dword8 in [
+            Word8 {
+                iodc_lsb: 10,
+                toc: 30,
+            },
+            Word8 {
+                iodc_lsb: 30,
+                toc: 10,
+            },
+        ] {
+            let encoded = dword8.encode();
+            let decoded = Word8::decode(encoded);
+            assert_eq!(decoded, dword8);
+        }
+    }
+
+    #[test]
+    fn dword9_encoding() {
+        for dword9 in [Word9 { af2: 10, af1: 9 }, Word9 { af2: 9, af1: 100 }] {
+            let encoded = dword9.encode();
+            let decoded = Word9::decode(encoded);
+            assert_eq!(decoded, dword9);
+        }
+    }
+
+    #[test]
+    fn dword10_encoding() {
+        for dword10 in [
+            // Word10 {
+            //     af0: 9,
+            // },
+            Word10 { af0: 100 },
+            // Word10 {
+            //     af0: -100,
+            // },
+            Word10 { af0: -1230 },
+        ] {
+            let encoded = dword10.encode();
+            let decoded = Word10::decode(encoded);
+            assert_eq!(decoded, dword10);
+        }
     }
 }
