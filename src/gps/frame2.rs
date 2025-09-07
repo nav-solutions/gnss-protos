@@ -72,8 +72,114 @@ pub struct GpsQzssFrame2 {
     pub aodo: u8,
 }
 
+impl GpsQzssFrame2 {
+    fn word3(&self) -> Word3 {
+        Word3 {
+            iode: self.iode,
+            crs: (self.crs * 2.0_f64.powi(5)) as i32,
+        }
+    }
+
+    pub(crate) fn set_word3(&mut self, word: &Word3) {
+        self.crs = (word.crs as f64) / 2.0_f64.powi(5);
+        self.iode = word.iode;
+    }
+
+    fn word4(&self) -> Word4 {
+        let m0 = (self.m0 * 2.0_f64.powi(31)) as u32;
+        Word4 {
+            m0_msb: ((m0 & 0xff000000) >> 24) as u8,
+            dn: (self.dn * 2.0_f64.powi(43)).round() as i16,
+        }
+    }
+
+    pub(crate) fn set_dn(&mut self, word: &Word4) {
+        self.dn = (word.dn as f64) / 2.0_f64.powi(43);
+    }
+
+    fn word5(&self) -> Word5 {
+        let m0 = (self.m0 * 2.0_f64.powi(31)).round() as i32;
+
+        Word5 {
+            m0_lsb: (m0 & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word5(&mut self, word: &Word5, m0_msb: u32) {
+        let mut m0 = m0_msb << 24;
+        m0 |= word.m0_lsb as u32;
+        self.m0 = ((m0 as i32) as f64) / 2.0_f64.powi(31);
+    }
+
+    fn word6(&self) -> Word6 {
+        let e = (self.e * 2.0_f64.powi(33)).round() as u32;
+
+        Word6 {
+            e_msb: ((e & 0xff000000) >> 24) as u8,
+            cuc: (self.cuc * 2.0_f64.powi(29)).round() as i16,
+        }
+    }
+
+    pub(crate) fn set_cuc(&mut self, word: &Word6) {
+        self.cuc = (word.cuc as f64) / 2.0_f64.powi(29);
+    }
+
+    fn word7(&self) -> Word7 {
+        let e = (self.e * 2.0_f64.powi(33)).round() as i32;
+        Word7 {
+            e_lsb: (e & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word7(&mut self, word: &Word7, e_msb: u32) {
+        let mut e = e_msb << 24;
+        e |= word.e_lsb;
+
+        self.e = (e as f64) / 2.0_f64.powi(33);
+    }
+
+    fn word8(&self) -> Word8 {
+        let sqrt_a = (self.sqrt_a * 2.0_f64.powi(19)).round() as u32;
+        Word8 {
+            sqrt_a_msb: ((sqrt_a & 0xff000000) >> 24) as u8,
+            cus: (self.cus * 2.0_f64.powi(29)).round() as i32,
+        }
+    }
+
+    pub(crate) fn set_word8(&mut self, word: &Word8) {
+        self.cus = (word.cus as f64) / 2.0_f64.powi(29);
+    }
+
+    fn word9(&self) -> Word9 {
+        let sqrt_a = (self.sqrt_a * 2.0_f64.powi(19)).round() as i32;
+        Word9 {
+            sqrt_a_lsb: (sqrt_a & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word9(&mut self, word: &Word9, sqrt_a_msb: u32) {
+        let mut sqrt_a = sqrt_a_msb << 24;
+        sqrt_a |= word.sqrt_a_lsb;
+        self.sqrt_a = (sqrt_a as f64) / 2.0_f64.powi(19);
+    }
+
+    fn word10(&self) -> Word10 {
+        Word10 {
+            aodo: self.aodo,
+            fitint: self.fit_int_flag,
+            toe: (self.toe / 16) as u16,
+        }
+    }
+
+    pub(crate) fn set_word10(&mut self, word: &Word10) {
+        self.aodo = word.aodo;
+        self.fit_int_flag = word.fitint;
+        self.toe = (word.toe as u32) * 16;
+    }
+}
+
 #[derive(Debug, Default, Clone)]
-pub struct Word3 {
+pub(crate) struct Word3 {
     pub iode: u8,
     pub crs: i32,
 }
@@ -88,7 +194,7 @@ impl Word3 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word4 {
+pub(crate) struct Word4 {
     /// Delta n
     pub dn: i16,
 
@@ -102,10 +208,14 @@ impl Word4 {
         let m0_msb = ((dword & WORD4_M0_MSB_MASK) >> WORD4_M0_MSB_SHIFT) as u8;
         Self { dn, m0_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word5 {
+pub(crate) struct Word5 {
     /// M0 (24) lsb, you need to associate this to Subframe #2 Word #4
     pub m0_lsb: u32,
 }
@@ -115,10 +225,14 @@ impl Word5 {
         let m0_lsb = ((dword & WORD5_M0_LSB_MASK) >> WORD5_M0_LSB_SHIFT) as u32;
         Self { m0_lsb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word6 {
+pub(crate) struct Word6 {
     pub cuc: i16,
 
     /// MSB(8) eccentricity, you need to associate this to Subframe #2 Word #7
@@ -131,10 +245,14 @@ impl Word6 {
         let e_msb = ((dword & WORD6_E_MSB_MASK) >> WORD6_E_MSB_SHIFT) as u8;
         Self { cuc, e_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word7 {
+pub(crate) struct Word7 {
     /// LSB(24) eccentricity, you need to associate this to Subframe #2 Word #6
     pub e_lsb: u32,
 }
@@ -144,10 +262,14 @@ impl Word7 {
         let e_lsb = ((dword & WORD7_E_LSB_MASK) >> WORD7_E_LSB_SHIFT) as u32;
         Self { e_lsb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word8 {
+pub(crate) struct Word8 {
     pub cus: i32,
 
     /// MSB(8) A⁻¹: you need to associate this to Subframe #2 Word #9
@@ -162,10 +284,14 @@ impl Word8 {
         let sqrt_a_msb = ((dword & WORD8_SQRTA_MSB_MASK) >> WORD8_SQRTA_MSB_SHIFT) as u8;
         Self { cus, sqrt_a_msb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word9 {
+pub(crate) struct Word9 {
     /// LSB(24) A⁻¹: you need to associate this to Subframe #2 Word #8
     pub sqrt_a_lsb: u32,
 }
@@ -175,10 +301,14 @@ impl Word9 {
         let sqrt_a_lsb = ((dword & WORD9_SQRTA_LSB_MASK) >> WORD9_SQRTA_LSB_SHIFT) as u32;
         Self { sqrt_a_lsb }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word10 {
+pub(crate) struct Word10 {
     /// Time of issue of Ephemeris (u16)
     pub toe: u16,
 
@@ -196,49 +326,8 @@ impl Word10 {
         let aodo = ((dword & WORD10_AODO_MASK) >> WORD10_AODO_SHIFT) as u8;
         Self { toe, fitint, aodo }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        0
+    }
 }
-
-// impl UnscaledFrame {
-//     pub fn scale(&self) -> GpsQzssFrame2 {
-//         GpsQzssFrame2 {
-//             iode: self.word3.iode,
-//             toe: (self.word10.toe as u32) * 16,
-//             crs: (self.word3.crs as f64) / 2.0_f64.powi(5),
-//             cus: (self.word8.cus as f64) / 2.0_f64.powi(29),
-//             cuc: (self.word6.cuc as f64) / 2.0_f64.powi(29),
-
-//             dn: {
-//                 let dn = self.word4.dn as f64;
-//                 dn / 2.0_f64.powi(43)
-//             },
-
-//             m0: {
-//                 let mut m0 = self.word4.m0_msb as u32;
-//                 m0 <<= 24;
-//                 m0 |= self.word5.m0_lsb as u32;
-
-//                 let m0 = (m0 as i32) as f64;
-//                 m0 / 2.0_f64.powi(31)
-//             },
-
-//             e: {
-//                 let mut e = self.word6.e_msb as u32;
-//                 e <<= 24;
-//                 e |= self.word7.e_lsb;
-
-//                 (e as f64) / 2.0_f64.powi(33)
-//             },
-
-//             sqrt_a: {
-//                 let mut sqrt_a = self.word8.sqrt_a_msb as u32;
-//                 sqrt_a <<= 24;
-//                 sqrt_a |= self.word9.sqrt_a_lsb;
-
-//                 (sqrt_a as f64) / 2.0_f64.powi(19)
-//             },
-
-//             aodo: self.word10.aodo,
-//             fit_int_flag: self.word10.fitint,
-//         }
-//     }
-// }
