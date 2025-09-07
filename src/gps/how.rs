@@ -18,7 +18,7 @@ use crate::gps::GpsQzssTelemetry;
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 /// [GpsHowWord]
 pub struct GpsQzssHow {
-    /// TOW (in seconds)
+    /// 17-bit TOW (in seconds)
     pub tow: u32,
 
     /// When alert is asserted, the SV URA may be worse than indicated in subframe 1
@@ -88,7 +88,7 @@ impl GpsQzssHow {
     }
 
     pub(crate) fn decode(dword: u32) -> Result<Self, GpsError> {
-        let tow = ((dword & TOW_MASK) >> TOW_SHIFT) as u32;
+        let tow = (dword & TOW_MASK) >> TOW_SHIFT;
         let frame_id = GpsQzssFrameId::decode(((dword & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
         let alert = (dword & ALERT_MASK) > 0;
         let anti_spoofing = (dword & AS_MASK) > 0;
@@ -103,8 +103,7 @@ impl GpsQzssHow {
 
     /// Encodes this [GpsQzssHow] word as [u32]
     pub(crate) fn encode(&self) -> u32 {
-        let mut value = (self.tow << TOW_SHIFT) & TOW_MASK;
-        value |= (self.frame_id as u32) << FRAMEID_SHIFT;
+        let mut value = 0;
 
         if self.alert {
             value |= ALERT_MASK;
@@ -114,36 +113,53 @@ impl GpsQzssHow {
             value |= AS_MASK;
         }
 
+        value |= ((self.tow / 6) & 0x1ffff) << TOW_SHIFT;
+        value += (self.frame_id.encode() as u32) << FRAMEID_SHIFT;
+
         value
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::{TOW_MASK, TOW_SHIFT};
     use crate::gps::{GpsQzssFrameId, GpsQzssHow};
 
     #[test]
     fn how_encoding() {
         for (dword, tow, frame_id, alert, anti_spoofing) in [
+            (0x1527C173, 259956, GpsQzssFrameId::Ephemeris1, false, false),
             (0x1527C973, 259956, GpsQzssFrameId::Ephemeris1, false, true),
             (0x1527EA1B, 259962, GpsQzssFrameId::Ephemeris2, false, true),
+            (0x1527E21B, 259962, GpsQzssFrameId::Ephemeris2, false, false),
+            (0x1527F21B, 259962, GpsQzssFrameId::Ephemeris2, true, false),
+            (0x1527FA1B, 259962, GpsQzssFrameId::Ephemeris2, true, true),
+            (0x15280BDB, 259968, GpsQzssFrameId::Ephemeris3, false, true),
+            (0x152803DB, 259968, GpsQzssFrameId::Ephemeris3, false, false),
+            (0x152813DB, 259968, GpsQzssFrameId::Ephemeris3, true, false),
         ] {
-            let decoded = GpsQzssHow::decode(dword).unwrap_or_else(|e| {
+            let gps_how = GpsQzssHow::decode(dword).unwrap_or_else(|e| {
                 panic!("failed to decode gps-how from 0x{:08X} : {}", dword, e);
             });
 
-            assert_eq!(decoded.tow, tow);
-            assert_eq!(decoded.alert, alert);
-            assert_eq!(decoded.frame_id, frame_id);
-            assert_eq!(decoded.anti_spoofing, anti_spoofing);
+            let expected_tow = (dword & TOW_MASK) >> TOW_SHIFT;
+            assert_eq!(tow, expected_tow * 6);
 
-            let encoded = decoded.encode();
+            assert_eq!(gps_how.tow, tow);
+            assert_eq!(gps_how.alert, alert);
+            assert_eq!(gps_how.frame_id, frame_id);
+            assert_eq!(gps_how.anti_spoofing, anti_spoofing);
 
-            // assert_eq!(
-            //     encoded, dword,
-            //     "{:?} encoding failed - 0x{:08X} but 0x{:08X} is expected",
-            //     decoded, encoded, dword
-            // );
+            let encoded = gps_how.encode();
+
+            let decoded = GpsQzssHow::decode(encoded).unwrap_or_else(|e| {
+                panic!(
+                    "failed to decode previously encoded gps-how (0x{:08X}) : {}",
+                    encoded, e
+                );
+            });
+
+            assert_eq!(decoded, gps_how);
         }
     }
 }
