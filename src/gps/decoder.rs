@@ -414,7 +414,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word3::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                frame.cic = (word.cic as f64) / 2.0_f64.powi(29);
+                                frame.set_word3(&word);
                                 self.storage = word.omega0_msb as u32;
 
                                 #[cfg(feature = "log")]
@@ -428,10 +428,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word4::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                let mut omega0 = self.storage;
-                                omega0 <<= 24;
-                                omega0 |= word.omega0_lsb;
-                                frame.omega0 = ((omega0 as i32) as f64) / 2.0_f64.powi(31);
+                                frame.set_word4(&word, self.storage);
 
                                 #[cfg(feature = "log")]
                                 trace!("GPS - EPH #3 Word#4 {:?}", word);
@@ -444,7 +441,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word5::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                frame.cis = (word.cis as f64) / 2.0_f64.powi(29);
+                                frame.set_word5(&word);
                                 self.storage = word.i0_msb as u32;
 
                                 #[cfg(feature = "log")]
@@ -458,11 +455,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word6::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                let mut i0 = self.storage;
-                                i0 <<= 24;
-                                i0 |= word.i0_lsb;
-
-                                frame.i0 = (i0 as f64) / 2.0_f64.powi(31);
+                                frame.set_word6(&word, self.storage);
 
                                 #[cfg(feature = "log")]
                                 trace!("GPS - EPH #3 Word#6 {:?}", word);
@@ -475,7 +468,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word7::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                frame.crc = (word.crc as f64) / 2.0_f64.powi(5);
+                                frame.set_word7(&word);
                                 self.storage = word.omega_msb as u32;
 
                                 #[cfg(feature = "log")]
@@ -489,11 +482,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word8::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                let mut omega = self.storage;
-                                omega <<= 24;
-                                omega |= word.omega_lsb;
-
-                                frame.omega = ((omega as i32) as f64) / 2.0_f64.powi(31);
+                                frame.set_word8(&word, self.storage);
 
                                 #[cfg(feature = "log")]
                                 trace!("GPS - EPH #3 Word#8 {:?}", word);
@@ -506,7 +495,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word9::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                frame.omega_dot = (word.omega_dot as f64) / 2.0_f64.powi(43);
+                                frame.set_word9(&word);
 
                                 #[cfg(feature = "log")]
                                 trace!("GPS - EPH #3 Word#9 {:?}", word);
@@ -519,8 +508,7 @@ impl GpsQzssDecoder {
                             let word = Ephemeris3Word10::decode(self.dword);
 
                             if let Some(frame) = self.subframe.as_mut_eph3() {
-                                frame.idot = (word.idot as f64) / 2.0_f64.powi(43);
-                                frame.iode = word.iode;
+                                frame.set_word10(&word);
 
                                 #[cfg(feature = "log")]
                                 trace!("GPS - EPH #3 Word#10 {:?}", word);

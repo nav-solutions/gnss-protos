@@ -39,7 +39,7 @@ const WORD9_AF1_SHIFT: u32 = 6;
 const WORD10_AF0_MASK: u32 = 0x3fffff00;
 const WORD10_AF0_SHIFT: u32 = 8;
 
-/// GPS / QZSS Frame #1 interpretation
+/// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame1 {
     /// 10-bit week counter (no rollover compensation).

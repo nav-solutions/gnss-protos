@@ -35,7 +35,7 @@ const WORD10_FITINT_MASK: u32 = 0x00002000;
 const WORD10_AODO_MASK: u32 = 0x00001f00;
 const WORD10_AODO_SHIFT: u32 = 8;
 
-/// GPS / QZSS Frame #2 interpretation
+/// [GpsQzssFrame2] Ephemeris #2 frame interpretation.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame2 {
     /// Time of issue of ephemeris (in seconds of week)

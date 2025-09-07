@@ -32,7 +32,7 @@ const WORD10_IODE_SHIFT: u32 = 22;
 const WORD10_IDOT_MASK: u32 = 0x003fff00;
 const WORD10_IDOT_SHIFT: u32 = 8;
 
-/// GPS / QZSS Frame #3 interpretation
+/// [GpsQzssFrame3] Ephemeris #3 frame interpretation.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame3 {
     /// Inclination angle cosine harmonic correction term
@@ -63,8 +63,149 @@ pub struct GpsQzssFrame3 {
     pub omega_dot: f64,
 }
 
+impl GpsQzssFrame3 {
+    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
+    pub fn with_cic(mut self, cic: f64) -> Self {
+        self.cic = cic;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated Cis correction term
+    pub fn with_cis(mut self, cis: f64) -> Self {
+        self.cis = cis;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated inclination angle at reference time (in semi circles)
+    pub fn with_i0_semi_circles(mut self, i0: f64) -> Self {
+        self.i0 = i0;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated orbit radius cosine harmonic term (meters)
+    pub fn with_crc_meters(mut self, crc: f64) -> Self {
+        self.crc = crc;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in semi circles)
+    pub fn with_omega0_semi_circles(mut self, omega0: f64) -> Self {
+        self.omega0 = omega0;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated omega (in semi circles)
+    pub fn with_omega_semi_circles(mut self, omega: f64) -> Self {
+        self.omega = omega;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in semi circles.s⁻¹)
+    pub fn with_omega_dot_semi_circles_sec(mut self, omega_dot: f64) -> Self {
+        self.omega_dot = omega_dot;
+        self
+    }
+
+    pub(crate) fn set_word3(&mut self, word: &Word3) {
+        self.cic = (word.cic as f64) / 2.0_f64.powi(29);
+    }
+
+    pub(crate) fn word3(&self) -> Word3 {
+        let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
+        Word3 {
+            omega0_msb: ((omega0 & 0xff000000) >> 24) as u8,
+            cic: (self.cic * 2.0_f64.powi(29)).round() as i32,
+        }
+    }
+
+    pub(crate) fn set_word4(&mut self, word: &Word4, omega0_msb: u32) {
+        let mut omega0 = omega0_msb << 24;
+        omega0 |= word.omega0_lsb;
+        self.omega0 = ((omega0 as i32) as f64) / 2.0_f64.powi(31);
+    }
+
+    pub(crate) fn word4(&self) -> Word4 {
+        let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
+        Word4 {
+            omega0_lsb: (omega0 & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word5(&mut self, word: &Word5) {
+        self.cis = (word.cis as f64) / 2.0_f64.powi(29);
+    }
+
+    pub(crate) fn word5(&self) -> Word5 {
+        let i0 = (self.i0 * 2.0_f64.powi(31)).round() as u32;
+        Word5 {
+            i0_msb: ((i0 & 0xff000000) >> 24) as u8,
+            cis: (self.cis * 2.0_f64.powi(29)) as i32,
+        }
+    }
+
+    pub(crate) fn set_word6(&mut self, word: &Word6, i0_msb: u32) {
+        let mut i0 = i0_msb << 24;
+        i0 |= word.i0_lsb;
+        self.i0 = (i0 as f64) / 2.0_f64.powi(31);
+    }
+
+    pub(crate) fn word6(&self) -> Word6 {
+        let i0 = (self.i0 * 2.0_f64.powi(31)).round() as u32;
+        Word6 {
+            i0_lsb: (i0 & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word7(&mut self, word: &Word7) {
+        self.crc = (word.crc as f64) / 2.0_f64.powi(5);
+    }
+
+    pub(crate) fn word7(&self) -> Word7 {
+        let omega = (self.omega * 2.0_f64.powi(31)).round() as u32;
+        Word7 {
+            crc: (self.crc * 2.0_f64.powi(5)) as i32,
+            omega_msb: ((omega & 0xff000000) >> 24) as u8,
+        }
+    }
+
+    pub(crate) fn set_word8(&mut self, word: &Word8, omega_msb: u32) {
+        let mut omega = omega_msb << 24;
+        omega |= word.omega_lsb;
+        self.omega = ((omega as i32) as f64) / 2.0_f64.powi(31);
+    }
+
+    pub(crate) fn word8(&self) -> Word8 {
+        let omega = (self.omega * 2.0_f64.powi(31)).round() as u32;
+        Word8 {
+            omega_lsb: (omega & 0x00ffffff) as u32,
+        }
+    }
+
+    pub(crate) fn set_word9(&mut self, word: &Word9) {
+        self.omega_dot = (word.omega_dot as f64) / 2.0_f64.powi(43);
+    }
+
+    pub(crate) fn word9(&self) -> Word9 {
+        Word9 {
+            omega_dot: (self.omega_dot * 2.0_f64.powi(43)).round() as i32,
+        }
+    }
+
+    pub(crate) fn set_word10(&mut self, word: &Word10) {
+        self.idot = (word.idot as f64) / 2.0_f64.powi(43);
+        self.iode = word.iode;
+    }
+
+    pub(crate) fn word10(&self) -> Word10 {
+        Word10 {
+            iode: self.iode,
+            idot: (self.idot * 2.0_f64.powi(43)).round() as i32,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
-pub struct Word3 {
+pub(crate) struct Word3 {
     pub cic: i32,
 
     /// Omega0 (8) MSB, you will have to associate this to Word #4
@@ -81,7 +222,7 @@ impl Word3 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word4 {
+pub(crate) struct Word4 {
     /// Omega0 (24) LSB, you will have to associate this to Word #3
     pub omega0_lsb: u32,
 }
@@ -93,7 +234,7 @@ impl Word4 {
     }
 }
 #[derive(Debug, Default, Clone)]
-pub struct Word5 {
+pub(crate) struct Word5 {
     pub cis: i32,
 
     /// I0 (8) MSB, you will have to associate this to Word #6
@@ -110,7 +251,7 @@ impl Word5 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word6 {
+pub(crate) struct Word6 {
     /// I0 (24) LSB, you will have to associate this to Word #5
     pub i0_lsb: u32,
 }
@@ -123,7 +264,7 @@ impl Word6 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word7 {
+pub(crate) struct Word7 {
     pub crc: i32,
 
     /// Omega (8) MSB, you will have to associate this to Word #8
@@ -140,7 +281,7 @@ impl Word7 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word8 {
+pub(crate) struct Word8 {
     /// Omega (24) LSB, you will have to associate this to Word #7
     pub omega_lsb: u32,
 }
@@ -153,7 +294,7 @@ impl Word8 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word9 {
+pub(crate) struct Word9 {
     // 24-bit Omega_dot
     pub omega_dot: i32,
 }
@@ -167,7 +308,7 @@ impl Word9 {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Word10 {
+pub(crate) struct Word10 {
     /// 8-bit IODE
     pub iode: u8,
 
