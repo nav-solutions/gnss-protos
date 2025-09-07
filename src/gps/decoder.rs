@@ -301,85 +301,124 @@ impl GpsQzssDecoder {
                     GpsQzssFrameId::Ephemeris2 => match self.ptr {
                         3 => {
                             let word = Ephemeris2Word3::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
-                            frame.crs = (word.crs as f64) / 2.0_f64.powi(5);
-                            frame.iode = word.iode;
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#3 {:?}", word);
+
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                let frame = self.subframe.as_mut_eph2().expect("internal error");
+                                frame.crs = (word.crs as f64) / 2.0_f64.powi(5);
+                                frame.iode = word.iode;
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#3 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         4 => {
                             let word = Ephemeris2Word4::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
-                            frame.dn = (word.dn as f64) / 2.0_f64.powi(43);
-                            self.storage = word.m0_msb as u32;
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#4 {:?}", word);
+
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                frame.dn = (word.dn as f64) / 2.0_f64.powi(43);
+                                self.storage = word.m0_msb as u32;
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#4 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         5 => {
                             let word = Ephemeris2Word5::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
 
-                            let mut m0 = self.storage;
-                            m0 <<= 24;
-                            m0 |= word.m0_lsb as u32;
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                let mut m0 = self.storage;
+                                m0 <<= 24;
+                                m0 |= word.m0_lsb as u32;
 
-                            frame.m0 = ((m0 as i32) as f64) / 2.0_f64.powi(31);
+                                frame.m0 = ((m0 as i32) as f64) / 2.0_f64.powi(31);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#5 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#5 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         6 => {
                             let word = Ephemeris2Word6::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
-                            frame.cuc = (word.cuc as f64) / 2.0_f64.powi(29);
-                            self.storage = word.e_msb as u32;
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#6 {:?}", word);
+
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                frame.cuc = (word.cuc as f64) / 2.0_f64.powi(29);
+                                self.storage = word.e_msb as u32;
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#6 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         7 => {
                             let word = Ephemeris2Word7::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
 
-                            let mut e = self.storage;
-                            e <<= 24;
-                            e |= word.e_lsb;
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                let mut e = self.storage;
+                                e <<= 24;
+                                e |= word.e_lsb;
 
-                            frame.e = (e as f64) / 2.0_f64.powi(33);
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#7 {:?}", word);
+                                frame.e = (e as f64) / 2.0_f64.powi(33);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#7 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         8 => {
                             let word = Ephemeris2Word8::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                frame.cus = (word.cus as f64) / 2.0_f64.powi(29);
+                                self.storage = word.sqrt_a_msb as u32;
 
-                            frame.cus = (word.cus as f64) / 2.0_f64.powi(29);
-                            self.storage = word.sqrt_a_msb as u32;
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#8 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#8 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         9 => {
                             let word = Ephemeris2Word9::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
 
-                            let mut sqrt_a = self.storage;
-                            sqrt_a <<= 24;
-                            sqrt_a |= word.sqrt_a_lsb;
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                let mut sqrt_a = self.storage;
+                                sqrt_a <<= 24;
+                                sqrt_a |= word.sqrt_a_lsb;
 
-                            frame.sqrt_a = (sqrt_a as f64) / 2.0_f64.powi(19);
+                                frame.sqrt_a = (sqrt_a as f64) / 2.0_f64.powi(19);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#9 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#9 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         10 => {
                             let word = Ephemeris2Word10::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph2().expect("internal error");
 
-                            frame.aodo = word.aodo;
-                            frame.fit_int_flag = word.fitint;
-                            frame.toe = (word.toe as u32) * 16;
+                            if let Some(frame) = self.subframe.as_mut_eph2() {
+                                frame.aodo = word.aodo;
+                                frame.fit_int_flag = word.fitint;
+                                frame.toe = (word.toe as u32) * 16;
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#10 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#10 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         _ => {
                             unreachable!("invalid state");
@@ -388,91 +427,122 @@ impl GpsQzssDecoder {
                     GpsQzssFrameId::Ephemeris3 => match self.ptr {
                         3 => {
                             let word = Ephemeris3Word3::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
-                            frame.cic = (word.cic as f64) / 2.0_f64.powi(29);
-                            self.storage = word.omega0_msb as u32;
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#3 {:?}", word);
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                frame.cic = (word.cic as f64) / 2.0_f64.powi(29);
+                                self.storage = word.omega0_msb as u32;
+
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#3 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         4 => {
                             let word = Ephemeris3Word4::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            let mut omega0 = self.storage;
-                            omega0 <<= 24;
-                            omega0 |= word.omega0_lsb;
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                let mut omega0 = self.storage;
+                                omega0 <<= 24;
+                                omega0 |= word.omega0_lsb;
+                                frame.omega0 = ((omega0 as i32) as f64) / 2.0_f64.powi(31);
 
-                            frame.omega0 = ((omega0 as i32) as f64) / 2.0_f64.powi(31);
-
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#4 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#4 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         5 => {
                             let word = Ephemeris3Word5::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            frame.cis = (word.cis as f64) / 2.0_f64.powi(29);
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                frame.cis = (word.cis as f64) / 2.0_f64.powi(29);
+                                self.storage = word.i0_msb as u32;
 
-                            self.storage = word.i0_msb as u32;
-
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #2 Word#5 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #2 Word#5 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         6 => {
                             let word = Ephemeris3Word6::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            let mut i0 = self.storage;
-                            i0 <<= 24;
-                            i0 |= word.i0_lsb;
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                let mut i0 = self.storage;
+                                i0 <<= 24;
+                                i0 |= word.i0_lsb;
 
-                            frame.i0 = (i0 as f64) / 2.0_f64.powi(31);
+                                frame.i0 = (i0 as f64) / 2.0_f64.powi(31);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#6 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#6 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         7 => {
                             let word = Ephemeris3Word7::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            frame.crc = (word.crc as f64) / 2.0_f64.powi(5);
-                            self.storage = word.omega_msb as u32;
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                frame.crc = (word.crc as f64) / 2.0_f64.powi(5);
+                                self.storage = word.omega_msb as u32;
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#7 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#7 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         8 => {
                             let word = Ephemeris3Word8::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            let mut omega = self.storage;
-                            omega <<= 24;
-                            omega |= word.omega_lsb;
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                let mut omega = self.storage;
+                                omega <<= 24;
+                                omega |= word.omega_lsb;
 
-                            frame.omega = ((omega as i32) as f64) / 2.0_f64.powi(31);
+                                frame.omega = ((omega as i32) as f64) / 2.0_f64.powi(31);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#8 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#8 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         9 => {
                             let word = Ephemeris3Word9::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            frame.omega_dot = (word.omega_dot as f64) / 2.0_f64.powi(43);
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                frame.omega_dot = (word.omega_dot as f64) / 2.0_f64.powi(43);
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#9 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#9 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         10 => {
                             let word = Ephemeris3Word10::decode(self.dword);
-                            let frame = self.subframe.as_mut_eph3().expect("internal error");
 
-                            frame.idot = (word.idot as f64) / 2.0_f64.powi(43);
-                            frame.iode = word.iode;
+                            if let Some(frame) = self.subframe.as_mut_eph3() {
+                                frame.idot = (word.idot as f64) / 2.0_f64.powi(43);
+                                frame.iode = word.iode;
 
-                            #[cfg(feature = "log")]
-                            trace!("GPS - EPH #3 Word#10 {:?}", word);
+                                #[cfg(feature = "log")]
+                                trace!("GPS - EPH #3 Word#10 {:?}", word);
+                            } else {
+                                self.reset();
+                                return None;
+                            }
                         },
                         _ => {
                             unreachable!("invalid state");
