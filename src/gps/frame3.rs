@@ -1,4 +1,4 @@
-use crate::twos_complement;
+use crate::{gps::GpsError, twos_complement};
 
 const WORD3_CIC_MASK: u32 = 0x3fffc000;
 const WORD3_CIC_SHIFT: u32 = 14;
@@ -106,11 +106,56 @@ impl GpsQzssFrame3 {
         self
     }
 
-    pub(crate) fn set_word3(&mut self, word: &Word3) {
+    pub(crate) fn decode_word(
+        &mut self,
+        ptr: usize,
+        word: u32,
+        extra: &mut u32,
+    ) -> Result<(), GpsError> {
+        match ptr {
+            3 => {
+                let word = Word3::decode(word);
+                self.set_word3(word, extra);
+            },
+            4 => {
+                let word = Word4::decode(word);
+                self.set_word4(word, *extra);
+            },
+            5 => {
+                let word = Word5::decode(word);
+                self.set_word5(word, extra);
+            },
+            6 => {
+                let word = Word6::decode(word);
+                self.set_word6(word, *extra);
+            },
+            7 => {
+                let word = Word7::decode(word);
+                self.set_word7(word, extra);
+            },
+            8 => {
+                let word = Word8::decode(word);
+                self.set_word8(word, *extra);
+            },
+            9 => {
+                let word = Word9::decode(word);
+                self.set_word9(word);
+            },
+            10 => {
+                let word = Word10::decode(word);
+                self.set_word10(word);
+            },
+            _ => return Err(GpsError::InternalFSM),
+        }
+        Ok(())
+    }
+
+    fn set_word3(&mut self, word: Word3, extra: &mut u32) {
+        *extra = word.omega0_msb as u32;
         self.cic = (word.cic as f64) / 2.0_f64.powi(29);
     }
 
-    pub(crate) fn word3(&self) -> Word3 {
+    fn word3(&self) -> Word3 {
         let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
         Word3 {
             omega0_msb: ((omega0 & 0xff000000) >> 24) as u8,
@@ -118,24 +163,25 @@ impl GpsQzssFrame3 {
         }
     }
 
-    pub(crate) fn set_word4(&mut self, word: &Word4, omega0_msb: u32) {
+    fn set_word4(&mut self, word: Word4, omega0_msb: u32) {
         let mut omega0 = omega0_msb << 24;
         omega0 |= word.omega0_lsb;
         self.omega0 = ((omega0 as i32) as f64) / 2.0_f64.powi(31);
     }
 
-    pub(crate) fn word4(&self) -> Word4 {
+    fn word4(&self) -> Word4 {
         let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
         Word4 {
             omega0_lsb: (omega0 & 0x00ffffff) as u32,
         }
     }
 
-    pub(crate) fn set_word5(&mut self, word: &Word5) {
+    fn set_word5(&mut self, word: Word5, extra: &mut u32) {
+        *extra = word.i0_msb as u32;
         self.cis = (word.cis as f64) / 2.0_f64.powi(29);
     }
 
-    pub(crate) fn word5(&self) -> Word5 {
+    fn word5(&self) -> Word5 {
         let i0 = (self.i0 * 2.0_f64.powi(31)).round() as u32;
         Word5 {
             i0_msb: ((i0 & 0xff000000) >> 24) as u8,
@@ -143,24 +189,25 @@ impl GpsQzssFrame3 {
         }
     }
 
-    pub(crate) fn set_word6(&mut self, word: &Word6, i0_msb: u32) {
+    fn set_word6(&mut self, word: Word6, i0_msb: u32) {
         let mut i0 = i0_msb << 24;
         i0 |= word.i0_lsb;
         self.i0 = (i0 as f64) / 2.0_f64.powi(31);
     }
 
-    pub(crate) fn word6(&self) -> Word6 {
+    fn word6(&self) -> Word6 {
         let i0 = (self.i0 * 2.0_f64.powi(31)).round() as u32;
         Word6 {
             i0_lsb: (i0 & 0x00ffffff) as u32,
         }
     }
 
-    pub(crate) fn set_word7(&mut self, word: &Word7) {
+    fn set_word7(&mut self, word: Word7, extra: &mut u32) {
+        *extra = word.omega_msb as u32;
         self.crc = (word.crc as f64) / 2.0_f64.powi(5);
     }
 
-    pub(crate) fn word7(&self) -> Word7 {
+    fn word7(&self) -> Word7 {
         let omega = (self.omega * 2.0_f64.powi(31)).round() as u32;
         Word7 {
             crc: (self.crc * 2.0_f64.powi(5)) as i32,
@@ -168,35 +215,35 @@ impl GpsQzssFrame3 {
         }
     }
 
-    pub(crate) fn set_word8(&mut self, word: &Word8, omega_msb: u32) {
+    fn set_word8(&mut self, word: Word8, omega_msb: u32) {
         let mut omega = omega_msb << 24;
         omega |= word.omega_lsb;
         self.omega = ((omega as i32) as f64) / 2.0_f64.powi(31);
     }
 
-    pub(crate) fn word8(&self) -> Word8 {
+    fn word8(&self) -> Word8 {
         let omega = (self.omega * 2.0_f64.powi(31)).round() as u32;
         Word8 {
             omega_lsb: (omega & 0x00ffffff) as u32,
         }
     }
 
-    pub(crate) fn set_word9(&mut self, word: &Word9) {
+    fn set_word9(&mut self, word: Word9) {
         self.omega_dot = (word.omega_dot as f64) / 2.0_f64.powi(43);
     }
 
-    pub(crate) fn word9(&self) -> Word9 {
+    fn word9(&self) -> Word9 {
         Word9 {
             omega_dot: (self.omega_dot * 2.0_f64.powi(43)).round() as i32,
         }
     }
 
-    pub(crate) fn set_word10(&mut self, word: &Word10) {
+    fn set_word10(&mut self, word: Word10) {
         self.idot = (word.idot as f64) / 2.0_f64.powi(43);
         self.iode = word.iode;
     }
 
-    pub(crate) fn word10(&self) -> Word10 {
+    fn word10(&self) -> Word10 {
         Word10 {
             iode: self.iode,
             idot: (self.idot * 2.0_f64.powi(43)).round() as i32,

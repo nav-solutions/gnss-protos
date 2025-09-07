@@ -1,4 +1,4 @@
-use crate::twos_complement;
+use crate::{gps::GpsError, twos_complement};
 
 const WORD3_IODE_MASK: u32 = 0x3fc00000;
 const WORD3_IODE_SHIFT: u32 = 22;
@@ -73,6 +73,50 @@ pub struct GpsQzssFrame2 {
 }
 
 impl GpsQzssFrame2 {
+    pub(crate) fn decode_word(
+        &mut self,
+        ptr: usize,
+        word: u32,
+        extra: &mut u32,
+    ) -> Result<(), GpsError> {
+        match ptr {
+            3 => {
+                let word = Word3::decode(word);
+                self.set_word3(word);
+            },
+            4 => {
+                let word = Word4::decode(word);
+                self.set_word4(word, extra);
+            },
+            5 => {
+                let word = Word5::decode(word);
+                self.set_word5(word, *extra);
+            },
+            6 => {
+                let word = Word6::decode(word);
+                self.set_word6(word, extra);
+            },
+            7 => {
+                let word = Word7::decode(word);
+                self.set_word7(word, *extra);
+            },
+            8 => {
+                let word = Word8::decode(word);
+                self.set_word8(word, extra);
+            },
+            9 => {
+                let word = Word9::decode(word);
+                self.set_word9(word, *extra);
+            },
+            10 => {
+                let word = Word10::decode(word);
+                self.set_word10(word);
+            },
+            _ => return Err(GpsError::InternalFSM),
+        }
+        Ok(())
+    }
+
     fn word3(&self) -> Word3 {
         Word3 {
             iode: self.iode,
@@ -80,7 +124,7 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word3(&mut self, word: &Word3) {
+    fn set_word3(&mut self, word: Word3) {
         self.crs = (word.crs as f64) / 2.0_f64.powi(5);
         self.iode = word.iode;
     }
@@ -93,7 +137,8 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_dn(&mut self, word: &Word4) {
+    fn set_word4(&mut self, word: Word4, extra: &mut u32) {
+        *extra = word.m0_msb as u32;
         self.dn = (word.dn as f64) / 2.0_f64.powi(43);
     }
 
@@ -105,7 +150,7 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word5(&mut self, word: &Word5, m0_msb: u32) {
+    fn set_word5(&mut self, word: Word5, m0_msb: u32) {
         let mut m0 = m0_msb << 24;
         m0 |= word.m0_lsb as u32;
         self.m0 = ((m0 as i32) as f64) / 2.0_f64.powi(31);
@@ -120,7 +165,8 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_cuc(&mut self, word: &Word6) {
+    fn set_word6(&mut self, word: Word6, extra: &mut u32) {
+        *extra = word.e_msb as u32;
         self.cuc = (word.cuc as f64) / 2.0_f64.powi(29);
     }
 
@@ -131,7 +177,7 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word7(&mut self, word: &Word7, e_msb: u32) {
+    fn set_word7(&mut self, word: Word7, e_msb: u32) {
         let mut e = e_msb << 24;
         e |= word.e_lsb;
 
@@ -146,7 +192,8 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word8(&mut self, word: &Word8) {
+    fn set_word8(&mut self, word: Word8, extra: &mut u32) {
+        *extra = word.sqrt_a_msb as u32;
         self.cus = (word.cus as f64) / 2.0_f64.powi(29);
     }
 
@@ -157,7 +204,7 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word9(&mut self, word: &Word9, sqrt_a_msb: u32) {
+    fn set_word9(&mut self, word: Word9, sqrt_a_msb: u32) {
         let mut sqrt_a = sqrt_a_msb << 24;
         sqrt_a |= word.sqrt_a_lsb;
         self.sqrt_a = (sqrt_a as f64) / 2.0_f64.powi(19);
@@ -171,7 +218,7 @@ impl GpsQzssFrame2 {
         }
     }
 
-    pub(crate) fn set_word10(&mut self, word: &Word10) {
+    fn set_word10(&mut self, word: Word10) {
         self.aodo = word.aodo;
         self.fit_int_flag = word.fitint;
         self.toe = (word.toe as u32) * 16;
