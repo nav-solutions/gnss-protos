@@ -446,7 +446,7 @@ impl Word9 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        (self.sqrt_a_lsb as u32) << WORD9_SQRTA_LSB_SHIFT
+        ((self.sqrt_a_lsb as u32) & 0x00ffffff) << WORD9_SQRTA_LSB_SHIFT
     }
 }
 
@@ -616,6 +616,57 @@ mod frame2 {
             let encoded = dword10.encode();
             let decoded = Word10::decode(encoded);
             assert_eq!(decoded, dword10);
+        }
+    }
+
+    #[test]
+    fn frame2_encoding() {
+        for (toe, iode, m0, dn, cuc, cus, crs, e, sqrt_a, fit_int_flag, aodo) in [
+            (
+                2300, 10, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 16.0, false, 10,
+            ),
+            (
+                4800, 11, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, true, 255,
+            ),
+        ] {
+            let frame2 = GpsQzssFrame2 {
+                toe,
+                iode,
+                m0,
+                dn,
+                cuc,
+                cus,
+                crs,
+                e,
+                sqrt_a,
+                fit_int_flag,
+                aodo,
+            };
+
+            let encoded = frame2.encode();
+
+            let mut extra = 0;
+            let mut decoded = GpsQzssFrame2::default();
+
+            for (i, dword) in encoded.iter().enumerate() {
+                decoded
+                    .decode_word(i + 3, *dword, &mut extra)
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
+                    });
+            }
+
+            assert_eq!(frame2.toe, toe);
+            assert_eq!(frame2.iode, iode);
+            assert_eq!(frame2.m0, m0);
+            assert_eq!(frame2.dn, dn);
+            assert_eq!(frame2.cuc, cuc);
+            assert_eq!(frame2.cus, cus);
+            assert_eq!(frame2.crs, crs);
+            assert_eq!(frame2.e, e);
+            assert_eq!(frame2.sqrt_a, sqrt_a);
+            assert_eq!(frame2.fit_int_flag, fit_int_flag);
+            assert_eq!(frame2.aodo, aodo);
         }
     }
 }

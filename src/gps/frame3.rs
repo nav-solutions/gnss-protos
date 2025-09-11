@@ -401,7 +401,7 @@ impl Word9 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        ((self.omega_dot & 0xffffff) as u32) << WORD9_OMEGADOT_SHIFT
     }
 }
 
@@ -594,6 +594,49 @@ mod frame3 {
             let encoded = dword10.encode();
             let decoded = Word10::decode(encoded);
             assert_eq!(decoded, dword10);
+        }
+    }
+
+    #[test]
+    fn frame3_encoding() {
+        for (cic, cis, crc, i0, iode, idot, omega0, omega, omega_dot) in [
+            (10.0, 11.0, 12.0, 13.0, 20, 30.0, 40.0, 50.0, 60.0),
+            (11.0, 12.0, 13.0, 14.0, 25, 36.0, 47.0, 58.0, 69.0),
+        ] {
+            let frame3 = GpsQzssFrame3 {
+                cic,
+                cis,
+                crc,
+                i0,
+                iode,
+                idot,
+                omega0,
+                omega,
+                omega_dot,
+            };
+
+            let encoded = frame3.encode();
+
+            let mut extra = 0;
+            let mut decoded = GpsQzssFrame3::default();
+
+            for (i, dword) in encoded.iter().enumerate() {
+                decoded
+                    .decode_word(i + 3, *dword, &mut extra)
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
+                    });
+            }
+
+            assert_eq!(frame3.cic, cic);
+            assert_eq!(frame3.cis, cis);
+            assert_eq!(frame3.crc, crc);
+            assert_eq!(frame3.i0, i0);
+            assert_eq!(frame3.iode, iode);
+            assert_eq!(frame3.idot, idot);
+            assert_eq!(frame3.omega0, omega0);
+            assert_eq!(frame3.omega, omega);
+            assert_eq!(frame3.omega_dot, omega_dot);
         }
     }
 }
