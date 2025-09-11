@@ -58,6 +58,17 @@ impl GpsQzssFrame {
         self.subframe = subframe;
         self
     }
+
+    /// Encodes this [GpsQzssFrame] as a 10 [u32] word burst
+    pub fn encode(&self) -> [u32; 10] {
+        let mut encoded = [0; 10];
+
+        encoded[0] = self.how.encode();
+        encoded[1] = self.telemetry.encode();
+        encoded[2..].copy_from_slice(&self.subframe.encode());
+
+        encoded
+    }
 }
 
 /// GPS / QZSS Interpreted subframes
@@ -126,6 +137,15 @@ impl GpsQzssSubframe {
         match self {
             Self::Ephemeris3(frame) => Some(frame),
             _ => None,
+        }
+    }
+
+    /// Encode this [GpsQzssSubframe] into 8 [u32] data burst.
+    pub(crate) fn encode(&self) -> [u32; 8] {
+        match self {
+            Self::Ephemeris1(subframe) => subframe.encode(),
+            Self::Ephemeris2(subframe) => subframe.encode(),
+            Self::Ephemeris3(subframe) => subframe.encode(),
         }
     }
 }

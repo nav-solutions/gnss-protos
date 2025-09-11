@@ -285,7 +285,7 @@ impl GpsQzssDecoder {
 mod test {
     use crate::{
         gps::{GpsDataByte, GpsQzssDecoder, GpsQzssSubframe},
-        GpsQzssFrameId,
+        GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry,
     };
 
     use crate::tests::from_ublox_be_bytes;
@@ -504,7 +504,7 @@ mod test {
     }
 
     #[test]
-    fn test_eph1_frame() {
+    fn test_eph1_frame_decoding() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
@@ -555,7 +555,7 @@ mod test {
     }
 
     #[test]
-    fn test_eph2_frame() {
+    fn test_eph2_frame_decoding() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
@@ -610,7 +610,7 @@ mod test {
     }
 
     #[test]
-    fn test_eph3_frame() {
+    fn test_eph3_frame_decoding() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
@@ -652,5 +652,48 @@ mod test {
         }
 
         assert!(found, "GPS decoding failed!");
+    }
+
+    #[test]
+    fn test_eph1_frame_encoding() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        for (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits) in [(
+            0,
+            false,
+            false,
+            GpsQzssFrameId::Ephemeris1,
+            0x13E,
+            false,
+            false,
+        )] {
+            let frame = GpsQzssFrame {
+                how: GpsQzssHow {
+                    tow,
+                    alert,
+                    anti_spoofing,
+                    frame_id,
+                },
+                telemetry: GpsQzssTelemetry {
+                    message,
+                    integrity,
+                    reserved_bits: tlm_reserved_bits,
+                },
+                subframe: Default::default(),
+            };
+
+            let encoded = frame.encode();
+
+            assert_eq!(encoded[0], 0x00);
+            assert_eq!(encoded[1], 0x00);
+            assert_eq!(encoded[2], 0x00);
+            assert_eq!(encoded[3], 0x00);
+            assert_eq!(encoded[4], 0x00);
+            assert_eq!(encoded[5], 0x00);
+            assert_eq!(encoded[6], 0x00);
+            assert_eq!(encoded[7], 0x00);
+            assert_eq!(encoded[8], 0x00);
+        }
     }
 }
