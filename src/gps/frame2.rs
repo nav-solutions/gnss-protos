@@ -111,20 +111,20 @@ impl GpsQzssFrame2 {
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated radius sine harmnoic correction term.
-    pub fn with_crs(mut self, crs: f64) -> Self {
-        self.crs = crs;
+    pub fn with_crs_radians(mut self, crs_rad: f64) -> Self {
+        self.crs = crs_rad;
         self
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated latitude cosine harmnoic correction term.
-    pub fn with_cuc(mut self, cuc: f64) -> Self {
-        self.cuc = cuc;
+    pub fn with_cuc_radians(mut self, cuc_rad: f64) -> Self {
+        self.cuc = cuc_rad;
         self
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated latitude sine harmnoic correction term.
-    pub fn with_cus(mut self, cus: f64) -> Self {
-        self.cus = cus;
+    pub fn with_cus_radians(mut self, cus_rad: f64) -> Self {
+        self.cus = cus_rad;
         self
     }
 
