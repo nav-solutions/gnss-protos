@@ -284,9 +284,24 @@ impl GpsQzssFrame2 {
         self.fit_int_flag = word.fitint;
         self.toe = (word.toe as u32) * 16;
     }
+
+    /// Encodes this [GpsQzssFrame2] as a burst of 8 [u32] data words
+    /// starting from [Word3] to [Word10].
+    pub(crate) fn encode(&self) -> [u32; 8] {
+        [
+            self.word3().encode(),
+            self.word4().encode(),
+            self.word5().encode(),
+            self.word6().encode(),
+            self.word7().encode(),
+            self.word8().encode(),
+            self.word9().encode(),
+            self.word10().encode(),
+        ]
+    }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word3 {
     pub iode: u8,
     pub crs: i32,
@@ -299,9 +314,18 @@ impl Word3 {
         let crs = twos_complement(crs, 0xffff, 0x8000);
         Self { iode, crs }
     }
+
+    pub(crate) fn encode(&self) -> u32 {
+        let mut value = 0;
+
+        value |= (self.iode as u32) << WORD3_IODE_SHIFT;
+        value |= ((self.crs as u32) & 0xffff) << WORD3_CRS_SHIFT;
+
+        value
+    }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub(crate) struct Word4 {
     /// Delta n
     pub dn: i16,
@@ -318,11 +342,14 @@ impl Word4 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= (self.dn as u32) << WORD4_DELTA_N_SHIFT;
+        value |= (self.m0_msb as u32) << WORD4_M0_MSB_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word5 {
     /// M0 (24) lsb, you need to associate this to Subframe #2 Word #4
     pub m0_lsb: u32,
@@ -335,11 +362,13 @@ impl Word5 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= ((self.m0_lsb & 0x00ffffff) as u32) << WORD5_M0_LSB_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word6 {
     pub cuc: i16,
 
@@ -355,11 +384,14 @@ impl Word6 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= (self.cuc as u32) << WORD6_CUC_SHIFT;
+        value |= (self.e_msb as u32) << WORD6_E_MSB_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word7 {
     /// LSB(24) eccentricity, you need to associate this to Subframe #2 Word #6
     pub e_lsb: u32,
@@ -372,11 +404,11 @@ impl Word7 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        (self.e_lsb as u32) << WORD7_E_LSB_SHIFT
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word8 {
     pub cus: i32,
 
@@ -394,11 +426,14 @@ impl Word8 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= (self.sqrt_a_msb as u32) << WORD8_SQRTA_MSB_SHIFT;
+        value |= (self.cus as u32) << WORD8_CUS_SHIFT;
+        value
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word9 {
     /// LSB(24) A⁻¹: you need to associate this to Subframe #2 Word #8
     pub sqrt_a_lsb: u32,
@@ -411,11 +446,11 @@ impl Word9 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        (self.sqrt_a_lsb as u32) << WORD9_SQRTA_LSB_SHIFT
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word10 {
     /// Time of issue of Ephemeris (u16)
     pub toe: u16,
@@ -436,11 +471,151 @@ impl Word10 {
     }
 
     pub(crate) fn encode(&self) -> u32 {
-        0
+        let mut value = 0;
+        value |= ((self.aodo & 0x1f) as u32) << WORD10_AODO_SHIFT;
+
+        if self.fitint {
+            value |= WORD10_FITINT_MASK;
+        }
+
+        value |= (self.toe as u32) << WORD10_TOE_SHIFT;
+        value
     }
 }
 
 #[cfg(test)]
 mod frame2 {
     use super::*;
+
+    #[test]
+    fn dword3_encoding() {
+        for dword3 in [
+            Word3 { crs: 1, iode: 0 },
+            Word3 { crs: 2, iode: 1 },
+            Word3 { crs: 10, iode: 2 },
+            Word3 { crs: 10, iode: 100 },
+        ] {
+            let encoded = dword3.encode();
+            let decoded = Word3::decode(encoded);
+            assert_eq!(decoded, dword3);
+        }
+    }
+
+    #[test]
+    fn dword4_encoding() {
+        for dword4 in [
+            Word4 { dn: 0, m0_msb: 1 },
+            Word4 { dn: 1, m0_msb: 3 },
+            Word4 {
+                dn: 10,
+                m0_msb: 100,
+            },
+        ] {
+            let encoded = dword4.encode();
+            let decoded = Word4::decode(encoded);
+            assert_eq!(decoded, dword4);
+        }
+    }
+
+    #[test]
+    fn dword5_encoding() {
+        for dword5 in [
+            Word5 { m0_lsb: 1 },
+            Word5 { m0_lsb: 10 },
+            Word5 { m0_lsb: 0 },
+            Word5 { m0_lsb: 100 },
+        ] {
+            let encoded = dword5.encode();
+            let decoded = Word5::decode(encoded);
+            assert_eq!(decoded, dword5);
+        }
+    }
+
+    #[test]
+    fn dword6_encoding() {
+        for dword6 in [Word6 { e_msb: 0, cuc: 10 }, Word6 { e_msb: 1, cuc: 100 }] {
+            let encoded = dword6.encode();
+            let decoded = Word6::decode(encoded);
+            assert_eq!(decoded, dword6);
+        }
+    }
+
+    #[test]
+    fn dword7_encoding() {
+        for dword7 in [
+            Word7 { e_lsb: 0 },
+            Word7 { e_lsb: 1 },
+            Word7 { e_lsb: 10 },
+            Word7 { e_lsb: 100 },
+        ] {
+            let encoded = dword7.encode();
+            let decoded = Word7::decode(encoded);
+            assert_eq!(decoded, dword7);
+        }
+    }
+
+    #[test]
+    fn dword8_encoding() {
+        for dword8 in [
+            Word8 {
+                cus: 0,
+                sqrt_a_msb: 10,
+            },
+            Word8 {
+                cus: 10,
+                sqrt_a_msb: 1,
+            },
+            Word8 {
+                cus: 10,
+                sqrt_a_msb: 0,
+            },
+            Word8 {
+                cus: 0,
+                sqrt_a_msb: 12,
+            },
+        ] {
+            let encoded = dword8.encode();
+            let decoded = Word8::decode(encoded);
+            assert_eq!(decoded, dword8);
+        }
+    }
+
+    #[test]
+    fn dword9_decoding() {
+        for dword9 in [
+            Word9 { sqrt_a_lsb: 0 },
+            Word9 { sqrt_a_lsb: 1 },
+            Word9 { sqrt_a_lsb: 10 },
+            Word9 { sqrt_a_lsb: 255 },
+        ] {
+            let encoded = dword9.encode();
+            let decoded = Word9::decode(encoded);
+            assert_eq!(decoded, dword9);
+        }
+    }
+
+    #[test]
+    fn dword10_decoding() {
+        for dword10 in [
+            Word10 {
+                toe: 0,
+                fitint: false,
+                aodo: 0,
+            },
+            Word10 {
+                toe: 0,
+                fitint: false,
+                aodo: 1,
+            },
+            Word10 {
+                toe: 10,
+                fitint: true,
+                aodo: 10,
+            },
+        ] {
+            let encoded = dword10.encode();
+            let decoded = Word10::decode(encoded);
+            assert_eq!(decoded, dword10);
+        }
+    }
 }
