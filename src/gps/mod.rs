@@ -59,13 +59,24 @@ impl GpsQzssFrame {
         self
     }
 
-    /// Encodes this [GpsQzssFrame] as a 10 [u32] word burst
-    pub fn encode(&self) -> [u32; 10] {
-        let mut encoded = [0; 10];
+    /// Encodes this [GpsQzssFrame] as a 10 [u32] word burst.
+    /// GPS is 30-bit aligned, we need 10 words to describe the entire message.
+    /// The final [u32] is padded with 20 MSB bits (zeros).
+    pub fn encode(&self) -> [u8; 8] {
+        let mut encoded = [0; 8];
 
-        encoded[0] = self.how.encode();
-        encoded[1] = self.telemetry.encode();
-        encoded[2..].copy_from_slice(&self.subframe.encode());
+        let how = self.how.encode();
+        let telemetry = self.telemetry.encode();
+        let subframe = self.subframe.encode();
+
+        encoded[0] = (how & 0xff) as u8;
+        encoded[1] = ((how & 0xff00) >> 8) as u8;
+        encoded[2] = ((how & 0xff0000) >> 16) as u8;
+        encoded[3] = ((how & 0xff000000) >> 24) as u8;
+
+        // encoded[0] = self.how.encode();
+        // encoded[1] = self.telemetry.encode();
+        // encoded[2..].copy_from_slice(&self.subframe.encode());
 
         encoded
     }
