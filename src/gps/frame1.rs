@@ -210,9 +210,9 @@ impl GpsQzssFrame1 {
     fn word3(&self) -> Word3 {
         Word3 {
             week: self.week,
-            ca_or_p_l2: self.ca_or_p_l2,
             ura: self.ura,
             health: self.health,
+            ca_or_p_l2: self.ca_or_p_l2,
             iodc_msb: ((self.iodc & 0x300) >> 8) as u8,
         }
     }
@@ -285,27 +285,27 @@ impl GpsQzssFrame1 {
 
     /// Updates scaled content from [Word9]
     fn set_word9(&mut self, word: Word9) {
-        self.af2 = (word.af2 as f64) / 2.0_f64.powi(55);
-        self.af1 = (word.af1 as f64) / 2.0_f64.powi(43);
+        self.af2 = (word.af2 as f64) * 2.0_f64.powi(55);
+        self.af1 = (word.af1 as f64) * 2.0_f64.powi(43);
     }
 
     /// Encodes a [Word9] from [GpsQzssFrame1]
     fn word9(&self) -> Word9 {
         Word9 {
-            af2: (self.af2 * 2.0_f64.powi(43)).round() as i8,
-            af1: (self.af1 * 2.0_f64.powi(55)).round() as i16,
+            af2: (self.af2 * 2.0_f64.powi(-43)).round() as i8,
+            af1: (self.af1 * 2.0_f64.powi(-55)).round() as i16,
         }
     }
 
     /// Updates scaled content from [Word10]
     fn set_word10(&mut self, word: Word10) {
-        self.af0 = (word.af0 as f64) / 2.0_f64.powi(31);
+        self.af0 = (word.af0 as f64) * 2.0_f64.powi(31);
     }
 
     /// Encodes a [Word10] from [GpsQzssFrame1]
     fn word10(&self) -> Word10 {
         Word10 {
-            af0: (self.af0 * 2.0_f64.powi(31)).round() as i32,
+            af0: (self.af0 * 2.0_f64.powi(-31)).round() as i32,
         }
     }
 
@@ -678,18 +678,80 @@ mod frame1 {
     #[test]
     fn dword10_encoding() {
         for dword10 in [
-            // Word10 {
-            //     af0: 9,
-            // },
+            Word10 { af0: 0 },
             Word10 { af0: 100 },
-            // Word10 {
-            //     af0: -100,
-            // },
             Word10 { af0: -1230 },
+            Word10 { af0: -3140 },
         ] {
             let encoded = dword10.encode();
             let decoded = Word10::decode(encoded);
             assert_eq!(decoded, dword10);
+        }
+    }
+
+    #[test]
+    fn frame1_encoding() {
+        for (
+            week,
+            ca_or_p_l2,
+            ura,
+            health,
+            iodc,
+            toc,
+            tgd,
+            af0,
+            af1,
+            af2,
+            l2_p_data_flag,
+            reserved_word4,
+            reserved_word5,
+            reserved_word6,
+            reserved_word7,
+        ) in [
+            (1, 2, 3, 4, 5, 6, 7.0, 8.0, 9.0, 10.0, false, 11, 12, 13, 14),
+            (0, 1, 2, 3, 4, 5, 6.0, 7.0, 8.0, 9.0, true, 10, 11, 12, 13),
+        ] {
+            let frame1 = GpsQzssFrame1 {
+                week,
+                ca_or_p_l2,
+                ura,
+                health,
+                iodc,
+                toc: toc * 16,
+                tgd: tgd * 1.0E-9,
+                af0: af0 * 1.0E-10,
+                af1: af1 * 1.0E-11,
+                af2: af2 * 1.0E-11,
+                l2_p_data_flag,
+                reserved_word4,
+                reserved_word5,
+                reserved_word6,
+                reserved_word7,
+            };
+
+            let encoded = frame1.encode();
+
+            let mut decoded = GpsQzssFrame1::default();
+
+            for (i, dword) in encoded.iter().enumerate() {
+                decoded.decode_word(i + 3, *dword).unwrap_or_else(|_| {
+                    panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
+                });
+            }
+
+            assert_eq!(decoded.ura, frame1.ura);
+            assert_eq!(decoded.week, frame1.week);
+            assert_eq!(decoded.toc, frame1.toc);
+            assert_eq!(decoded.ca_or_p_l2, frame1.ca_or_p_l2);
+            assert_eq!(decoded.l2_p_data_flag, frame1.l2_p_data_flag);
+            assert_eq!(decoded.reserved_word4, frame1.reserved_word4);
+            assert_eq!(decoded.reserved_word5, frame1.reserved_word5);
+            assert_eq!(decoded.reserved_word6, frame1.reserved_word6);
+            assert_eq!(decoded.reserved_word7, frame1.reserved_word7);
+
+            assert!((decoded.af0 - frame1.af0).abs() < 1E-9);
+            assert!((decoded.af1 - frame1.af1).abs() < 1E-9);
+            assert!((decoded.af2 - frame1.af2).abs() < 1E-9);
         }
     }
 }
