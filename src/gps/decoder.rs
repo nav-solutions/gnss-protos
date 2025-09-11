@@ -659,41 +659,64 @@ mod test {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        for (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits) in [(
-            0,
-            false,
-            false,
-            GpsQzssFrameId::Ephemeris1,
-            0x13E,
-            false,
-            false,
-        )] {
+        for (
+            ith,
+            (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits, dwords),
+        ) in [
+            (
+                259956,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris1,
+                0x13E,
+                false,
+                false,
+                [
+                    0x1527C100, 0x22C13E00, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                ],
+            ),
+            (
+                259957,
+                true,
+                true,
+                GpsQzssFrameId::Ephemeris1,
+                0x13F,
+                true,
+                true,
+                [
+                    0x1527D900, 0x22C13FC0, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                ],
+            ),
+        ]
+        .iter()
+        .enumerate()
+        {
             let frame = GpsQzssFrame {
                 how: GpsQzssHow {
-                    tow,
-                    alert,
-                    anti_spoofing,
-                    frame_id,
+                    tow: *tow,
+                    alert: *alert,
+                    frame_id: *frame_id,
+                    anti_spoofing: *anti_spoofing,
                 },
                 telemetry: GpsQzssTelemetry {
-                    message,
-                    integrity,
-                    reserved_bits: tlm_reserved_bits,
+                    message: *message,
+                    integrity: *integrity,
+                    reserved_bits: *tlm_reserved_bits,
                 },
                 subframe: Default::default(),
             };
 
             let encoded = frame.encode();
 
-            assert_eq!(encoded[0], 0x00);
-            assert_eq!(encoded[1], 0x00);
-            assert_eq!(encoded[2], 0x00);
-            assert_eq!(encoded[3], 0x00);
-            assert_eq!(encoded[4], 0x00);
-            assert_eq!(encoded[5], 0x00);
-            assert_eq!(encoded[6], 0x00);
-            assert_eq!(encoded[7], 0x00);
-            assert_eq!(encoded[8], 0x00);
+            for (i, expected) in dwords.iter().enumerate() {
+                assert_eq!(
+                    encoded[i], *expected,
+                    "TEST #{} DWORD({}) expected 0x{:08X}, got 0x{:08X}",
+                    ith, i, dwords[i], encoded[i]
+                );
+            }
         }
     }
 }
