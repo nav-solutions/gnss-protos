@@ -66,10 +66,6 @@ pub struct GpsQzssFrame1 {
     /// - 13: 1536.00 < ura <= 3072.00
     /// - 14: 3072.00 < ura <= 6144.00
     /// - 15: 6144.00 < ura
-    ///
-    /// For each URA index, users may compute a nominal URA value (x)
-    ///  - ura < 6: 2**(1+N/2)
-    ///  - ura > 6: 2**(N-2)
     pub ura: u8,
 
     /// 6-bit SV Health. 0 means all good.
@@ -110,49 +106,115 @@ pub struct GpsQzssFrame1 {
 }
 
 impl GpsQzssFrame1 {
-    /// Copies and updates Week number
+    /// Computes binary URA from value in meters
+    fn compute_ura(value_m: f64) -> u8 {
+        if value_m <= 2.4 {
+            0
+        } else if value_m <= 3.4 {
+            1
+        } else if value_m <= 4.85 {
+            2
+        } else if value_m <= 6.85 {
+            3
+        } else if value_m <= 9.65 {
+            4
+        } else if value_m <= 13.65 {
+            5
+        } else if value_m <= 24.0 {
+            6
+        } else if value_m <= 48.0 {
+            7
+        } else if value_m <= 96.0 {
+            8
+        } else if value_m <= 192.0 {
+            9
+        } else if value_m <= 384.0 {
+            10
+        } else if value_m <= 768.0 {
+            11
+        } else if value_m <= 1536.0 {
+            12
+        } else if value_m <= 3072.0 {
+            13
+        } else if value_m <= 6144.0 {
+            14
+        } else {
+            15
+        }
+    }
+
+    /// Calculates nominal User Range Accuracy in meters
+    pub fn nominal_user_range_accuracy(&self) -> f64 {
+        // For each URA index, users may compute a nominal URA value (x)
+        //  - ura < 6: 2**(1+N/2)
+        //  - ura > 6: 2**(N-2)
+        if self.ura <= 6 {
+            2.0_f64.powi((1 + self.ura / 2) as i32)
+        } else {
+            2.0_f64.powi((self.ura / 2) as i32)
+        }
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated Week number
     pub fn with_week(mut self, week: u16) -> Self {
         self.week = week;
         self
     }
 
-    /// Copies and updates health mask
+    /// Copies and returns [GpsQzssFrame1] with updated health mask.
     pub fn with_health(mut self, health: u8) -> Self {
         self.health = health;
         self
     }
 
-    /// Copies and updates time of clock
-    pub fn with_toc(mut self, toc: u32) -> Self {
-        self.toc = toc;
+    /// Copies and returns [GpsQzssFrame1] with updated time of clock in seconds.
+    pub fn with_time_of_clock_seconds(mut self, toc_s: u32) -> Self {
+        self.toc = toc_s;
         self
     }
 
-    /// Copies and updates Total Group Delay (TGD)
-    pub fn with_tgd(mut self, tgd: f64) -> Self {
-        self.tgd = tgd;
+    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in seconds
+    pub fn with_total_group_delay_seconds(mut self, tgd_s: f64) -> Self {
+        self.tgd = tgd_s;
         self
     }
 
-    /// Copies and updates User Range Accuracy (URA)
-    pub fn with_ura(mut self, ura: u8) -> Self {
-        self.ura = ura;
+    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
+    /// in meters.
+    pub fn with_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
+        self.ura = Self::compute_ura(ura_m);
         self
     }
 
-    /// Copies and updates clock correction (0) term
+    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
+    /// from a nominal User Range Accuracy in meters.
+    pub fn with_nominal_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
+        // For each URA index, users may compute a nominal URA value (x)
+        //  - ura < 6: 2**(1+N/2)
+        //  - ura > 6: 2**(N-2)
+        let ura = if ura_m <= 24.0 {
+            2.0 * (ura_m - 1.0).log2()
+        } else {
+            2.0 + ura_m.log2()
+        };
+
+        self.ura = ura.round() as u8;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term
     pub fn with_af0(mut self, af0: f64) -> Self {
         self.af0 = af0;
         self
     }
 
-    /// Copies and updates clock correction (1) term
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (1) term
     pub fn with_af1(mut self, af1: f64) -> Self {
         self.af1 = af1;
         self
     }
 
-    /// Copies and updates clock correction (quadratic) term
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (2) term
     pub fn with_af2(mut self, af2: f64) -> Self {
         self.af2 = af2;
         self
@@ -752,6 +814,40 @@ mod frame1 {
             assert!((decoded.af0 - frame1.af0).abs() < 1E-9);
             assert!((decoded.af1 - frame1.af1).abs() < 1E-9);
             assert!((decoded.af2 - frame1.af2).abs() < 1E-9);
+        }
+    }
+
+    #[test]
+    fn user_range_accuracy() {
+        for (value_m, encoded_ura) in [
+            (0.1, 0),
+            (1.0, 0),
+            (2.4, 0),
+            (2.5, 1),
+            (2.6, 1),
+            (3.4, 1),
+            (3.5, 2),
+            (95.0, 8),
+            (96.0, 8),
+            (96.1, 9),
+            (3071.0, 12),
+            (3072.0, 12),
+            (3072.1, 13),
+            (4000.1, 13),
+        ] {
+            let ura = GpsQzssFrame1::compute_ura(value_m);
+            assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
+
+            let mut frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
+
+            assert_eq!(frame1.ura, encoded_ura);
+
+            let mut expected = GpsQzssFrame1::default();
+            expected.ura = encoded_ura;
+            assert_eq!(
+                frame1.with_nominal_user_range_accuracy_m(value_m).ura,
+                encoded_ura
+            );
         }
     }
 }
