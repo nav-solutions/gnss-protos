@@ -73,6 +73,67 @@ pub struct GpsQzssFrame2 {
 }
 
 impl GpsQzssFrame2 {
+    /// Copies and returns [GpsQzssFrame2] with updated time of issue of Ephemeris
+    /// in seconds of week.
+    pub fn with_toe(mut self, toe_seconds: u32) -> Self {
+        self.toe = toe_seconds;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated IODE value.
+    pub fn with_iode(mut self, iode: u8) -> Self {
+        self.iode = iode;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time.
+    pub fn with_mean_anomaly_semi_circles(mut self, m0_semi_circles: f64) -> Self {
+        self.m0 = m0_semi_circles;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in semi circles)
+    pub fn with_motion_difference_semi_circles(mut self, dn_semi_circles: f64) -> Self {
+        self.dn = dn_semi_circles;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated orbit eccentricity.
+    pub fn with_eccentricity(mut self, e: f64) -> Self {
+        self.e = e;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated 5-bit AODO mask.
+    pub fn with_aodo(mut self, aodo: u8) -> Self {
+        self.aodo = aodo & 0x1f;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated radius sine harmnoic correction term.
+    pub fn with_crs(mut self, crs: f64) -> Self {
+        self.crs = crs;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated latitude cosine harmnoic correction term.
+    pub fn with_cuc(mut self, cuc: f64) -> Self {
+        self.cuc = cuc;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated latitude sine harmnoic correction term.
+    pub fn with_cus(mut self, cus: f64) -> Self {
+        self.cus = cus;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated Fit interval flag.
+    pub fn with_fit_interval_flag(mut self, flag: bool) -> Self {
+        self.fit_int_flag = flag;
+        self
+    }
+
     pub(crate) fn decode_word(
         &mut self,
         ptr: usize,
@@ -377,4 +438,9 @@ impl Word10 {
     pub(crate) fn encode(&self) -> u32 {
         0
     }
+}
+
+#[cfg(test)]
+mod frame2 {
+    use super::*;
 }
