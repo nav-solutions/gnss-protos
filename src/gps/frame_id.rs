@@ -13,6 +13,17 @@ pub enum GpsQzssFrameId {
     Ephemeris3,
 }
 
+#[cfg(feature = "std")]
+impl std::fmt::Display for GpsQzssFrameId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Ephemeris1 => write!(f, "EPH-1"),
+            Self::Ephemeris2 => write!(f, "EPH-2"),
+            Self::Ephemeris3 => write!(f, "EPH-3"),
+        }
+    }
+}
+
 impl GpsQzssFrameId {
     /// [GpsQzssFrameId] decoding attempt
     pub(crate) fn decode(mask: u8) -> Result<Self, GpsError> {

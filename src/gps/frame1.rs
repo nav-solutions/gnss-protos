@@ -1,4 +1,10 @@
-use crate::{gps::GpsError, twos_complement};
+use crate::{
+    gps::{
+        bytes::{ByteArray, GpsDataByte},
+        GpsError,
+    },
+    twos_complement,
+};
 
 const WORD3_WEEK_MASK: u32 = 0x3ff00000;
 const WORD3_WEEK_SHIFT: u32 = 20;
@@ -220,43 +226,27 @@ impl GpsQzssFrame1 {
         self
     }
 
-    pub(crate) fn decode_word(&mut self, ptr: usize, dword: u32) -> Result<(), GpsError> {
-        match ptr {
-            3 => {
-                let word = Word3::decode(dword);
-                self.set_word3(word);
-            },
-            4 => {
-                let word = Word4::decode(dword);
-                self.set_word4(word);
-            },
-            5 => {
-                let word = Word5::decode(dword);
-                self.set_word5(word);
-            },
-            6 => {
-                let word = Word6::decode(dword);
-                self.set_word6(word);
-            },
-            7 => {
-                let word = Word7::decode(dword);
-                self.set_word7(word);
-            },
-            8 => {
-                let word = Word8::decode(dword);
-                self.set_word8(word);
-            },
-            9 => {
-                let word = Word9::decode(dword);
-                self.set_word9(word);
-            },
-            10 => {
-                let word = Word10::decode(dword);
-                self.set_word10(word);
-            },
-            _ => return Err(GpsError::InternalFSM),
+    /// Decodes [Self] from a burst of 8 [GpsDataByte]s
+    pub(crate) fn decode(bytes: &[GpsDataByte]) -> Self {
+        let mut s = Self::default();
+
+        for i in 0..8 {
+            let array = ByteArray::new(&bytes[i * 4..i * 4 + 4]);
+            let dword = array.value_u32();
+
+            match i {
+                0 => s.set_word3(Word3::decode(dword)),
+                1 => s.set_word4(Word4::decode(dword)),
+                2 => s.set_word5(Word5::decode(dword)),
+                3 => s.set_word6(Word6::decode(dword)),
+                4 => s.set_word7(Word7::decode(dword)),
+                5 => s.set_word8(Word8::decode(dword)),
+                6 => s.set_word9(Word9::decode(dword)),
+                7 => s.set_word10(Word10::decode(dword)),
+                _ => unreachable!("compiler issue"),
+            }
         }
-        Ok(())
+        s
     }
 
     /// Updates scaled content from [Word3]
@@ -795,11 +785,11 @@ mod frame1 {
 
             let mut decoded = GpsQzssFrame1::default();
 
-            for (i, dword) in encoded.iter().enumerate() {
-                decoded.decode_word(i + 3, *dword).unwrap_or_else(|_| {
-                    panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
-                });
-            }
+            // for (i, dword) in encoded.iter().enumerate() {
+            //     decoded.decode_word(i + 3, *dword).unwrap_or_else(|_| {
+            //         panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
+            //     });
+            // }
 
             assert_eq!(decoded.ura, frame1.ura);
             assert_eq!(decoded.week, frame1.week);

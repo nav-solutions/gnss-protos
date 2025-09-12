@@ -32,6 +32,17 @@ pub struct GpsQzssHow {
     pub frame_id: GpsQzssFrameId,
 }
 
+#[cfg(feature = "std")]
+impl std::fmt::Display for GpsQzssHow {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "GPS/QZS HOW TOW={} - ALERT={} - A/S={} - ID={}",
+            self.tow, self.alert, self.anti_spoofing, self.frame_id
+        )
+    }
+}
+
 impl GpsQzssHow {
     /// Copies and returns [GpsQzssHow] with updated TOW in seconds
     pub fn with_tow_seconds(mut self, tow_seconds: u32) -> Self {

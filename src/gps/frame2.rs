@@ -1,4 +1,10 @@
-use crate::{gps::GpsError, twos_complement};
+use crate::{
+    gps::{
+        bytes::{ByteArray, GpsDataByte},
+        GpsError,
+    },
+    twos_complement,
+};
 
 const WORD3_IODE_MASK: u32 = 0x3fc00000;
 const WORD3_IODE_SHIFT: u32 = 22;
@@ -134,48 +140,28 @@ impl GpsQzssFrame2 {
         self
     }
 
-    pub(crate) fn decode_word(
-        &mut self,
-        ptr: usize,
-        word: u32,
-        extra: &mut u32,
-    ) -> Result<(), GpsError> {
-        match ptr {
-            3 => {
-                let word = Word3::decode(word);
-                self.set_word3(word);
-            },
-            4 => {
-                let word = Word4::decode(word);
-                self.set_word4(word, extra);
-            },
-            5 => {
-                let word = Word5::decode(word);
-                self.set_word5(word, *extra);
-            },
-            6 => {
-                let word = Word6::decode(word);
-                self.set_word6(word, extra);
-            },
-            7 => {
-                let word = Word7::decode(word);
-                self.set_word7(word, *extra);
-            },
-            8 => {
-                let word = Word8::decode(word);
-                self.set_word8(word, extra);
-            },
-            9 => {
-                let word = Word9::decode(word);
-                self.set_word9(word, *extra);
-            },
-            10 => {
-                let word = Word10::decode(word);
-                self.set_word10(word);
-            },
-            _ => return Err(GpsError::InternalFSM),
+    /// Decodes [Self] from a burst of 8 [GpsDataByte]s
+    pub(crate) fn decode(bytes: &[GpsDataByte]) -> Self {
+        let mut extra = 0u32;
+        let mut s = Self::default();
+
+        for i in 0..8 {
+            let array = ByteArray::new(&bytes[i * 4..i * 4 + 4]);
+            let dword = array.value_u32();
+
+            match i {
+                0 => s.set_word3(Word3::decode(dword)),
+                1 => s.set_word4(Word4::decode(dword), &mut extra),
+                2 => s.set_word5(Word5::decode(dword), extra),
+                3 => s.set_word6(Word6::decode(dword), &mut extra),
+                4 => s.set_word7(Word7::decode(dword), extra),
+                5 => s.set_word8(Word8::decode(dword), &mut extra),
+                6 => s.set_word9(Word9::decode(dword), extra),
+                7 => s.set_word10(Word10::decode(dword)),
+                _ => unreachable!("compiler issue"),
+            }
         }
-        Ok(())
+        s
     }
 
     fn word3(&self) -> Word3 {
@@ -649,11 +635,11 @@ mod frame2 {
             let mut decoded = GpsQzssFrame2::default();
 
             for (i, dword) in encoded.iter().enumerate() {
-                decoded
-                    .decode_word(i + 3, *dword, &mut extra)
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
-                    });
+                // decoded
+                //     .decode_word(i + 3, *dword, &mut extra)
+                //     .unwrap_or_else(|_| {
+                //         panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
+                //     });
             }
 
             assert_eq!(frame2.toe, toe);

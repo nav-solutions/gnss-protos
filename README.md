@@ -36,16 +36,17 @@ We provide methods to both encode and decode data frames, and methods
 to work from a single byte or a buffer which is most suited for real-time interfaces.
 
 The parser is flexible and efficient enough. It supports both frame encoding & decoding.
-The GPS/QZSS protocol is not ideal to handle because it is not aligned to 32-bits, which is incompatible with any machine.
-To work around this (design flaw), this framework proposes two different interfaces that should suite all use cases:
+The GPS/QZSS protocol being "thoughtout" and redacted in the 70s/80s, it is not convenient to deal with.
+The data stream is not aligned to 8bit, hence not compatible with any machine.
+To work around this, this framework proposes two different interfaces that should suite all use cases:
 
 1. The `GpsDecoder.parse_buffer(&[u8])` works from a stream of bytes and is the goto method
-when working with a real time GPS/QZSS decoder. It is capable to align itself to the first valid GPS bit found.
-[u8] being not aligned to GPS (design flaw) you have to carefully manage your buffer.
-Anytime you invoke this method we will return the _first_ frame we identify in the buffer, and its offset position in the buffer
-(in bits, not bytes!). You are expected to discard this amount _of bits_ (_not bytes_), not to process the same frame twice.
-If you discard this amount of _bytes_ you will lose data. If you respect this rule, you will be able to process all successive
-GPS/QZSS messages from your streamer.
+when working with a real time GPS/QZSS decoder. It will automatically lock to the first valid GPS message found in your buffer,
+which is not [u8] aligned. But you have to carefully mange your buffer.
+The methods will return the number of processed _bits_ (not bytes!) and the possibly identified GPS message.
+You must discard all processed _bits_ (not bytes) not to process the same GPS message twice. If you happen to discard
+this amount of bytes (not bits) you will automatically loose data. 
+If you follow this principle, you can decode successive GPS messages and not loose any data from your streamer.
 
 ```rust
 use gnss_protos::gps::GpsDecoder;

@@ -20,20 +20,127 @@ pub fn init_logger() {
     });
 }
 
-#[cfg(feature = "gps")]
-pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> {
-    let mut ret = Vec::new();
-    let mut word32 = 0u32;
+use std::fs::File;
+use std::io::Read;
 
-    for (index, byte) in bytes.iter().enumerate() {
-        if index % 4 == 0 {
-            ret.push(GpsDataByte::msb_padded(*byte));
-        } else {
-            ret.push(GpsDataByte::Byte(*byte));
+/// A custom [FileReader] with possible offset (delay)
+/// in the stream.
+pub struct FileReader<const N: usize> {
+    // FD
+    fd: File,
+
+    // RD pointer
+    rd_ptr: usize,
+
+    // WR pointer
+    wr_ptr: usize,
+
+    // Initial offset in bits
+    initial_offset_bits: usize,
+
+    // internal buufer
+    buffer: [u8; N],
+}
+
+impl<const N: usize> std::io::Read for FileReader<N> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let mut capacity = buffer.len();
+
+        let avail_in_buffer = self.rd_ptr;
+
+        if self.rd_ptr > 0 {
+            // provide existing content
+            if capacity > self.rd_ptr {
+                buffer[..avail_in_buffer].copy_from_slice(&self.buffer[self.rd_ptr..]);
+
+                self.rd_ptr = 0;
+                capacity -= self.rd_ptr;
+            } else {
+                // provide capacity and return
+                self.rd_ptr += capacity;
+                return Ok(capacity);
+            }
+        }
+
+        // read new content
+        let new_size = self.fd.read(&mut self.buffer[self.rd_ptr..])?;
+
+        if new_size == 0 {
+            if avail_in_buffer == 0 {
+                // end of stream
+                return Ok(0);
+            } else {
+                // already copied
+                self.rd_ptr += new_size;
+                return Ok(avail_in_buffer);
+            }
+        }
+
+        if capacity >= new_size {
+            // can absorb new content entirely
+            buffer[avail_in_buffer..].copy_from_slice(&self.buffer[self.rd_ptr..]);
+
+            self.rd_ptr += new_size;
+
+            return Ok(avail_in_buffer + new_size);
+        }
+
+        // can only absorb a part of it
+
+        Ok(0)
+    }
+}
+
+impl<const N: usize> FileReader<N> {
+    /// Creates new [FileReader] with possible fake offset in bits
+    pub fn new(fp: &str, initial_offset_bits: usize) -> Self {
+        let initial_offset_bytes = initial_offset_bits / 8;
+
+        let mut buffer = [0; N];
+
+        let mut fd = File::open(fp).unwrap_or_else(|e| {
+            panic!("Failed to open file {}: {}", fp, e);
+        });
+
+        Self {
+            fd,
+            buffer,
+            initial_offset_bits,
+            wr_ptr: 0,
+            rd_ptr: 0,
         }
     }
+}
 
-    ret
+#[test]
+#[ignore]
+fn test_file_reader() {
+    let mut buffer = [0; 1024];
+    let mut file = FileReader::<1024>::new("two_frames.bin", 0);
+
+    file.read(&mut buffer).unwrap_or_else(|e| {
+        panic!("Failed to read test data: {}", e);
+    });
+
+    // reconstructed words
+    let dword = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
+
+    assert_eq!(dword, 0x8B00_0400);
+}
+
+#[cfg(feature = "gps")]
+pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> {
+    bytes
+        .iter()
+        .enumerate()
+        .map(|(index, byte)| {
+            if index % 4 == 0 {
+                GpsDataByte::msb_padded(*byte)
+            } else {
+                GpsDataByte::Byte(*byte)
+            }
+        })
+        .collect()
 }
 
 #[test]

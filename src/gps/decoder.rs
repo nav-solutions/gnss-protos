@@ -1,5 +1,10 @@
 use crate::gps::{
     GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+    BitReader,
+    GPS_WORD_BITS,
+    GPS_FRAME_BYTES,
+    GPS_FRAME_BITS,
+    GPS_WORDS_PER_FRAME,
 };
 
 #[cfg(feature = "log")]
@@ -18,6 +23,9 @@ enum State {
     DataWord,
 }
 
+/// [GpsQzssDecoder] is a structure to work on byte per byte approach,
+/// not compatible with truly raw / real-time GPS-QZSS data bits.
+/// Prefer the [GpsQzssFrame::decode] functions to work from a buffer of raw bytes.
 #[derive(Clone, Copy)]
 pub struct GpsQzssDecoder {
     /// Frame counter
@@ -74,43 +82,6 @@ impl GpsQzssDecoder {
         self.state = Default::default();
         self.how = Default::default();
         self.subframe = Default::default();
-    }
-
-    /// Attempts at decoding the first valid [GpsQzssFrame] found in proposed buffer.
-    /// ## Input
-    /// - buffer: read only [u8] buffer.
-    ///
-    /// ## Returns
-    /// - [GpsQzssFrame] and offset position in buffer, so you can discard the
-    /// consumed bits. [GpsQzssFrame] as a size of 300 bits exactly starting at offset position.
-    pub fn parse_buffer(&mut self, buffer: &[u8]) -> Option<(GpsQzssFrame, usize)> {
-        let mut index = 0;
-        let mut offset = 0;
-        let mut size_avail = buffer.len();
-
-        loop {
-            if size_avail == 0 {
-                return None;
-            }
-
-            let byte = if index == 3 {
-                index = 0;
-                GpsDataByte::MsbPadded(buffer[offset])
-            } else {
-                index += 1;
-                GpsDataByte::Byte(buffer[offset])
-            };
-
-            if let Some(frame) = self.consume_byte(byte) {
-                return Some((frame, offset));
-            }
-
-            offset += 1;
-            size_avail -= 1;
-            index += 1;
-        }
-
-        None
     }
 
     /// Processes a [GpsDataByte] from a GPS-QZSS data stream,
@@ -320,6 +291,9 @@ impl GpsQzssDecoder {
 
 #[cfg(test)]
 mod test {
+    use std::io::Read;
+    use std::fs::File;
+
     use crate::{
         gps::{GpsDataByte, GpsQzssDecoder, GpsQzssSubframe},
         GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry,
@@ -538,222 +512,5 @@ mod test {
         }
 
         assert!(!found, "Invalid GPS frame decoded");
-    }
-
-    #[test]
-    fn test_eph1_frame_decoding() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut found = false;
-
-        let bytes = from_ublox_be_bytes(&[
-            // TLM
-            0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x15, 0x27, 0xC9, 0x73, // WORD3
-            0x13, 0xE4, 0x00, 0x04, //WORD4
-            0x10, 0x4F, 0x5D, 0x31, //WORD5
-            0x97, 0x44, 0xE6, 0xD7, // WORD6
-            0x07, 0x75, 0x57, 0x83, //WORD7
-            0x33, 0x0C, 0x80, 0xB5, // WORD8
-            0x92, 0x50, 0x42, 0xA1, // WORD9
-            0x80, 0x00, 0x16, 0x84, //WORD10
-            0x31, 0x2C, 0x30, 0x33,
-        ]);
-
-        let mut decoder = GpsQzssDecoder::default().without_parity_verification();
-
-        for byte in bytes {
-            if let Some(frame) = decoder.consume_byte(byte) {
-                assert_eq!(decoder.tlm.message, 0x13E);
-                assert_eq!(decoder.tlm.integrity, false);
-                assert_eq!(decoder.tlm.reserved_bits, false);
-
-                assert_eq!(decoder.how.alert, false);
-                assert_eq!(decoder.how.anti_spoofing, true);
-                assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris1);
-
-                match frame.subframe {
-                    GpsQzssSubframe::Ephemeris1(frame1) => {
-                        assert_eq!(frame1.af2, 0.0);
-                        assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
-                        assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
-                        assert_eq!(frame1.week, 318);
-                        assert_eq!(frame1.toc, 266_400);
-                        assert_eq!(frame1.health, 0);
-                        found = true;
-                    },
-                    _ => panic!("incorrect subframe decoded!"),
-                }
-            }
-        }
-
-        assert!(found, "GPS decoding failed!");
-    }
-
-    #[test]
-    fn test_eph2_frame_decoding() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut found = false;
-
-        let bytes = from_ublox_be_bytes(&[
-            // TLM
-            0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x15, 0x27, 0xEA, 0x1B, // WORD3
-            0x12, 0x7F, 0xF1, 0x65, //WORD4
-            0x8C, 0x68, 0x1F, 0x7C, //WORD5
-            0x02, 0x49, 0x34, 0x15, // WORD6
-            0xBF, 0xF8, 0x81, 0x1E, //WORD7
-            0x99, 0x1B, 0x81, 0x14, // W0RD8
-            0x04, 0x3E, 0x68, 0x6E, // WORD9
-            0x83, 0x34, 0x72, 0x21, // WORD10
-            0x90, 0x42, 0x9F, 0x7B,
-        ]);
-
-        let mut decoder = GpsQzssDecoder::default().without_parity_verification();
-
-        for byte in bytes {
-            if let Some(frame) = decoder.consume_byte(byte) {
-                assert_eq!(decoder.tlm.message, 0x13E);
-                assert_eq!(decoder.tlm.integrity, false);
-                assert_eq!(decoder.tlm.reserved_bits, false);
-
-                assert_eq!(decoder.how.alert, false);
-                assert_eq!(decoder.how.anti_spoofing, true);
-                assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris2);
-
-                match frame.subframe {
-                    GpsQzssSubframe::Ephemeris2(frame2) => {
-                        assert_eq!(frame2.toe, 266_400);
-                        assert_eq!(frame2.crs, -1.843750000000e+000);
-                        assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
-                        assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
-                        assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
-                        assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
-                        assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
-                        assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
-                        assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
-                        assert_eq!(frame2.fit_int_flag, false);
-                        found = true;
-                    },
-                    _ => panic!("incorrect subframe decoded!"),
-                }
-            }
-        }
-
-        assert!(found, "GPS decoding failed!");
-    }
-
-    #[test]
-    fn test_eph3_frame_decoding() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut found = false;
-
-        let bytes = from_ublox_be_bytes(&[
-            0x22, 0xC1, 0x3E, 0x1B, 0x15, 0x28, 0x0B, 0xDB, 0x00, 0x0A, 0xEA, 0x34, 0x03, 0x3C,
-            0xFF, 0xEE, 0xBF, 0xE5, 0xC9, 0xEB, 0x13, 0x6F, 0xB6, 0x4E, 0x86, 0xF4, 0xAB, 0x2C,
-            0x06, 0x71, 0xEB, 0x44, 0x3F, 0xEA, 0xF6, 0x02, 0x92, 0x45, 0x52, 0x13,
-        ]);
-
-        let mut decoder = GpsQzssDecoder::default().without_parity_verification();
-
-        for byte in bytes {
-            if let Some(frame) = decoder.consume_byte(byte) {
-                assert_eq!(decoder.tlm.message, 0x13E);
-                assert_eq!(decoder.tlm.integrity, false);
-                assert_eq!(decoder.tlm.reserved_bits, false);
-
-                assert_eq!(decoder.how.alert, false);
-                assert_eq!(decoder.how.anti_spoofing, true);
-                assert_eq!(decoder.how.frame_id, GpsQzssFrameId::Ephemeris3);
-
-                match frame.subframe {
-                    GpsQzssSubframe::Ephemeris3(frame3) => {
-                        assert!((frame3.cic - 8.009374141693e-008).abs() < 1e-9);
-                        assert!((frame3.cis - -1.955777406693e-007).abs() < 1E-9);
-                        assert!((frame3.crc - 2.225625000000e+002).abs() < 1E-9);
-                        assert!((frame3.i0 - 3.070601043291e-001).abs() < 1e-9);
-                        assert!((frame3.idot - 1.548414729768e-010).abs() < 1E-9);
-                        assert!((frame3.omega0 - -6.871047024615e-001).abs() < 1e-9);
-                        assert!((frame3.omega_dot - -2.449269231874e-009).abs() < 1e-9);
-                        assert!((frame3.omega - -6.554632573389e-001).abs() < 1e-9);
-                        found = true;
-                    },
-                    _ => panic!("incorrect subframe decoded!"),
-                }
-            }
-        }
-
-        assert!(found, "GPS decoding failed!");
-    }
-
-    #[test]
-    fn test_eph1_frame_encoding() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        for (
-            ith,
-            (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits), // dwords),
-        ) in [
-            (
-                259956,
-                false,
-                false,
-                GpsQzssFrameId::Ephemeris1,
-                0x13E,
-                false,
-                false,
-                // [
-                //     0x1527C100, 0x22C13E00, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-                //     0x00000000, 0x00000000, 0x00000000, 0x00000000,
-                // ],
-            ),
-            (
-                259957,
-                true,
-                true,
-                GpsQzssFrameId::Ephemeris1,
-                0x13F,
-                true,
-                true,
-                // [
-                //     0x1527D900, 0x22C13FC0, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
-                //     0x00000000, 0x00000000, 0x00000000, 0x00000000,
-                // ],
-            ),
-        ]
-        .iter()
-        .enumerate()
-        {
-            let frame = GpsQzssFrame {
-                how: GpsQzssHow {
-                    tow: *tow,
-                    alert: *alert,
-                    frame_id: *frame_id,
-                    anti_spoofing: *anti_spoofing,
-                },
-                telemetry: GpsQzssTelemetry {
-                    message: *message,
-                    integrity: *integrity,
-                    reserved_bits: *tlm_reserved_bits,
-                },
-                subframe: Default::default(),
-            };
-
-            let encoded = frame.encode();
-
-            // for (i, expected) in dwords.iter().enumerate() {
-            //     assert_eq!(
-            //         encoded[i], *expected,
-            //         "TEST #{} DWORD({}) expected 0x{:08X}, got 0x{:08X}",
-            //         ith, i, dwords[i], encoded[i]
-            //     );
-            // }
-        }
     }
 }

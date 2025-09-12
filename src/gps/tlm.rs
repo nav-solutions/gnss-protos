@@ -22,6 +22,17 @@ pub struct GpsQzssTelemetry {
     pub reserved_bits: bool,
 }
 
+#[cfg(feature = "std")]
+impl std::fmt::Display for GpsQzssTelemetry {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "GPS/QZS Telemetry INTEGRITY={} - MSG=0x{:08X} - reserved={}",
+            self.integrity, self.message, self.reserved_bits
+        )
+    }
+}
+
 impl GpsQzssTelemetry {
     /// Copies and returns new [GpsQzssTelemetry] with updated 14-bit TLM message
     pub fn with_message(mut self, message_14b: u16) -> Self {

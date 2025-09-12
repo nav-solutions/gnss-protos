@@ -1,23 +1,28 @@
-//! GPS / QZSS protocol
+/// GPS data word size (in bits!)
+pub const GPS_WORD_BITS: usize = 30;
 
-/// GPS uses 30 bit data words, and is not aligned.
-pub const GPS_WORD_SIZE: usize = 30;
+/// Number of words in a frame
+pub const GPS_WORDS_PER_FRAME: usize = 10;
 
-/// Minimal allocation to encode a correct GPS data frame.
-pub const GPS_MIN_SIZE: usize = GPS_WORD_SIZE * 10;
+/// Total GPS/QZSS frame size (in bits!)
+pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
+
+/// Total GPS/QZSS frame size (in bytes!)
+pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 
 mod bytes;
-mod decoder;
+mod decoding;
+mod encoding;
 mod errors;
 mod frame1;
 mod frame2;
 mod frame3;
 mod frame_id;
 mod how;
+mod reader;
 mod tlm;
 
 pub use bytes::GpsDataByte;
-pub use decoder::GpsQzssDecoder;
 pub use errors::GpsError;
 pub use frame_id::GpsQzssFrameId;
 pub use how::GpsQzssHow;
@@ -27,8 +32,10 @@ pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
 pub use frame3::GpsQzssFrame3;
 
+pub(crate) use reader::BitReader;
+
 /// GPS / QZSS interpreted frame.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame {
     /// [GpsQzssHow] describes following frame.
     pub how: GpsQzssHow,
@@ -57,28 +64,6 @@ impl GpsQzssFrame {
     pub fn with_subframe(mut self, subframe: GpsQzssSubframe) -> Self {
         self.subframe = subframe;
         self
-    }
-
-    /// Encodes this [GpsQzssFrame] as a 10 [u32] word burst.
-    /// GPS is 30-bit aligned, we need 10 words to describe the entire message.
-    /// The final [u32] is padded with 20 MSB bits (zeros).
-    pub fn encode(&self) -> [u8; 8] {
-        let mut encoded = [0; 8];
-
-        let how = self.how.encode();
-        let telemetry = self.telemetry.encode();
-        let subframe = self.subframe.encode();
-
-        encoded[0] = (how & 0xff) as u8;
-        encoded[1] = ((how & 0xff00) >> 8) as u8;
-        encoded[2] = ((how & 0xff0000) >> 16) as u8;
-        encoded[3] = ((how & 0xff000000) >> 24) as u8;
-
-        // encoded[0] = self.how.encode();
-        // encoded[1] = self.telemetry.encode();
-        // encoded[2..].copy_from_slice(&self.subframe.encode());
-
-        encoded
     }
 }
 
@@ -151,6 +136,23 @@ impl GpsQzssSubframe {
         }
     }
 
+    /// Decodes a [GpsQzssSubframe] from a 8 [GpsDataByte] slice
+    /// supports padding on each word termination (not intra words)
+    pub(crate) fn decode(frame_id: GpsQzssFrameId, bytes: &[GpsDataByte]) -> Self {
+        // for i in 0..8 {
+        //     let dword = ByteArray::new(&bytes[8+i*4..8+i*4+4])
+        //         .value_u32();
+
+        //     let _ = subframe.decode_word(i +3, dword);  // IMPROVE
+        //
+
+        match frame_id {
+            GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::decode(bytes)),
+            GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::decode(bytes)),
+            GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::decode(bytes)),
+        }
+    }
+
     /// Encode this [GpsQzssSubframe] into 8 [u32] data burst.
     pub(crate) fn encode(&self) -> [u32; 8] {
         match self {
@@ -194,3 +196,51 @@ impl GpsQzssSubframe {
 //
 //     ((reg >> 30) & 0x3f) as u8
 // }
+
+#[cfg(test)]
+mod test {
+    use crate::gps::{GpsDataByte, GpsQzssFrameId, GpsQzssSubframe};
+
+    #[test]
+    fn eph1_reciprocal() {
+        let subframe = GpsQzssSubframe::decode(
+            GpsQzssFrameId::Ephemeris1,
+            &[
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::MsbPadded(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+                GpsDataByte::Byte(0x00),
+            ],
+        );
+
+        let encoded = subframe.encode();
+    }
+}
