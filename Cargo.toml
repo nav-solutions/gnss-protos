@@ -21,7 +21,7 @@ default = ["gps"]
 # STD support. Currently only used in test mode.
 std = []
 
-# Unlock GPS protocol
+# Unlock GPS (+QZSS) protocol
 gps = []
 
 [package.metadata.docs.rs]

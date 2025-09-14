@@ -1,3 +1,6 @@
+/// GPS preamble (SYNC) byte
+pub const GPS_PREAMBLE_BYTE: u8 = 0x8B;
+
 /// GPS data word size (in bits!)
 pub const GPS_WORD_BITS: usize = 30;
 

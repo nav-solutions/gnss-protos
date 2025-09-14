@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read};
+
 #[cfg(feature = "std")]
 use std::sync::Once;
 
@@ -20,8 +22,30 @@ pub fn init_logger() {
     });
 }
 
-use std::fs::File;
-use std::io::Read;
+/// Inserts desired number of zero (bits) at the begginning of a frame
+pub fn insert_zeros(slice: &[u8], shift_bits: usize) -> Vec<u8> {
+    let size = slice.len();
+    let mut out = vec![0u8; size];
+
+    let byte_shift = shift_bits / 8;
+    let bit_shift = shift_bits % 8;
+
+    for (i, &byte) in slice.iter().enumerate() {
+        let out_idx = i + byte_shift;
+
+        if out_idx >= size {
+            break;
+        }
+
+        out[out_idx] |= byte >> bit_shift;
+
+        if bit_shift != 0 && out_idx + 1 < size {
+            out[out_idx + 1] |= byte << (8 - bit_shift);
+        }
+    }
+
+    out
+}
 
 /// A custom [FileReader] with possible offset (delay)
 /// in the stream.
@@ -109,6 +133,34 @@ impl<const N: usize> FileReader<N> {
             wr_ptr: 0,
             rd_ptr: 0,
         }
+    }
+}
+
+#[test]
+fn test_zeros_padder() {
+    let mut buffer = [0; 1024];
+    let mut file = FileReader::<1024>::new("data/GPS/two_frames.bin", 0);
+
+    file.read(&mut buffer).unwrap_or_else(|e| {
+        panic!("Failed to read test data: {}", e);
+    });
+
+    let size = buffer.len();
+
+    // test offset by bytes
+    for i in 1..16 {
+        // insert 1 byte
+        let delayed = insert_zeros(&buffer, i * 8);
+
+        assert_eq!(delayed.len(), size); // size should never change
+    }
+
+    // test offset by bits
+    for i in 1..7 {
+        let delayed = insert_zeros(&buffer, i);
+
+        assert_eq!(delayed[0], 0x8B >> i);
+        assert_eq!(delayed.len(), size); // size should never change
     }
 }
 

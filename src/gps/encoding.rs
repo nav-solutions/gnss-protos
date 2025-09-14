@@ -9,12 +9,12 @@ use log::{error, trace};
 impl GpsQzssFrame {
     /// Returns total number of bytes needed to encode this [GpsQzssFrame] to binary
     /// aligned to [u8]
-    pub const fn encoding_size(&self) -> usize {
+    pub const fn encoding_size() -> usize {
         GPS_FRAME_BYTES
     }
 
     /// Returns exact number of bits needed to encode this [GpsQzssFrame]
-    pub const fn encoding_bits(&self) -> usize {
+    pub const fn encoding_bits() -> usize {
         GPS_FRAME_BITS
     }
 
@@ -25,8 +25,8 @@ impl GpsQzssFrame {
     pub fn encode(&self) -> [u8; GPS_FRAME_BYTES] {
         let mut encoded = [0; GPS_FRAME_BYTES];
 
-        let telemetry = self.telemetry.encode();
         let how = self.how.encode();
+        let telemetry = self.telemetry.encode();
         let subframe = self.subframe.encode();
 
         // encoded[3] = ((telemetry & 0xff) << 2) as u8;
@@ -92,12 +92,12 @@ mod encoding {
 
     #[test]
     fn encoding_size() {
-        assert_eq!(GpsQzssFrame::default().encoding_size(), 300 / 8 + 1);
+        assert_eq!(GpsQzssFrame::encoding_size(), 300 / 8 + 1);
     }
 
     #[test]
     fn encoding_bits() {
-        assert_eq!(GpsQzssFrame::default().encoding_bits(), 300);
+        assert_eq!(GpsQzssFrame::encoding_bits(), 300);
     }
 
     #[test]
@@ -110,42 +110,9 @@ mod encoding {
         assert_eq!(encoded[2], 0x00);
         assert_eq!(encoded[3], 0x00);
 
-        let (decoded, size) = GpsQzssFrame::decode(&encoded);
+        let (decoded, size) = GpsQzssFrame::decode(&encoded, false);
 
         assert_eq!(decoded, Some(default), "reciprocal failed");
-    }
-
-    #[test]
-    #[ignore]
-    fn two_frames_decoding_bin() {
-        let mut buffer = [0; 1024];
-
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut file = File::open("two_frames.bin").unwrap();
-
-        let content = file.read(&mut buffer).unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn test_eph1_buffer_decoding() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let buffer = [
-            0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x15, 0x27, 0xC9, 0x73, // WORD3
-            0x13, 0xE4, 0x00, 0x04, //WORD4
-            0x10, 0x4F, 0x5D, 0x31, //WORD5
-            0x97, 0x44, 0xE6, 0xD7, // WORD6
-            0x07, 0x75, 0x57, 0x83, //WORD7
-            0x33, 0x0C, 0x80, 0xB5, // WORD8
-            0x92, 0x50, 0x42, 0xA1, // WORD9
-            0x80, 0x00, 0x16, 0x84, //WORD10
-            0x31, 0x2C, 0x30, 0x33,
-        ];
     }
 
     #[test]
@@ -198,7 +165,7 @@ mod encoding {
                 );
             }
 
-            let (decoded, size) = GpsQzssFrame::decode(&encoded);
+            let (decoded, size) = GpsQzssFrame::decode(&encoded, false);
             assert_eq!(size, GPS_FRAME_BITS);
 
             assert_eq!(decoded, Some(frame), "reciprocal failed");

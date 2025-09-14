@@ -68,7 +68,7 @@ impl<'a> ByteArray<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 /// [GpsDataByte] aligned to 32 bits
 pub enum GpsDataByte {
     /// 2-bit MSB padding.
@@ -81,6 +81,12 @@ pub enum GpsDataByte {
 
     /// Plain byte (no padding)
     Byte(u8),
+}
+
+impl Default for GpsDataByte {
+    fn default() -> Self {
+        Self::Byte(0)
+    }
 }
 
 impl core::fmt::LowerExp for GpsDataByte {
