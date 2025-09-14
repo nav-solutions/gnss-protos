@@ -1,6 +1,6 @@
 use crate::gps::{
-    BitReader, GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
+    GpsDataByte, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+    GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
 };
 
 #[cfg(feature = "log")]
@@ -129,7 +129,7 @@ mod encoding {
 
         let mut decoder = GpsQzssDecoder::default();
 
-        for (ith, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits)) in
+        for (ith, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bit)) in
             [(
                 259956,
                 false,
@@ -152,7 +152,7 @@ mod encoding {
                 telemetry: GpsQzssTelemetry {
                     message: *message,
                     integrity: *integrity,
-                    reserved_bits: *tlm_reserved_bits,
+                    reserved_bit: *tlm_reserved_bit,
                 },
                 subframe: Default::default(),
             };

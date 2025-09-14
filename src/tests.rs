@@ -22,6 +22,29 @@ pub fn init_logger() {
     });
 }
 
+// TLM : 10001011 0000000000000000 101010   (préambule + padding + parité fictive)
+// HOW : 00000000000000000 0001  111000   (Z-count fictif + SubframeID=1 + parité)
+// W3  : 010101010101010101010101 101010
+// W4  : 001100110011001100110011 110011
+// W5  : 111100001111000011110000 000111
+// W6  : 000111000111000111000111 111000
+// W7  : 101010101010101010101010 010101
+// W8  : 011001100110011001100110 101101
+// W9  : 110000110000110000110000 111100
+// W10 : 111111000000111111000000 000111
+pub const GPS_EPH1_DATA: [u8; 40] = [
+    0x8B, // PREAMBLE
+    0x00, 0x00, // TLM-MSG+I+R
+    0x17, // PAR(TLM=5) + 2b HOW=3
+    0x00, 0x00, // HOW.TOW + A
+    0x90, // A/S + FID=1
+    0x00, // PAR(HOW)
+    0x00, // P1, P2, PAR(MSBx2)
+    0x00, // PAR(LSBx4), BIT29=0, BIT30=0
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
 /// Inserts desired number of zero (bits) at the begginning of a frame
 pub fn insert_zeros(slice: &[u8], shift_bits: usize) -> Vec<u8> {
     let size = slice.len();
@@ -139,7 +162,7 @@ impl<const N: usize> FileReader<N> {
 #[test]
 fn test_zeros_padder() {
     let mut buffer = [0; 1024];
-    let mut file = FileReader::<1024>::new("data/GPS/two_frames.bin", 0);
+    let mut file = FileReader::<1024>::new("data/GPS/eph-1.bin", 0);
 
     file.read(&mut buffer).unwrap_or_else(|e| {
         panic!("Failed to read test data: {}", e);
@@ -165,19 +188,18 @@ fn test_zeros_padder() {
 }
 
 #[test]
-#[ignore]
 fn test_file_reader() {
     let mut buffer = [0; 1024];
-    let mut file = FileReader::<1024>::new("two_frames.bin", 0);
+    let mut file = FileReader::<1024>::new("data/GPS/eph-1.bin", 0);
 
     file.read(&mut buffer).unwrap_or_else(|e| {
         panic!("Failed to read test data: {}", e);
     });
 
-    // reconstructed words
-    let dword = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
-
-    assert_eq!(dword, 0x8B00_0400);
+    assert_eq!(buffer[0], 0x8B);
+    assert_eq!(buffer[1], 0x00);
+    assert_eq!(buffer[2], 0x00);
+    assert_eq!(buffer[3], 0x04);
 }
 
 #[cfg(feature = "gps")]

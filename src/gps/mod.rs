@@ -23,7 +23,7 @@ mod frame2;
 mod frame3;
 mod frame_id;
 mod how;
-mod reader;
+// mod reader;
 mod tlm;
 
 pub use bytes::GpsDataByte;
@@ -37,7 +37,7 @@ pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
 pub use frame3::GpsQzssFrame3;
 
-pub(crate) use reader::BitReader;
+// pub(crate) use reader::BitReader;
 
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]

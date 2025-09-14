@@ -1,7 +1,9 @@
-use crate::gps::{GpsQzssFrame, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE};
+use crate::gps::{
+    GpsQzssFrame, GpsQzssHow, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE,
+};
 
 #[cfg(feature = "log")]
-use log::trace;
+use log::{debug, error, trace};
 
 /// [GpsQzssDecoder] can decode GPS (or QZSS) protocol.
 /// By [Default], our [GpsQzssDecoder] does not verify parity.
@@ -39,7 +41,7 @@ impl GpsQzssDecoder {
     /// ## Input
     /// - slice: &[u8], will panic if not [GPS_FRAME_BYTES] byte long!
     /// - preamble_offset in bits!
-    pub(crate) fn pack_align_slice(&mut self, slice: &[u8], preamble_offset_bit: usize) {
+    pub(crate) fn resync_align(&mut self, slice: &[u8], preamble_offset_bit: usize) {
         // byte index
         let byte_index = preamble_offset_bit / 8;
 
@@ -117,57 +119,96 @@ impl GpsQzssDecoder {
 
         // realign and pack as [u8]
         let preamble_offset_bit = preamble_offset_bit.unwrap();
-        trace!("PREAMBLE position={}", preamble_offset_bit);
 
-        // realign and pack to [u8]
-        // let telemetry = ByteArray::new(&bytes[0..4])
-        //     .value_u32();
+        #[cfg(feature = "log")]
+        trace!("(GPS/QZSS)  [preamble]: pos={}", preamble_offset_bit);
 
-        // let telemetry = match GpsQzssTelemetry::decode(telemetry) {
-        //     Ok(tlm) => tlm,
-        //     #[cfg(not(feature = "log"))]
-        //     Err(_) => {
-        //         return (None, byte_offset * 8 + bit_offset);
-        //     },
-        //     #[cfg(feature = "log")]
-        //     Err(e) => {
-        //         error!("invalid TLM: {}", telemetry);
-        //         return (None, byte_offset * 8 + bit_offset);
-        //     },
-        // };
+        self.resync_align(buffer, preamble_offset_bit);
 
-        // let how = ByteArray::new(&bytes[4..8])
-        //     .value_u32();
+        let telemetry_dword = u32::from_be_bytes([
+            self.buffer[0],
+            self.buffer[1],
+            self.buffer[2],
+            self.buffer[3],
+        ]);
 
-        // let how = match GpsQzssHow::decode(how) {
-        //     Ok(how) => how,
-        //     #[cfg(not(feature = "log"))]
-        //     Err(_) => {
-        //         return (None, byte_offset * 8 + bit_offset +32);
-        //     },
-        //     #[cfg(feature = "log")]
-        //     Err(e) => {
-        //         error!("invalid frame-id: {}", how);
-        //         return (None, byte_offset * 8 + bit_offset +32);
-        //     },
-        // };
+        let shifted_dword = telemetry_dword >> 2;
+        let parity = (telemetry_dword & 0xfc) >> 2;
 
-        // let processed_size = preamble_offset + Self::encoding_bits();
+        #[cfg(feature = "log")]
+        trace!("(GPS/QZSS) [telemetry]: par={}", parity);
 
-        // let frame = GpsQzssFrame {
-        //     how,
-        //     telemetry,
-        //     subframe: Default::default(),
-        // };
-        return (size * 8 - GPS_FRAME_BITS, None);
+        let telemetry = match GpsQzssTelemetry::decode(shifted_dword) {
+            Ok(telemetry) => {
+                #[cfg(feature = "log")]
+                debug!("(GPS/QZSS) [telemetry]: {}", telemetry);
+                telemetry
+            },
+            #[cfg(not(feature = "log"))]
+            Err(_) => {
+                return (preamble_offset_bit + GPS_FRAME_BITS, None);
+            },
+            #[cfg(feature = "log")]
+            Err(e) => {
+                error!("(GPS/QZSS) [telemetry]: {}", e);
+                return (preamble_offset_bit + GPS_FRAME_BITS, None);
+            },
+        };
+
+        let how_dword = u32::from_be_bytes([
+            self.buffer[4],
+            self.buffer[5],
+            self.buffer[6],
+            self.buffer[7],
+        ]);
+
+        let mut shifted_dword = (telemetry_dword & 0x3) << 30;
+        shifted_dword |= how_dword >> 6;
+
+        let parity = (how_dword & 0xfc) >> 2;
+        trace!("(GPS/QZSS)       [how]:    ={:08X}", shifted_dword);
+
+        #[cfg(feature = "log")]
+        trace!("(GPS/QZSS)       [how]: par={}", parity);
+
+        let how = match GpsQzssHow::decode(shifted_dword) {
+            Ok(how) => {
+                #[cfg(feature = "log")]
+                debug!("(GPS/QZSS) [how]: {}", how);
+                how
+            },
+            #[cfg(not(feature = "log"))]
+            Err(_) => {
+                return (preamble_offset_bit + GPS_FRAME_BITS, None);
+            },
+            #[cfg(feature = "log")]
+            Err(e) => {
+                error!("(GPS/QZSS) [how]: {}", e);
+                return (preamble_offset_bit + GPS_FRAME_BITS, None);
+            },
+        };
+
+        // now process the 8 data words
+        for i in 0..8 {}
+
+        let frame = GpsQzssFrame {
+            telemetry,
+            how,
+            subframe: Default::default(),
+        };
+
+        return (preamble_offset_bit + GPS_FRAME_BITS, Some(frame));
     }
 }
 
 #[cfg(test)]
 mod decoder {
-    use super::GpsQzssDecoder;
-    use crate::tests::insert_zeros;
     use std::{fs::File, io::Read};
+
+    use crate::{
+        gps::{GpsQzssDecoder, GPS_FRAME_BITS, GPS_FRAME_BYTES},
+        tests::{insert_zeros, GPS_EPH1_DATA},
+    };
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
@@ -178,7 +219,7 @@ mod decoder {
         init_logger();
 
         let mut buffer = [0; 1024];
-        let mut file = File::open("data/GPS/two_frames.bin").unwrap();
+        let mut file = File::open("data/GPS/eph-1.bin").unwrap();
         file.read(&mut buffer).unwrap();
 
         assert_eq!(GpsQzssDecoder::find_preamble(&buffer, 1024), Some(0));
@@ -235,39 +276,49 @@ mod decoder {
         }
     }
 
-    // #[test]
-    // fn slice_alignmnt_packing() {
-    //     #[cfg(all(feature = "std", feature = "log"))]
-    //     init_logger();
+    #[test]
+    fn decoder_test_data() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
 
-    //     assert_eq!(GPS_FRAME_BYTES, 38);
+        let mut decoder = GpsQzssDecoder::default();
 
-    //     let mut buffer = [0; 1024];
-    //     let mut file = File::open("data/GPS/two_frames.bin").unwrap();
-    //     file.read(&mut buffer).unwrap();
+        let (size, decoded) = decoder.decode(&GPS_EPH1_DATA, GPS_EPH1_DATA.len());
 
-    //     // test dummy case of 0 offset
-    //     let aligned = GpsQzssDecoder::pack_align_slice(&buffer, 0);
+        assert_eq!(size, GPS_FRAME_BITS, "returned invalid size");
 
-    //     assert_eq!(
-    //         aligned.len(),
-    //         GPS_FRAME_BYTES,
-    //         "did not extract correct amount of bytes!"
-    //     );
+        let decoded = decoded.unwrap_or_else(|| {
+            panic!("did not decoded GPS frame!");
+        });
 
-    //     assert_eq!(aligned[0], buffer[0]);
-    //     assert_eq!(aligned[1], buffer[1]);
+        assert_eq!(decoded.telemetry.message, 0);
+        assert_eq!(decoded.telemetry.integrity, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
+    }
 
-    //     // test 1 bit offset
-    //     let delayed = insert_zeros(&buffer, 1);
-    //     let aligned = GpsQzssDecoder::pack_align_slice(&delayed, 1);
+    #[test]
+    fn decoder_raw_data() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
 
-    //     assert_eq!(
-    //         aligned.len(),
-    //         GPS_FRAME_BYTES,
-    //         "did not extract correct amount of bytes!"
-    //     );
+        assert_eq!(GPS_FRAME_BYTES, 38);
 
-    //     assert_eq!(aligned[0], buffer[0]);
-    // }
+        let mut buffer = [0; 1024];
+        let mut file = File::open("data/GPS/eph-1.bin").unwrap();
+        file.read(&mut buffer).unwrap();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        let (size, decoded) = decoder.decode(&buffer, 1024);
+
+        assert_eq!(size, GPS_FRAME_BITS, "returned invalid size");
+
+        let decoded = decoded.unwrap_or_else(|| {
+            panic!("did not decoded GPS frame!");
+        });
+
+        assert_eq!(decoded.telemetry.message, 0);
+        assert_eq!(decoded.telemetry.integrity, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
+    }
 }

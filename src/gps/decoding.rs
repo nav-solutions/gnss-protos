@@ -1,8 +1,7 @@
 use crate::gps::{
     bytes::{ByteArray, GpsDataByte},
-    BitReader, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
-    GPS_WORD_BITS,
+    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+    GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
 };
 
 #[cfg(doc)]
@@ -42,7 +41,7 @@ impl GpsQzssFrame {
                 return None;
             },
             #[cfg(feature = "log")]
-            Err(e) => {
+            Err(_) => {
                 error!("invalid telemetry: 0x{:08X}", telemetry);
                 return None;
             },
@@ -111,7 +110,7 @@ mod test {
 
         assert_eq!(decoded.telemetry.message, 0x13E);
         assert_eq!(decoded.telemetry.integrity, false);
-        assert_eq!(decoded.telemetry.reserved_bits, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
 
         assert_eq!(decoded.how.alert, false);
         assert_eq!(decoded.how.anti_spoofing, true);
@@ -157,7 +156,7 @@ mod test {
 
         assert_eq!(decoded.telemetry.message, 0x13E);
         assert_eq!(decoded.telemetry.integrity, false);
-        assert_eq!(decoded.telemetry.reserved_bits, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
 
         assert_eq!(decoded.how.alert, false);
         assert_eq!(decoded.how.anti_spoofing, true);
@@ -206,7 +205,7 @@ mod test {
 
         assert_eq!(decoded.telemetry.message, 0x13E);
         assert_eq!(decoded.telemetry.integrity, false);
-        assert_eq!(decoded.telemetry.reserved_bits, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
 
         assert_eq!(decoded.how.alert, false);
         assert_eq!(decoded.how.anti_spoofing, true);

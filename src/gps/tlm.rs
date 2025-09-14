@@ -18,8 +18,8 @@ pub struct GpsQzssTelemetry {
     /// with an enhanced level of integrity assurance.
     pub integrity: bool,
 
-    /// Reserved bits
-    pub reserved_bits: bool,
+    /// Reserved bit
+    pub reserved_bit: bool,
 }
 
 #[cfg(feature = "std")]
@@ -27,8 +27,8 @@ impl std::fmt::Display for GpsQzssTelemetry {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "GPS/QZS Telemetry INTEGRITY={} - MSG=0x{:08X} - reserved={}",
-            self.integrity, self.message, self.reserved_bits
+            "INTEGRITY={} - MSG=0x{:08X} - reserved={}",
+            self.integrity, self.message, self.reserved_bit
         )
     }
 }
@@ -46,9 +46,9 @@ impl GpsQzssTelemetry {
         self
     }
 
-    /// Copies and returns new [GpsQzssTelemetry with updated reserved bits
-    pub fn with_reserved_bits(mut self, reserved_bits: bool) -> Self {
-        self.reserved_bits = reserved_bits;
+    /// Copies and returns new [GpsQzssTelemetry with updated reserved bit
+    pub fn with_reserved_bit(mut self, reserved: bool) -> Self {
+        self.reserved_bit = reserved;
         self
     }
 
@@ -62,12 +62,12 @@ impl GpsQzssTelemetry {
 
         let message = ((dword & MESSAGE_MASK) >> MESSAGE_SHIFT) as u16;
         let integrity = (dword & INTEGRITY_BIT_MASK) > 0;
-        let reserved_bits = (dword & RESERVED_BIT_MASK) > 0;
+        let reserved_bit = (dword & RESERVED_BIT_MASK) > 0;
 
         Ok(Self {
             message,
             integrity,
-            reserved_bits,
+            reserved_bit,
         })
     }
 
@@ -81,7 +81,7 @@ impl GpsQzssTelemetry {
             value |= INTEGRITY_BIT_MASK;
         }
 
-        if self.reserved_bits {
+        if self.reserved_bit {
             value |= RESERVED_BIT_MASK;
         }
 
@@ -107,7 +107,7 @@ mod tlm {
 
             assert_eq!(tlm.message, message);
             assert_eq!(tlm.integrity, integrity);
-            assert_eq!(tlm.reserved_bits, reserved_bit);
+            assert_eq!(tlm.reserved_bit, reserved_bit);
 
             let encoded = tlm.encode();
 

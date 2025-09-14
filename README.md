@@ -30,41 +30,44 @@ GPS (US) / QZSS (Jap) protocol
 The `gps` library feature activates support of GPS/QZSS protocol.
 
 Currently we support Ephemeris frames 1, 2 and 3, which is sufficient for real-time
-navigation. Protocol parity is not fully implemented yet.
+navigation (we do not support the Almanach frames).
+Frames parity is not fully implemented either.
 
 We provide methods to both encode and decode data frames, and methods
 to work from a single byte or a buffer which is most suited for real-time interfaces.
 
 The parser is flexible and efficient enough. It supports both frame encoding & decoding.
 The GPS/QZSS protocol being "thoughtout" and redacted in the 70s/80s, it is not convenient to deal with.
-The data stream is not aligned to 8bit, hence not compatible with any machine.
-To work around this, this framework proposes two different interfaces that should suite all use cases:
+The data stream is not aligned to 8bit, hence not compatible with any machine, and stream synchronization is mandatory. To work around this, our framework proposes two different interfaces that should suite all use cases:
 
-1. The `GpsDecoder.parse_buffer(&[u8])` works from a stream of bytes and is the goto method
-when working with a real time GPS/QZSS decoder. It will automatically lock to the first valid GPS message found in your buffer,
-which is not [u8] aligned. But you have to carefully mange your buffer.
-The methods will return the number of processed _bits_ (not bytes!) and the possibly identified GPS message.
-You must discard all processed _bits_ (not bytes) not to process the same GPS message twice. If you happen to discard
-this amount of bytes (not bits) you will automatically loose data. 
-If you follow this principle, you can decode successive GPS messages and not loose any data from your streamer.
+1. The `GpsDecoder` is the solution when working with real-time GPS/QZSS streams.
+It is capable to synchronize itself to the frame start (which is not aligned to a byte).
+But you have to manage your buffer and operate the API correctly.
+This method returns the number of processed _bits_ (not bytes). You are expected
+to discard all processed _bits_ each time you invoke the decoder, not to process
+the same frame twice. If you discard bytes not bits, you will inevitably loose messages.
 
 ```rust
 use gnss_protos::gps::GpsDecoder;
 
-let mut decoder = GpsDecoder::default()
-    .without_parity_verification(); // until further notice
+// The decoder does not verify parity at the moment
+let mut decoder = GpsDecoder::default();
+
+// Feed one of our test frames into it,
+// which is equivalent to real-time acquisition
 ```
 
-2. The `GpsDecoder.consume_byte()` let's you process one byte at a time. For each byte, you can 
-describe whether this byte contains padding (which is most likely going to happen at some point in your stream)
-or not (pure data bits or noise). We used this approach to interface correctly to U-Blox receivers for example
+2. `GpsQzssFrame` supports a `decode()` that works with a possibly padded Byte.
+This is the prefered option when working with a stream that was already manipulated by a machine
+and therefore, re-aligned to bytes. Each byte may have padding (or not). The stream must
+start with the sync byte.
+We used this approach to interface correctly to U-Blox receivers for example
 (that pad and align the frames internally).
 
 ```rust
 use gnss_protos::gps::GpsDecoder;
 
-let mut decoder = GpsDecoder::default()
-    .without_parity_verification(); // until further notice
+
 ```
 
 License

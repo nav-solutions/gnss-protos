@@ -28,22 +28,3 @@ impl<'a> BitReader<'a> {
         Some(u32::from_be_bytes(bytes))
     }
 }
-
-#[cfg(test)]
-mod bit_reader {
-    use super::*;
-
-    use crate::tests::FileReader;
-
-    use std::fs::File;
-    use std::io::Read;
-
-    #[test]
-    #[ignore]
-    fn test_bit_reader() {
-        let mut file = FileReader::<1024>::new("two_frames.bin", 0);
-
-        // let mut reader = BitReader::new(&file.buffer, 0);
-        // assert_eq!(reader.read_u32(), Some(0x8B000000));
-    }
-}

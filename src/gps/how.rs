@@ -14,9 +14,9 @@ use crate::gps::GpsQzssFrameId;
 #[cfg(doc)]
 use crate::gps::GpsQzssTelemetry;
 
-/// [GpsQzssHow] marks the beginning of each frame, following [GpsQzssTelemetry]
+/// [GpsQzssHow] (GPS HandOver Word) marks the beginning of each frame, following [GpsQzssTelemetry],
+/// and defines the content to follow.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-/// [GpsHowWord]
 pub struct GpsQzssHow {
     /// 17-bit TOW (in seconds)
     pub tow: u32,
@@ -37,7 +37,7 @@ impl std::fmt::Display for GpsQzssHow {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "GPS/QZS HOW TOW={} - ALERT={} - A/S={} - ID={}",
+            "TOW={} - ALERT={} - A/S={} - ID={}",
             self.tow, self.alert, self.anti_spoofing, self.frame_id
         )
     }
