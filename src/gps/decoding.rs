@@ -5,84 +5,30 @@ use crate::gps::{
     GPS_WORD_BITS,
 };
 
+#[cfg(doc)]
+use crate::gps::GpsQzssDecoder;
+
 #[cfg(feature = "log")]
-use log::{error, trace};
-
-/// Packs 38 bytes (10x 30-bit + 4bit padding) aligned correcty to [u8], ready to decode
-///
-/// ## Input
-/// - slice: &[u8], will panic if not [GPS_FRAME_BYTES] byte long!
-/// - preamble_offset in bits!
-fn pack_align_slice<'a>(slice: &'a [u8], preamble_offset_bit: usize) -> &'a [u8] {
-    // byte index
-    let byte_index = preamble_offset_bit / 8;
-
-    // bit index within byte
-    let bit_index = preamble_offset_bit % 8;
-
-    if bit_index == 0 {
-        &slice[byte_index..byte_index + GPS_FRAME_BYTES]
-    } else {
-        panic!("not supported yet");
-    }
-}
-
-/// Locates the preamble bit marker (sync byte) within a buffer
-///
-/// ## Input
-/// - slice: slice of bytes, must be [GPS_FRAME_BYTES] byte long
-/// - size: total number of bytes
-///
-/// ## Returns
-/// - offset in bits !
-fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
-    for i in 0..size - GPS_FRAME_BYTES {
-        if slice[i] == GPS_PREAMBLE_BYTE {
-            return Some(i * 8);
-        }
-
-        // intra byte test
-        let mut byte1_mask = 0x7F;
-        let mut byte2_mask = 0x80;
-
-        for j in 1..8 {
-            let mut value = slice[i + 1];
-            value >>= 8 - j;
-            value |= (slice[i] & byte1_mask) << j;
-
-            byte1_mask >>= 1;
-            byte2_mask |= 0x1 << 8 - j;
-
-            if value == GPS_PREAMBLE_BYTE {
-                return Some(i * 8 + j);
-            }
-        }
-    }
-
-    None
-}
+use log::{debug, error, trace};
 
 impl GpsQzssFrame {
-    /// Decodes a slice of [GpsDataByte]s collected, that must start
-    /// correctly on the first synchronization byte. All bytes may have some
-    /// padding, as a valid [GpsQzssFrame] is not aligned to [GPS_FRAME_BYTES]
-    /// and will contain padding at some point (usually on frame termination).
+    /// Decodes a collected slice of [GpsDataByte]s that must start
+    /// correctly on the first synchronization byte.
     ///
     /// This method is not capable to synchronize itself anywhere other than
-    /// the very first bit. Prefer the [Self::decode] from raw bytes method instead,
-    /// especially when working with real-time streams.
-    ///
-    /// Warning: this method only supports padding on each word ending or termination,
-    /// not intra word padding!
+    /// the very first byte. When working with raw stream of bits,
+    /// you will prefer working with the [GpsQzssDecoder].
     ///
     /// ## Input
-    /// - array of [GPS_FRAME_BYTES] [GpsDataByte]s
-    /// - check_parity: true if parity verification is required
+    /// - array of at least [GPS_FRAME_BYTES] [GpsDataByte]s
+    /// - size: total size of this slice
+    /// - check_parity: true if parity verification is required.
+    /// In this case, the method will return None on parity errors.
     ///
     /// ## Output
     /// - Decoded [GpsQzssFrame]
-    pub fn decode_bytes(bytes: &[GpsDataByte], check_parity: bool) -> Option<GpsQzssFrame> {
-        if bytes.len() < GPS_FRAME_BYTES {
+    pub fn decode(bytes: &[GpsDataByte], size: usize, check_parity: bool) -> Option<GpsQzssFrame> {
+        if size < GPS_FRAME_BYTES {
             return None;
         }
 
@@ -124,98 +70,6 @@ impl GpsQzssFrame {
             how,
         })
     }
-
-    /// Decodes the first valid [GpsQzssFrame] found in this read-only [u8] buffer.
-    /// We expect raw bytes, unaligned to [u8] because raw GPS/QZSS stream
-    /// is not aligned. Buffer must contain at least [GPS_FRAME_BYTES] bytes for this to work.
-    ///
-    /// This is [Self::encode] mirror operation.
-    ///
-    /// ## Input
-    /// - buffer: read-only [u8] buffer
-    ///
-    /// ## Ouput
-    /// - Optional [GpsQzssFrame] correctly decoded. First in order of appearance in the buffer.
-    /// - Total number of _bits_ that were consumed (not bytes!).
-    /// You are expected to discard all processed _bits_ not to decode the same frame twice.
-    pub fn decode(buffer: &[u8], check_parity: bool) -> (Option<Self>, usize) {
-        let mut size = 0;
-        let mut byte_offset = 0;
-        let mut bit_offset = 0;
-        let mut preamble_offset = 0;
-
-        let available = buffer.len();
-        let available_bits = available * 8;
-
-        if available < GPS_FRAME_BYTES {
-            return (None, 0);
-        }
-
-        // locates preamble
-        let preamble_offset_bin = find_preamble(buffer, available);
-
-        if preamble_offset_bin.is_none() {
-            return (None, available_bits);
-        }
-
-        // // Gathers & aligns 38 bytes (10x30 bit + 4bit padding)
-        // println!("PREAMBLE : byte_offset={} bit_offset={}", byte_offset, bit_offset);
-
-        // let mut bytes : [GpsDataByte; GPS_FRAME_BYTES] = [Default::default(); GPS_FRAME_BYTES];
-
-        // for i in 0..GPS_FRAME_BYTES {
-        //     if i % 4 == 0 {
-        //         bytes[i] = GpsDataByte::MsbPadded(buffer[byte_offset +i]);
-        //     } else {
-        //         bytes[i] = GpsDataByte::Byte(buffer[byte_offset +i]);
-        //     }
-        // }
-
-        // println!("BYTES: {:?}", bytes);
-
-        // let telemetry = ByteArray::new(&bytes[0..4])
-        //     .value_u32();
-
-        // let telemetry = match GpsQzssTelemetry::decode(telemetry) {
-        //     Ok(tlm) => tlm,
-        //     #[cfg(not(feature = "log"))]
-        //     Err(_) => {
-        //         return (None, byte_offset * 8 + bit_offset);
-        //     },
-        //     #[cfg(feature = "log")]
-        //     Err(e) => {
-        //         error!("invalid TLM: {}", telemetry);
-        //         return (None, byte_offset * 8 + bit_offset);
-        //     },
-        // };
-
-        // let how = ByteArray::new(&bytes[4..8])
-        //     .value_u32();
-
-        // let how = match GpsQzssHow::decode(how) {
-        //     Ok(how) => how,
-        //     #[cfg(not(feature = "log"))]
-        //     Err(_) => {
-        //         return (None, byte_offset * 8 + bit_offset +32);
-        //     },
-        //     #[cfg(feature = "log")]
-        //     Err(e) => {
-        //         error!("invalid frame-id: {}", how);
-        //         return (None, byte_offset * 8 + bit_offset +32);
-        //     },
-        // };
-
-        // let processed_size = preamble_offset + Self::encoding_bits();
-
-        // let frame = GpsQzssFrame {
-        //     how,
-        //     telemetry,
-        //     subframe: Default::default(),
-        // };
-
-        // (Some(frame), processed_size)
-        (None, available_bits)
-    }
 }
 
 #[cfg(test)]
@@ -227,93 +81,8 @@ mod test {
         tests::{from_ublox_be_bytes, insert_zeros},
     };
 
-    use super::{find_preamble, pack_align_slice};
-
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
-
-    #[test]
-    fn preamble() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut buffer = [0; 1024];
-        let mut file = File::open("data/GPS/two_frames.bin").unwrap();
-        file.read(&mut buffer).unwrap();
-
-        assert_eq!(find_preamble(&buffer, 1024), Some(0));
-
-        // test delay < 1 byte
-        for i in 1..7 {
-            let delayed = insert_zeros(&buffer, i);
-            assert_eq!(
-                find_preamble(&delayed, 1024),
-                Some(i),
-                "failed for bit position {}",
-                i
-            );
-        }
-
-        // test 1 byte offset
-        let delayed = insert_zeros(&buffer, 8);
-        assert_eq!(
-            find_preamble(&delayed, 1024),
-            Some(8),
-            "failed for bit position 8"
-        );
-
-        // test 1 byte + bits
-        for i in 1..7 {
-            let delayed = insert_zeros(&buffer, i + 8);
-            assert_eq!(
-                find_preamble(&delayed, 1024),
-                Some(8 + i),
-                "failed for bit position {}",
-                8 + i
-            );
-        }
-
-        // test other values
-        for i in 2..9 {
-            let delayed = insert_zeros(&buffer, i * 8);
-            assert_eq!(
-                find_preamble(&delayed, 1024),
-                Some(i * 8),
-                "failed for bit position {}",
-                i * 8
-            );
-
-            for j in 1..7 {
-                let delayed = insert_zeros(&buffer, i * 8 + j);
-                assert_eq!(
-                    find_preamble(&delayed, 1024),
-                    Some(i * 8 + j),
-                    "failed for bit position {}",
-                    i * 8 + j
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn slice_alignmnt_packing() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        assert_eq!(GPS_FRAME_BYTES, 38);
-
-        let mut buffer = [0; 1024];
-        let mut file = File::open("data/GPS/two_frames.bin").unwrap();
-        file.read(&mut buffer).unwrap();
-
-        let packed_aligned = pack_align_slice(&buffer, 0);
-
-        assert_eq!(
-            packed_aligned.len(),
-            GPS_FRAME_BYTES,
-            "did not extract correct amount of bytes!"
-        );
-    }
 
     #[test]
     fn eph1_bytes_decoding_noparity() {
@@ -326,17 +95,17 @@ mod test {
             // TLM
             0x22, 0xC1, 0x3E, 0x1B, // HOW
             0x15, 0x27, 0xC9, 0x73, // WORD3
-            0x13, 0xE4, 0x00, 0x04, //WORD4
-            0x10, 0x4F, 0x5D, 0x31, //WORD5
+            0x13, 0xE4, 0x00, 0x04, // WORD4
+            0x10, 0x4F, 0x5D, 0x31, // WORD5
             0x97, 0x44, 0xE6, 0xD7, // WORD6
-            0x07, 0x75, 0x57, 0x83, //WORD7
+            0x07, 0x75, 0x57, 0x83, // WORD7
             0x33, 0x0C, 0x80, 0xB5, // WORD8
             0x92, 0x50, 0x42, 0xA1, // WORD9
-            0x80, 0x00, 0x16, 0x84, //WORD10
+            0x80, 0x00, 0x16, 0x84, // WORD10
             0x31, 0x2C, 0x30, 0x33,
         ]);
 
-        let decoded = GpsQzssFrame::decode_bytes(&bytes, false).unwrap_or_else(|| {
+        let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
             panic!("Failed to decode valid message");
         });
 
@@ -362,25 +131,6 @@ mod test {
     }
 
     #[test]
-    fn eph1_buffer_decoding_noparity() {
-        #[cfg(all(feature = "std", feature = "log"))]
-        init_logger();
-
-        let mut buffer = [0; 1024];
-        let mut file = File::open("data/GPS/two_frames.bin").unwrap();
-        file.read(&mut buffer).unwrap();
-
-        let (frame, size) = GpsQzssFrame::decode(&buffer, false);
-
-        assert_eq!(
-            size,
-            GpsQzssFrame::encoding_bits(),
-            "returned invalid size!"
-        );
-        assert_eq!(frame, Some(Default::default()));
-    }
-
-    #[test]
     fn eph2_bytes_decoding_noparity() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
@@ -391,17 +141,17 @@ mod test {
             // TLM
             0x22, 0xC1, 0x3E, 0x1B, // HOW
             0x15, 0x27, 0xEA, 0x1B, // WORD3
-            0x12, 0x7F, 0xF1, 0x65, //WORD4
-            0x8C, 0x68, 0x1F, 0x7C, //WORD5
+            0x12, 0x7F, 0xF1, 0x65, // WORD4
+            0x8C, 0x68, 0x1F, 0x7C, // WORD5
             0x02, 0x49, 0x34, 0x15, // WORD6
-            0xBF, 0xF8, 0x81, 0x1E, //WORD7
+            0xBF, 0xF8, 0x81, 0x1E, // WORD7
             0x99, 0x1B, 0x81, 0x14, // W0RD8
             0x04, 0x3E, 0x68, 0x6E, // WORD9
             0x83, 0x34, 0x72, 0x21, // WORD10
             0x90, 0x42, 0x9F, 0x7B,
         ]);
 
-        let decoded = GpsQzssFrame::decode_bytes(&bytes, false).unwrap_or_else(|| {
+        let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
             panic!("Failed to decode valid message");
         });
 
@@ -437,12 +187,20 @@ mod test {
         let mut found = false;
 
         let bytes = from_ublox_be_bytes(&[
-            0x22, 0xC1, 0x3E, 0x1B, 0x15, 0x28, 0x0B, 0xDB, 0x00, 0x0A, 0xEA, 0x34, 0x03, 0x3C,
-            0xFF, 0xEE, 0xBF, 0xE5, 0xC9, 0xEB, 0x13, 0x6F, 0xB6, 0x4E, 0x86, 0xF4, 0xAB, 0x2C,
-            0x06, 0x71, 0xEB, 0x44, 0x3F, 0xEA, 0xF6, 0x02, 0x92, 0x45, 0x52, 0x13,
+            // TLM
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x15, 0x28, 0x0B, 0xDB, // WORD3
+            0x00, 0x0A, 0xEA, 0x34, // WORD4
+            0x03, 0x3C, 0xFF, 0xEE, // WORD5
+            0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+            0x13, 0x6F, 0xB6, 0x4E, // WORD7
+            0x86, 0xF4, 0xAB, 0x2C, // WORD8
+            0x06, 0x71, 0xEB, 0x44, // WORD9
+            0x3F, 0xEA, 0xF6, 0x02, // WORD10
+            0x92, 0x45, 0x52, 0x13,
         ]);
 
-        let decoded = GpsQzssFrame::decode_bytes(&bytes, false).unwrap_or_else(|| {
+        let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
             panic!("Failed to decode valid message");
         });
 

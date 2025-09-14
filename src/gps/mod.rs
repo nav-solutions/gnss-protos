@@ -14,6 +14,7 @@ pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
 pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 
 mod bytes;
+mod decoder;
 mod decoding;
 mod encoding;
 mod errors;
@@ -26,6 +27,7 @@ mod reader;
 mod tlm;
 
 pub use bytes::GpsDataByte;
+pub use decoder::GpsQzssDecoder;
 pub use errors::GpsError;
 pub use frame_id::GpsQzssFrameId;
 pub use how::GpsQzssHow;

@@ -88,7 +88,10 @@ mod encoding {
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
 
-    use crate::gps::{GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_FRAME_BITS};
+    use crate::gps::{
+        GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_FRAME_BITS,
+        GPS_FRAME_BYTES,
+    };
 
     #[test]
     fn encoding_size() {
@@ -104,14 +107,18 @@ mod encoding {
     fn default_frame() {
         let default = GpsQzssFrame::default();
         let encoded = default.encode();
+        let encoded_size = encoded.len();
+        assert_eq!(encoded_size, GPS_FRAME_BYTES, "encoded invalid size!");
 
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x00);
         assert_eq!(encoded[2], 0x00);
         assert_eq!(encoded[3], 0x00);
 
-        let (decoded, size) = GpsQzssFrame::decode(&encoded, false);
+        let mut decoder = GpsQzssDecoder::default();
 
+        let (size, decoded) = decoder.decode(&encoded, encoded_size);
+        assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
         assert_eq!(decoded, Some(default), "reciprocal failed");
     }
 
@@ -120,25 +127,20 @@ mod encoding {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        for (
-            ith,
-            (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits, bytes),
-        ) in [(
-            259956,
-            false,
-            false,
-            GpsQzssFrameId::Ephemeris1,
-            0x13E,
-            false,
-            false,
-            [
-                0x8B, 0x04, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            ],
-        )]
-        .iter()
-        .enumerate()
+        let mut decoder = GpsQzssDecoder::default();
+
+        for (ith, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bits)) in
+            [(
+                259956,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris1,
+                0x13E,
+                false,
+                false,
+            )]
+            .iter()
+            .enumerate()
         {
             let frame = GpsQzssFrame {
                 how: GpsQzssHow {
@@ -156,18 +158,11 @@ mod encoding {
             };
 
             let encoded = frame.encode();
+            let encoded_size = encoded.len();
+            assert_eq!(encoded_size, GPS_FRAME_BYTES, "encoded invalid size!");
 
-            for (i, expected) in bytes.iter().enumerate() {
-                assert_eq!(
-                    encoded[i], *expected,
-                    "TEST #{} BYTE({}) expected 0x{:02X}, got 0x{:02X}",
-                    ith, i, bytes[i], encoded[i]
-                );
-            }
-
-            let (decoded, size) = GpsQzssFrame::decode(&encoded, false);
-            assert_eq!(size, GPS_FRAME_BITS);
-
+            let (size, decoded) = decoder.decode(&encoded, encoded_size);
+            assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
             assert_eq!(decoded, Some(frame), "reciprocal failed");
         }
     }
