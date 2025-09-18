@@ -49,28 +49,28 @@ pub struct GpsQzssFrame2 {
     /// Time of issue of ephemeris (in seconds of week)
     pub toe: u32,
 
-    /// 8-bit IODE: Issue of Data (Ephemeris)
+    /// 8-bit IODE (Issue of Data)
     pub iode: u8,
 
-    /// Mean anomaly at reference time (in semi circles)
+    /// Mean anomaly at reference time (in semi-circles)
     pub m0: f64,
 
-    /// Mean motion difference from computed value (in semi circles)
+    /// Mean motion difference from computed value (in semi-circles)
     pub dn: f64,
 
-    /// Latitude cosine harmonic correction term
+    /// Latitude (cosine harmonic) in semi-circles.
     pub cuc: f64,
 
-    /// Latitude sine harmonic correction term
+    /// Latitude (sine harmonic) in semi-circles.
     pub cus: f64,
 
-    /// Orbit radius sine harmonic correction term
+    /// Orbit radius (sine harmonic) in meters.
     pub crs: f64,
 
-    /// Eccentricity
+    /// Orbit eccentricity.
     pub e: f64,
 
-    /// Sqrt(a)
+    /// Square root of semi-major axis, in square root of meters.
     pub sqrt_a: f64,
 
     /// Fit interval flag
@@ -93,7 +93,7 @@ impl GpsQzssFrame2 {
         self.iode = iode;
         self
     }
-    
+
     /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time, expressed
     /// in semi-circles.
     pub fn with_mean_anomaly_semi_circles(mut self, m0_semi_circles: f64) -> Self {
@@ -113,10 +113,22 @@ impl GpsQzssFrame2 {
         self.dn = dn_semi_circles;
         self
     }
-    
+
     /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in radians)
     pub fn with_mean_motion_difference_radians(mut self, dn_rad: f64) -> Self {
         self.dn = dn_rad * PI / 2.0f64.powi(31);
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated semi-major axis (in meters)
+    pub fn with_semi_major_axis_meters(mut self, semi_major_m: f64) -> Self {
+        self.sqrt_a = semi_major_m.sqrt();
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with updated square root of semi-major axis (in square root meters)
+    pub fn with_square_root_semi_major_axis(mut self, sqrt_semi_major_m: f64) -> Self {
+        self.sqrt_a = sqrt_semi_major_m;
         self
     }
 
@@ -132,9 +144,9 @@ impl GpsQzssFrame2 {
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated radius sine harmnoic correction term.
-    pub fn with_crs_radians(mut self, crs_rad: f64) -> Self {
-        self.crs = crs_rad;
+    /// Copies and returns [GpsQzssFrame2] with updated radius (sine component) in meters.
+    pub fn with_crs_meters(mut self, crs_m: f64) -> Self {
+        self.crs = crs_m;
         self
     }
 
@@ -150,9 +162,15 @@ impl GpsQzssFrame2 {
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated Fit interval flag.
-    pub fn with_fit_interval_flag(mut self, flag: bool) -> Self {
-        self.fit_int_flag = flag;
+    /// Copies and returns [GpsQzssFrame2] with fit interval flag asserted.
+    pub fn with_fit_interval_flag(mut self) -> Self {
+        self.fit_int_flag = true;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame2] with fit interval flag deasserted.
+    pub fn without_fit_interval_flag(mut self) -> Self {
+        self.fit_int_flag = false;
         self
     }
 
