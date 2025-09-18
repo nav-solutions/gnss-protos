@@ -23,6 +23,10 @@ impl GpsQzssFrame {
     /// (unsigned). If you leave it to that, any streaming/transmitter looses a little bit of efficiency
     /// any time a [GpsQzssFrame] is encoded/transmitted. The only solution then, is to manually remove this padding
     /// an truly concatenate your frames, but one can't expect easy processes when working with poorly designed and very old protocols.
+    /// A true synchronous [GpsQzssFrame] emitter is supposed to transmit one frame every 6 seconds,
+    /// that is 50 bits per second.
+    /// NB: this [GpsQzssFrame] is not ready to transmit as-is and must be CDMA encoded
+    /// using [GpsQzssFrame::cdma_encoding].
     pub fn encode(&self) -> [u8; GPS_FRAME_BYTES] {
         let mut encoded = [0; GPS_FRAME_BYTES];
 
@@ -65,9 +69,13 @@ impl GpsQzssFrame {
                 let subf = self.subframe.as_eph1().unwrap_or_default();
 
                 encoded[7] |= ((subf.week & 0x3c0) >> 6) as u8;
-
                 encoded[8] = (subf.week & 0x03f) as u8;
                 encoded[8] <<= 2;
+                encoded[8] |= (subf.ca_or_p_l2) & 0x03;
+
+                encoded[9] = subf.ura & 0x0f;
+                encoded[9] <<= 4;
+                encoded[9] |= (subf.health & 0x3c) >> 2;
             },
             GpsQzssFrameId::Ephemeris2 => {
                 let subf = self.subframe.as_eph2().unwrap_or_default();

@@ -14,6 +14,7 @@ pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
 pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 
 mod bytes;
+mod cdma;
 mod decoder;
 mod decoding;
 mod encoding;
