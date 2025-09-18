@@ -47,7 +47,7 @@ pub struct GpsQzssFrame2 {
     /// Time of issue of ephemeris (in seconds of week)
     pub toe: u32,
 
-    /// IODE: Issue of Data (Ephemeris)
+    /// 8-bit IODE: Issue of Data (Ephemeris)
     pub iode: u8,
 
     /// Mean anomaly at reference time (in semi circles)

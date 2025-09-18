@@ -48,7 +48,7 @@ const WORD10_AF0_SHIFT: u32 = 8;
 /// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame1 {
-    /// 10-bit week counter (no rollover compensation).
+    /// 10-bit wrapped week counter.
     pub week: u16,
 
     /// 2-bit C/A or P ON L2.  
@@ -163,7 +163,7 @@ impl GpsQzssFrame1 {
 
     /// Copies and returns [GpsQzssFrame1] with updated Week number
     pub fn with_week(mut self, week: u16) -> Self {
-        self.week = week;
+        self.week = (week & 0x3ff);
         self
     }
 

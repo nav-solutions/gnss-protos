@@ -41,7 +41,9 @@ impl GpsQzssFrame {
             encoded[2] |= 0x01;
         }
 
-        encoded[3] = ((self.how.tow & 0x1_8000) >> 15) as u8;
+        encoded[3] <<= 2; // TODO
+        encoded[3] |= ((self.how.tow & 0x1_8000) >> 15) as u8;
+
         encoded[4] = ((self.how.tow & 0x0_7f80) >> 7) as u8;
 
         encoded[5] = (self.how.tow & 0x0_007f) as u8;
@@ -57,14 +59,34 @@ impl GpsQzssFrame {
 
         encoded[6] |= self.how.frame_id.encode() << 4;
 
-        // encoded[7] = (how & 0xff) as u8;
-        // encoded[6] = ((how & 0xff00) >> 8) as u8;
-        // encoded[5] = ((how & 0xff0000) >> 16) as u8;
-        // encoded[4] = ((how & 0xff000000) >> 24) as u8;
+        encoded[7] <<= 4; // TODO
 
-        // encoded[0] = self.how.encode();
-        // encoded[1] = self.telemetry.encode();
-        // encoded[2..].copy_from_slice(&self.subframe.encode());
+        match self.how.frame_id {
+            GpsQzssFrameId::Ephemeris1 => {
+                let subf = self.subframe.as_eph1().unwrap_or_default();
+
+                encoded[7] |= ((subf.week & 0x3c0) >> 6) as u8;
+
+                encoded[8] = (subf.week & 0x03f) as u8;
+                encoded[8] <<= 2;
+            },
+            GpsQzssFrameId::Ephemeris2 => {
+                let subf = self.subframe.as_eph2().unwrap_or_default();
+
+                encoded[7] |= (subf.iode & 0xf0)>>4;
+                encoded[8] |= subf.iode & 0x0f;
+                encoded[8] <<= 4;
+            },
+            GpsQzssFrameId::Ephemeris3 => {
+                let subf = self.subframe.as_eph3().unwrap_or_default();
+
+                let cic = (subf.cic * 2.0_f64.powi(29)).round() as u16;
+
+                encoded[7] |= ((cic & 0xf000) >> 12) as u8;
+                encoded[8] |= (cic & 0x0ff0) as u8;
+                encoded[8] <<= 4;
+            },
+        }
 
         encoded
     }
@@ -111,6 +133,9 @@ mod encoding {
     use crate::gps::{
         GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
         GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsQzssFrame1,
+        GpsQzssFrame2,
+        GpsQzssFrame3,
     };
 
     #[test]
@@ -200,7 +225,10 @@ mod encoding {
                     .with_alert_bit()
                     .with_anti_spoofing(),
             )
-            .with_subframe(GpsQzssSubframe::default());
+            .with_subframe(GpsQzssSubframe::Ephemeris1(
+                GpsQzssFrame1::default()
+                    .with_week(0x123)
+            ));
 
         let encoded = frame.encode();
 
@@ -212,9 +240,9 @@ mod encoding {
         assert_eq!(encoded[4], 0xCF);
         assert_eq!(encoded[5], 0x13);
         assert_eq!(encoded[6], 0x90);
-        assert_eq!(encoded[7], 0x00);
+        assert_eq!(encoded[7], 0x04);
 
-        assert_eq!(encoded[8], 0x00);
+        assert_eq!(encoded[8], 0x8c);
         assert_eq!(encoded[9], 0x00);
         assert_eq!(encoded[10], 0x00);
         assert_eq!(encoded[11], 0x00);
@@ -405,5 +433,135 @@ mod encoding {
             // assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
             // assert_eq!(decoded, Some(frame), "reciprocal failed");
         }
+    }
+    
+    #[test]
+    fn ephemeris2_0() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        let frame = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x9999)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_9999)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris2(
+                GpsQzssFrame2::default()
+                    .with_iode(0x12)
+            ));
+
+        let encoded = frame.encode();
+
+        assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
+        assert_eq!(encoded[1], 0x19);
+        assert_eq!(encoded[2], 0x99 << 2 | 0x02 | 0x01);
+        assert_eq!(encoded[3], 0x03);
+
+        assert_eq!(encoded[4], 0x33);
+        assert_eq!(encoded[5], 0x33);
+        assert_eq!(encoded[6], 0x90);
+        assert_eq!(encoded[7], 0x01);
+
+        assert_eq!(encoded[8], 0x2c);
+        assert_eq!(encoded[9], 0x00);
+        assert_eq!(encoded[10], 0x00);
+        assert_eq!(encoded[11], 0x00);
+        assert_eq!(encoded[12], 0x00);
+        assert_eq!(encoded[13], 0x00);
+        assert_eq!(encoded[14], 0x00);
+        assert_eq!(encoded[15], 0x00);
+        assert_eq!(encoded[16], 0x00);
+        assert_eq!(encoded[17], 0x00);
+        assert_eq!(encoded[18], 0x00);
+        assert_eq!(encoded[19], 0x00);
+        assert_eq!(encoded[20], 0x00);
+        assert_eq!(encoded[21], 0x00);
+        assert_eq!(encoded[22], 0x00);
+        assert_eq!(encoded[23], 0x00);
+        assert_eq!(encoded[24], 0x00);
+        assert_eq!(encoded[25], 0x00);
+        assert_eq!(encoded[26], 0x00);
+        assert_eq!(encoded[27], 0x00);
+        assert_eq!(encoded[28], 0x00);
+        assert_eq!(encoded[29], 0x00);
+        assert_eq!(encoded[30], 0x00);
+        assert_eq!(encoded[31], 0x00);
+        assert_eq!(encoded[32], 0x00);
+        assert_eq!(encoded[33], 0x00);
+        assert_eq!(encoded[34], 0x00);
+        assert_eq!(encoded[35], 0x00);
+        assert_eq!(encoded[36], 0x00);
+        assert_eq!(encoded[37], 0x00);
+        
+        let frame = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x9999)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_9999)
+                    .without_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris2(
+                GpsQzssFrame2::default()
+                    .with_iode(0x12)
+            ));
+
+        let encoded = frame.encode();
+
+        assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
+        assert_eq!(encoded[1], 0x19);
+        assert_eq!(encoded[2], 0x99 << 2 | 0x02 | 0x01);
+        assert_eq!(encoded[3], 0x03);
+
+        assert_eq!(encoded[4], 0x33);
+        assert_eq!(encoded[5], 0x32);
+        assert_eq!(encoded[6], 0x90);
+        assert_eq!(encoded[7], 0x04);
+
+        assert_eq!(encoded[8], 0x8c);
+        assert_eq!(encoded[9], 0x00);
+        assert_eq!(encoded[10], 0x00);
+        assert_eq!(encoded[11], 0x00);
+        assert_eq!(encoded[12], 0x00);
+        assert_eq!(encoded[13], 0x00);
+        assert_eq!(encoded[14], 0x00);
+        assert_eq!(encoded[15], 0x00);
+        assert_eq!(encoded[16], 0x00);
+        assert_eq!(encoded[17], 0x00);
+        assert_eq!(encoded[18], 0x00);
+        assert_eq!(encoded[19], 0x00);
+        assert_eq!(encoded[20], 0x00);
+        assert_eq!(encoded[21], 0x00);
+        assert_eq!(encoded[22], 0x00);
+        assert_eq!(encoded[23], 0x00);
+        assert_eq!(encoded[24], 0x00);
+        assert_eq!(encoded[25], 0x00);
+        assert_eq!(encoded[26], 0x00);
+        assert_eq!(encoded[27], 0x00);
+        assert_eq!(encoded[28], 0x00);
+        assert_eq!(encoded[29], 0x00);
+        assert_eq!(encoded[30], 0x00);
+        assert_eq!(encoded[31], 0x00);
+        assert_eq!(encoded[32], 0x00);
+        assert_eq!(encoded[33], 0x00);
+        assert_eq!(encoded[34], 0x00);
+        assert_eq!(encoded[35], 0x00);
+        assert_eq!(encoded[36], 0x00);
+        assert_eq!(encoded[37], 0x00);
     }
 }

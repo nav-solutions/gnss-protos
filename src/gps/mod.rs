@@ -68,6 +68,13 @@ impl GpsQzssFrame {
     /// Copies and returns an updated [GpsQzssSubframe]
     pub fn with_subframe(mut self, subframe: GpsQzssSubframe) -> Self {
         self.subframe = subframe;
+
+        match subframe {
+            GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
+            GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
+            GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
+        }
+
         self
     }
 }
@@ -94,9 +101,9 @@ impl Default for GpsQzssSubframe {
 
 impl GpsQzssSubframe {
     /// Unwraps self as [GpsQzssFrame1] reference (if feasible)
-    pub fn as_eph1(&self) -> Option<&GpsQzssFrame1> {
+    pub fn as_eph1(&self) -> Option<GpsQzssFrame1> {
         match self {
-            Self::Ephemeris1(frame) => Some(frame),
+            Self::Ephemeris1(frame) => Some(*frame),
             _ => None,
         }
     }
@@ -110,9 +117,9 @@ impl GpsQzssSubframe {
     }
 
     /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    pub fn as_eph2(&self) -> Option<&GpsQzssFrame2> {
+    pub fn as_eph2(&self) -> Option<GpsQzssFrame2> {
         match self {
-            Self::Ephemeris2(frame) => Some(frame),
+            Self::Ephemeris2(frame) => Some(*frame),
             _ => None,
         }
     }
@@ -126,9 +133,9 @@ impl GpsQzssSubframe {
     }
 
     /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    pub fn as_eph3(&self) -> Option<&GpsQzssFrame3> {
+    pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {
         match self {
-            Self::Ephemeris3(frame) => Some(frame),
+            Self::Ephemeris3(frame) => Some(*frame),
             _ => None,
         }
     }

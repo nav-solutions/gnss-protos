@@ -145,7 +145,7 @@ impl GpsQzssFrame3 {
         let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
         Word3 {
             omega0_msb: ((omega0 & 0xff000000) >> 24) as u8,
-            cic: (self.cic * 2.0_f64.powi(29)).round() as i32,
+            cic: (self.cic * 2.0_f64.powi(29)).round() as i16,
         }
     }
 
@@ -253,7 +253,8 @@ impl GpsQzssFrame3 {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Word3 {
-    pub cic: i32,
+    /// 16 bit Ci (cosine) component in radians
+    pub cic: i16,
 
     /// Omega0 (8) MSB, you will have to associate this to Word #4
     pub omega0_msb: u8,
@@ -262,7 +263,7 @@ pub(crate) struct Word3 {
 impl Word3 {
     pub(crate) fn decode(dword: u32) -> Self {
         let cic = ((dword & WORD3_CIC_MASK) >> WORD3_CIC_SHIFT) as u32;
-        let cic = twos_complement(cic, 0xffff, 0x8000);
+        let cic = twos_complement(cic, 0xffff, 0x8000) as i16;
         let omega0_msb = ((dword & WORD3_OMEGA0_MASK) >> WORD3_OMEGA0_SHIFT) as u8;
         Self { cic, omega0_msb }
     }
