@@ -76,6 +76,14 @@ impl GpsQzssFrame {
                 encoded[7] |= (subf.iode & 0xf0)>>4;
                 encoded[8] |= subf.iode & 0x0f;
                 encoded[8] <<= 4;
+
+                let crs = (subf.crs * 2.0_f64.powi(5)).round() as u16;
+                encoded[8] |= ((crs & 0xf000) >> 12) as u8;
+                encoded[9] |= ((crs & 0x0ff0) >> 4) as u8;
+
+                encoded[10] <<= 6; // TODO
+
+
             },
             GpsQzssFrameId::Ephemeris3 => {
                 let subf = self.subframe.as_eph3().unwrap_or_default();
@@ -85,6 +93,9 @@ impl GpsQzssFrame {
                 encoded[7] |= ((cic & 0xf000) >> 12) as u8;
                 encoded[8] |= (cic & 0x0ff0) as u8;
                 encoded[8] <<= 4;
+
+                encoded[9] |= (cic & 0x000f) as u8;
+                encoded[9] <<= 4;
             },
         }
 
@@ -458,6 +469,7 @@ mod encoding {
             .with_subframe(GpsQzssSubframe::Ephemeris2(
                 GpsQzssFrame2::default()
                     .with_iode(0x12)
+                    .with_crs_radians(100.0)
             ));
 
         let encoded = frame.encode();
@@ -473,7 +485,7 @@ mod encoding {
         assert_eq!(encoded[7], 0x01);
 
         assert_eq!(encoded[8], 0x20);
-        assert_eq!(encoded[9], 0x00);
+        assert_eq!(encoded[9], 0xc8);
         assert_eq!(encoded[10], 0x00);
         assert_eq!(encoded[11], 0x00);
         assert_eq!(encoded[12], 0x00);
@@ -537,14 +549,17 @@ mod encoding {
         assert_eq!(encoded[9], 0x00);
         assert_eq!(encoded[10], 0x00);
         assert_eq!(encoded[11], 0x00);
+
         assert_eq!(encoded[12], 0x00);
         assert_eq!(encoded[13], 0x00);
         assert_eq!(encoded[14], 0x00);
         assert_eq!(encoded[15], 0x00);
+
         assert_eq!(encoded[16], 0x00);
         assert_eq!(encoded[17], 0x00);
         assert_eq!(encoded[18], 0x00);
         assert_eq!(encoded[19], 0x00);
+
         assert_eq!(encoded[20], 0x00);
         assert_eq!(encoded[21], 0x00);
         assert_eq!(encoded[22], 0x00);

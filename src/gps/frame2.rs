@@ -6,6 +6,8 @@ use crate::{
     twos_complement,
 };
 
+use core::f64::consts::PI;
+
 const WORD3_IODE_MASK: u32 = 0x3fc00000;
 const WORD3_IODE_SHIFT: u32 = 22;
 const WORD3_CRS_MASK: u32 = 0x003fffc0;
@@ -91,16 +93,30 @@ impl GpsQzssFrame2 {
         self.iode = iode;
         self
     }
-
-    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time.
+    
+    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time, expressed
+    /// in semi-circles.
     pub fn with_mean_anomaly_semi_circles(mut self, m0_semi_circles: f64) -> Self {
         self.m0 = m0_semi_circles;
         self
     }
 
+    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time, expressed
+    /// in radians.
+    pub fn with_mean_anomaly_radians(mut self, m0_rad: f64) -> Self {
+        self.m0 = m0_rad * PI / 2.0f64.powi(31);
+        self
+    }
+
     /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in semi circles)
-    pub fn with_motion_difference_semi_circles(mut self, dn_semi_circles: f64) -> Self {
+    pub fn with_mean_motion_difference_semi_circles(mut self, dn_semi_circles: f64) -> Self {
         self.dn = dn_semi_circles;
+        self
+    }
+    
+    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in radians)
+    pub fn with_mean_motion_difference_radians(mut self, dn_rad: f64) -> Self {
+        self.dn = dn_rad * PI / 2.0f64.powi(31);
         self
     }
 

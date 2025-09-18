@@ -163,7 +163,7 @@ impl GpsQzssFrame1 {
 
     /// Copies and returns [GpsQzssFrame1] with updated Week number
     pub fn with_week(mut self, week: u16) -> Self {
-        self.week = (week & 0x3ff);
+        self.week = week & 0x3ff;
         self
     }
 
