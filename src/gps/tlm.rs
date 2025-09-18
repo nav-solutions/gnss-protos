@@ -40,15 +40,27 @@ impl GpsQzssTelemetry {
         self
     }
 
-    /// Copies and returns new [GpsQzssTelemetry with updated message integrity
-    pub fn with_integrity(mut self, integrity: bool) -> Self {
-        self.integrity = integrity;
+    /// Copies and returns new [GpsQzssTelemetry] with message integrity asserted
+    pub fn with_integrity(mut self) -> Self {
+        self.integrity = true;
         self
     }
 
-    /// Copies and returns new [GpsQzssTelemetry with updated reserved bit
-    pub fn with_reserved_bit(mut self, reserved: bool) -> Self {
-        self.reserved_bit = reserved;
+    /// Copies and returns new [GpsQzssTelemetry] with message integrity deasserted
+    pub fn without_integrity(mut self) -> Self {
+        self.integrity = false;
+        self
+    }
+
+    /// Copies and returns new [GpsQzssTelemetry] with reserved bit asserted
+    pub fn with_reserved_bit(mut self) -> Self {
+        self.reserved_bit = true;
+        self
+    }
+
+    /// Copies and returns new [GpsQzssTelemetry] with reserved bit deasserted
+    pub fn without_reserved_bit(mut self) -> Self {
+        self.reserved_bit = false;
         self
     }
 

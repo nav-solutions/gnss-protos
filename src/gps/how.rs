@@ -56,15 +56,27 @@ impl GpsQzssHow {
         self
     }
 
-    /// Copies and returns [GpsQzssHow] with updated alert bit
-    pub fn with_alert_bit(mut self, alert: bool) -> Self {
-        self.alert = alert;
+    /// Copies and returns [GpsQzssHow] with updated alert bit asserted
+    pub fn with_alert_bit(mut self) -> Self {
+        self.alert = true;
         self
     }
 
-    /// Copies and returns [GpsQzssHow] with updated A/S bit
-    pub fn with_anti_spoofing(mut self, anti_spoofing: bool) -> Self {
-        self.anti_spoofing = anti_spoofing;
+    /// Copies and returns [GpsQzssHow] with updated alert bit deasserted
+    pub fn without_alert_bit(mut self) -> Self {
+        self.alert = false;
+        self
+    }
+
+    /// Copies and returns [GpsQzssHow] with A/S bit asserted
+    pub fn with_anti_spoofing(mut self) -> Self {
+        self.anti_spoofing = true;
+        self
+    }
+
+    /// Copies and returns [GpsQzssHow] with A/S bit deasserted
+    pub fn without_anti_spoofing(mut self) -> Self {
+        self.anti_spoofing = false;
         self
     }
 
