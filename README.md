@@ -34,11 +34,7 @@ navigation (we do not support the Almanach frames).
 Frames parity is not fully implemented either.
 
 We provide methods to both encode and decode data frames, and methods
-to work from a single byte or a buffer which is most suited for real-time interfaces.
-
-The parser is flexible and efficient enough. It supports both frame encoding & decoding.
-The GPS/QZSS protocol being "thoughtout" and redacted in the 70s/80s, it is not convenient to deal with.
-The data stream is not aligned to 8bit, hence not compatible with any machine, and stream synchronization is mandatory. To work around this, our framework proposes two different interfaces that should suite all use cases:
+to work from a stream of padded bytes (re-aligned) (2) or a bit stream buffer for real-time interfaces (1):
 
 1. The `GpsDecoder` is the solution when working with real-time GPS/QZSS streams.
 It is capable to synchronize itself to the frame start (which is not aligned to a byte).
@@ -66,8 +62,6 @@ We used this approach to interface correctly to U-Blox receivers for example
 
 ```rust
 use gnss_protos::gps::GpsDecoder;
-
-
 ```
 
 License

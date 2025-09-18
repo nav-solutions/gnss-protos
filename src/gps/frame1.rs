@@ -86,10 +86,10 @@ pub struct GpsQzssFrame1 {
     /// 8-bit TGD (in seconds)
     pub tgd: f64,
 
-    /// af2 (in seconds per s^-^&)
+    /// af2 (in seconds per squared second)
     pub af2: f64,
 
-    /// af1 (in seconds per seconds)
+    /// af1 (in seconds per second)
     pub af1: f64,
 
     /// 22-bit af0 (in seconds)
@@ -167,6 +167,42 @@ impl GpsQzssFrame1 {
         self
     }
 
+    /// Copies and returns [GpsQzssFrame1] with updated 10-bit IODC mask
+    pub fn with_iodc(mut self, iodc: u16) -> Self {
+        self.iodc = iodc & 0x3ff;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with asserted L2P data flag
+    pub fn with_l2p_flag(mut self) -> Self {
+        self.l2_p_data_flag = true;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with deasserted L2P data flag
+    pub fn without_l2p_flag(mut self) -> Self {
+        self.l2_p_data_flag = false;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated 23-bit reserved word
+    pub fn with_reserved23_word(mut self, reserved: u32) -> Self {
+        self.reserved_word4 = reserved & 0x7f_ffff;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated (first) 24-bit reserved word
+    pub fn with_reserved24_word1(mut self, reserved: u32) -> Self {
+        self.reserved_word5 = reserved & 0xff_ffff;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated (second) 24-bit reserved word
+    pub fn with_reserved24_word2(mut self, reserved: u32) -> Self {
+        self.reserved_word6 = reserved & 0xff_ffff;
+        self
+    }
+
     /// Returns true if [GpsQzssFrame1] indicates all-signals are OK.
     pub fn healthy(&self) -> bool {
         self.health == 0
@@ -238,6 +274,12 @@ impl GpsQzssFrame1 {
     /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in seconds
     pub fn with_total_group_delay_seconds(mut self, tgd_s: f64) -> Self {
         self.tgd = tgd_s;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in nanoseconds
+    pub fn with_total_group_delay_nanos(mut self, tgd_nanos: f64) -> Self {
+        self.tgd = tgd_nanos * 1e-9;
         self
     }
 
@@ -406,8 +448,8 @@ impl GpsQzssFrame1 {
     /// Encodes a [Word9] from [GpsQzssFrame1]
     fn word9(&self) -> Word9 {
         Word9 {
-            af2: (self.af2 * 2.0_f64.powi(43)).round() as i8,
-            af1: (self.af1 * 2.0_f64.powi(55)).round() as i16,
+            af2: (self.af2 * 2.0_f64.powi(55)).round() as i8,
+            af1: (self.af1 * 2.0_f64.powi(43)).round() as i16,
         }
     }
 
@@ -831,7 +873,7 @@ mod frame1 {
                 ura,
                 health,
                 iodc,
-                toc: toc * 16,
+                toc,
                 tgd: tgd * 1.0E-9,
                 af0: af0 * 1.0E-10,
                 af1: af1 * 1.0E-11,

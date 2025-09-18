@@ -76,6 +76,74 @@ impl GpsQzssFrame {
                 encoded[9] = subf.ura & 0x0f;
                 encoded[9] <<= 4;
                 encoded[9] |= (subf.health & 0x3c) >> 2;
+
+                encoded[10] |= (subf.health & 0x03);
+                encoded[10] <<= 6;
+                encoded[10] |= (((subf.iodc & 0x300) >> 8) as u8) << 4;
+
+                encoded[11] <<= 6; // TODO
+
+                if subf.l2_p_data_flag {
+                    encoded[11] |= 0x20;
+                }
+
+                encoded[11] |= ((subf.reserved_word4 & 0x7c_0000) >> 18) as u8;
+                encoded[12] = ((subf.reserved_word4 & 0x03_fc00) >> 10) as u8;
+                encoded[13] = ((subf.reserved_word4 & 0x00_03fc) >> 2) as u8;
+
+                encoded[14] = (subf.reserved_word4 & 0x3) as u8;
+                encoded[14] <<= 6; // TODO
+
+                encoded[15] = ((subf.reserved_word5 & 0xff_0000) >> 16) as u8;
+                encoded[16] = ((subf.reserved_word5 & 0x00_ff00) >> 8) as u8;
+                encoded[17] = ((subf.reserved_word5 & 0x00_00ff) >> 0) as u8;
+                encoded[18] <<= 2; // TODO
+
+                encoded[18] |= ((subf.reserved_word6 & 0xc0_0000) >> 22) as u8;
+                encoded[19] = ((subf.reserved_word6 & 0x3f_c000) >> 14) as u8;
+                encoded[20] = ((subf.reserved_word6 & 0x00_3fc0) >> 6) as u8;
+                encoded[21] = ((subf.reserved_word6 & 0x00_003f) >> 0) as u8;
+                encoded[21] <<= 2;
+                encoded[22] <<= 4; // TODO
+
+                encoded[22] |= ((subf.reserved_word7 & 0xf000) >> 12) as u8;
+                encoded[23] = ((subf.reserved_word7 & 0x0ff0) >> 4) as u8;
+                encoded[24] = ((subf.reserved_word7 & 0x000f) >> 0) as u8;
+                encoded[24] <<= 4;
+
+                let tgd = (subf.tgd * 2.0_f64.powi(31)).round() as u8;
+                encoded[24] |= (tgd & 0xf0) >> 4;
+
+                encoded[25] = tgd & 0x0f;
+                encoded[25] <<= 4; // TODO
+                encoded[26] <<= 6; // TODO
+                encoded[26] |= ((subf.iodc & 0x0fc) >> 2) as u8;
+
+                encoded[27] = (subf.iodc & 0x03) as u8;
+                encoded[27] <<= 6;
+
+                let toc = subf.toc * 16;
+                encoded[27] = ((toc & 0xfc00) >> 10) as u8;
+                encoded[28] = ((toc & 0x03fc) >> 2) as u8;
+                encoded[29] = (toc & 0x0003) as u8;
+                encoded[29] <<= 6; // TODO
+
+                let af2 = (subf.af2 * 2.0_f64.powi(10)).round() as u8;
+                let af1 = (subf.af1 * 2.0_f64.powi(10)).round() as u16;
+                let af0 = (subf.af0 * 2.0_f64.powi(10)).round() as u32;
+
+                encoded[30] = af2;
+                encoded[31] = ((af1 & 0xff00) >> 8) as u8;
+                encoded[32] = ((af1 & 0x00ff) >> 0) as u8;
+                encoded[33] <<= 2; // TODO
+
+                encoded[33] |= ((af0 & 0x30_0000) >> 20) as u8;
+                encoded[34] = ((af0 & 0x0f_f000) >> 12) as u8;
+                encoded[35] = ((af0 & 0x00_0ff0) >> 4) as u8;
+                encoded[36] = ((af0 & 0x00_000f) >> 0) as u8;
+                encoded[36] <<= 4; // TODO
+
+                encoded[37] <<= 4;
             },
             GpsQzssFrameId::Ephemeris2 => {
                 let subf = self.subframe.as_eph2().unwrap_or_default();
@@ -216,7 +284,7 @@ impl GpsQzssFrame {
 #[cfg(test)]
 mod encoding {
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{Read, Write};
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
@@ -253,7 +321,7 @@ mod encoding {
         assert_eq!(encoded[3], 0x00);
         assert_eq!(encoded[4], 0x00);
         assert_eq!(encoded[5], 0x00);
-        assert_eq!(encoded[6], 0x00);
+        assert_eq!(encoded[6], 0x10);
         assert_eq!(encoded[7], 0x00);
         assert_eq!(encoded[8], 0x00);
         assert_eq!(encoded[9], 0x00);
@@ -314,7 +382,17 @@ mod encoding {
                     .with_anti_spoofing(),
             )
             .with_subframe(GpsQzssSubframe::Ephemeris1(
-                GpsQzssFrame1::default().with_week(0x123),
+                GpsQzssFrame1::default()
+                    .with_week(0x123)
+                    .with_iodc(0x123)
+                    .with_all_signals_ok()
+                    .with_l2p_flag()
+                    .with_reserved23_word(0x12_3456)
+                    .with_reserved24_word1(0x34_5678)
+                    .with_reserved24_word2(0x98_7654)
+                    .with_total_group_delay_nanos(5.0)
+                    .with_ca_or_p_l2_mask(0x3)
+                    .with_user_range_accuracy_m(4.0),
             ));
 
         let encoded = frame.encode();
@@ -329,24 +407,24 @@ mod encoding {
         assert_eq!(encoded[6], 0x90);
         assert_eq!(encoded[7], 0x04);
 
-        assert_eq!(encoded[8], 0x8c);
-        assert_eq!(encoded[9], 0x00);
-        assert_eq!(encoded[10], 0x00);
-        assert_eq!(encoded[11], 0x00);
-        assert_eq!(encoded[12], 0x00);
-        assert_eq!(encoded[13], 0x00);
-        assert_eq!(encoded[14], 0x00);
-        assert_eq!(encoded[15], 0x00);
-        assert_eq!(encoded[16], 0x00);
-        assert_eq!(encoded[17], 0x00);
-        assert_eq!(encoded[18], 0x00);
-        assert_eq!(encoded[19], 0x00);
-        assert_eq!(encoded[20], 0x00);
-        assert_eq!(encoded[21], 0x00);
+        assert_eq!(encoded[8], 0x8f);
+        assert_eq!(encoded[9], 0x20);
+        assert_eq!(encoded[10], 0x10);
+        assert_eq!(encoded[11], 0x24);
+        assert_eq!(encoded[12], 0x8D);
+        assert_eq!(encoded[13], 0x15);
+        assert_eq!(encoded[14], 0x80);
+        assert_eq!(encoded[15], 0x34);
+        assert_eq!(encoded[16], 0x56);
+        assert_eq!(encoded[17], 0x78);
+        assert_eq!(encoded[18], 0x02);
+        assert_eq!(encoded[19], 0x61);
+        assert_eq!(encoded[20], 0xD9);
+        assert_eq!(encoded[21], 0x50);
         assert_eq!(encoded[22], 0x00);
         assert_eq!(encoded[23], 0x00);
         assert_eq!(encoded[24], 0x00);
-        assert_eq!(encoded[25], 0x00);
+        assert_eq!(encoded[25], 0x0B);
         assert_eq!(encoded[26], 0x00);
         assert_eq!(encoded[27], 0x00);
         assert_eq!(encoded[28], 0x00);
@@ -373,7 +451,14 @@ mod encoding {
                     .with_alert_bit()
                     .without_anti_spoofing(),
             )
-            .with_subframe(GpsQzssSubframe::default());
+            .with_subframe(GpsQzssSubframe::Ephemeris1(
+                GpsQzssFrame1::default()
+                    .with_week(0x123)
+                    .with_iodc(0x345)
+                    .with_all_signals_ok()
+                    .with_ca_or_p_l2_mask(0x1)
+                    .with_user_range_accuracy_m(24.0),
+            ));
 
         let encoded = frame.encode();
 
@@ -385,11 +470,11 @@ mod encoding {
         assert_eq!(encoded[4], 0xCF);
         assert_eq!(encoded[5], 0x13);
         assert_eq!(encoded[6], 0x10);
-        assert_eq!(encoded[7], 0x00);
+        assert_eq!(encoded[7], 0x04);
 
-        assert_eq!(encoded[8], 0x00);
-        assert_eq!(encoded[9], 0x00);
-        assert_eq!(encoded[10], 0x00);
+        assert_eq!(encoded[8], 0x8D);
+        assert_eq!(encoded[9], 0x60);
+        assert_eq!(encoded[10], 0x30);
         assert_eq!(encoded[11], 0x00);
         assert_eq!(encoded[12], 0x00);
         assert_eq!(encoded[13], 0x00);
@@ -660,5 +745,238 @@ mod encoding {
         assert_eq!(encoded[35], 0x00);
         assert_eq!(encoded[36], 0x00);
         assert_eq!(encoded[37], 0x00);
+    }
+
+    #[test]
+    fn generate_eph1_bin() {
+        let mut fd = File::create("data/GPS/eph1.bin").unwrap_or_else(|e| {
+            panic!("Failed to create file: {}", e);
+        });
+
+        let mut frame = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x1234)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x5_6789)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris1(
+                GpsQzssFrame1::default()
+                    .with_week(0x123)
+                    .with_iodc(0x1)
+                    .with_all_signals_ok()
+                    .with_l2p_flag()
+                    .with_reserved23_word(0x12_3456)
+                    .with_reserved24_word1(0x34_5678)
+                    .with_reserved24_word2(0x98_7654)
+                    .with_total_group_delay_nanos(5.0)
+                    .with_ca_or_p_l2_mask(0x3)
+                    .with_user_range_accuracy_m(4.0),
+            ));
+
+        let encoded = frame.encode();
+
+        for i in 0..128 {
+            let encoded = frame.encode();
+
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write encoded frame #{}: {}", i, e);
+            });
+
+            frame.telemetry.message += 1;
+            frame.telemetry.integrity = !frame.telemetry.integrity;
+            frame.telemetry.reserved_bit = !frame.telemetry.reserved_bit;
+
+            frame.how.tow += 1;
+            frame.how.alert = !frame.how.alert;
+            frame.how.anti_spoofing = !frame.how.anti_spoofing;
+
+            let subframe = frame.subframe.as_mut_eph1().unwrap();
+
+            subframe.week += 1;
+            subframe.ura += 1;
+            subframe.ca_or_p_l2 = subframe.ca_or_p_l2 ^ 0x3;
+            subframe.iodc += 1;
+            subframe.health += 1;
+            subframe.toc += 1;
+
+            subframe.af0 += 1.0E-9;
+            subframe.af1 += 1.0E-10;
+            subframe.af2 += 1.0E-11;
+
+            subframe.tgd += 1.0E-9;
+
+            subframe.reserved_word4 += 1;
+            subframe.reserved_word5 += 1;
+            subframe.reserved_word6 += 1;
+            subframe.reserved_word7 += 1;
+
+            subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
+        }
+    }
+
+    #[test]
+    fn generate_eph2_bin() {
+        let mut fd = File::create("data/GPS/eph2.bin").unwrap_or_else(|e| {
+            panic!("Failed to create file: {}", e);
+        });
+
+        let mut frame = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x3456)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_8765)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris2(
+                GpsQzssFrame2::default()
+                    .with_toe(54_321)
+                    .with_iode(0x01)
+                    .with_mean_anomaly_semi_circles(0.1)
+                    .with_mean_motion_difference_semi_circles(0.1)
+                    .with_square_root_semi_major_axis(0.1)
+                    .with_eccentricity(0.1)
+                    .with_aodo(0x12)
+                    .with_cuc_radians(0.1)
+                    .with_cus_radians(0.1)
+                    .with_fit_interval_flag(),
+            ));
+
+        let encoded = frame.encode();
+
+        for i in 0..128 {
+            let encoded = frame.encode();
+
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write encoded frame #{}: {}", i, e);
+            });
+
+            frame.telemetry.message += 1;
+            frame.telemetry.integrity = !frame.telemetry.integrity;
+            frame.telemetry.reserved_bit = !frame.telemetry.reserved_bit;
+
+            frame.how.tow += 1;
+            frame.how.alert = !frame.how.alert;
+            frame.how.anti_spoofing = !frame.how.anti_spoofing;
+
+            let subframe = frame.subframe.as_mut_eph2().unwrap();
+
+            subframe.toe += 1;
+            subframe.aodo += 1;
+            subframe.iode += 1;
+            subframe.fit_int_flag = !subframe.fit_int_flag;
+        }
+    }
+
+    #[test]
+    fn generate_burst_bin() {
+        let mut fd = File::create("data/GPS/burst.bin").unwrap_or_else(|e| {
+            panic!("Failed to create file: {}", e);
+        });
+
+        let mut eph_1 = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x3456)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_8765)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris1(
+                GpsQzssFrame1::default()
+                    .with_week(0x123)
+                    .with_iodc(0x1)
+                    .with_all_signals_ok()
+                    .with_l2p_flag()
+                    .with_reserved23_word(0x12_3456)
+                    .with_reserved24_word1(0x34_5678)
+                    .with_reserved24_word2(0x98_7654)
+                    .with_total_group_delay_nanos(5.0)
+                    .with_ca_or_p_l2_mask(0x3)
+                    .with_user_range_accuracy_m(4.0),
+            ));
+
+        let mut eph_2 = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x3457)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_how_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_8765)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris2(
+                GpsQzssFrame2::default()
+                    .with_toe(54_326)
+                    .with_iode(0x01)
+                    .with_mean_anomaly_semi_circles(0.1)
+                    .with_mean_motion_difference_semi_circles(0.1)
+                    .with_square_root_semi_major_axis(0.1)
+                    .with_eccentricity(0.1)
+                    .with_aodo(0x12)
+                    .with_cuc_radians(0.1)
+                    .with_cus_radians(0.1)
+                    .with_fit_interval_flag(),
+            ));
+
+        for i in 0..128 {
+            let encoded = eph_1.encode();
+
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write encoded frame #{}: {}", i, e);
+            });
+
+            eph_1.telemetry.message += 1;
+            eph_1.telemetry.integrity = !eph_1.telemetry.integrity;
+            eph_1.telemetry.reserved_bit = !eph_1.telemetry.reserved_bit;
+
+            eph_1.how.tow += 1;
+            eph_1.how.alert = !eph_1.how.alert;
+            eph_1.how.anti_spoofing = !eph_1.how.anti_spoofing;
+
+            let subframe = eph_1.subframe.as_mut_eph1().unwrap();
+
+            let encoded = eph_2.encode();
+
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write encoded frame #{}: {}", i, e);
+            });
+
+            eph_2.telemetry.message += 1;
+            eph_2.telemetry.integrity = !eph_2.telemetry.integrity;
+            eph_2.telemetry.reserved_bit = !eph_2.telemetry.reserved_bit;
+
+            eph_2.how.tow += 1;
+            eph_2.how.alert = !eph_2.how.alert;
+            eph_2.how.anti_spoofing = !eph_2.how.anti_spoofing;
+
+            let subframe = eph_2.subframe.as_mut_eph2().unwrap();
+
+            subframe.toe += 1;
+            subframe.aodo += 1;
+            subframe.iode += 1;
+            subframe.fit_int_flag = !subframe.fit_int_flag;
+        }
     }
 }
