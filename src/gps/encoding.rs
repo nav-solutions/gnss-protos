@@ -469,10 +469,10 @@ mod encoding {
 
         assert_eq!(encoded[4], 0x33);
         assert_eq!(encoded[5], 0x33);
-        assert_eq!(encoded[6], 0x90);
+        assert_eq!(encoded[6], 0xA0);
         assert_eq!(encoded[7], 0x01);
 
-        assert_eq!(encoded[8], 0x2c);
+        assert_eq!(encoded[8], 0x20);
         assert_eq!(encoded[9], 0x00);
         assert_eq!(encoded[10], 0x00);
         assert_eq!(encoded[11], 0x00);
@@ -518,7 +518,7 @@ mod encoding {
             )
             .with_subframe(GpsQzssSubframe::Ephemeris2(
                 GpsQzssFrame2::default()
-                    .with_iode(0x12)
+                    .with_iode(0x34)
             ));
 
         let encoded = frame.encode();
@@ -530,10 +530,10 @@ mod encoding {
 
         assert_eq!(encoded[4], 0x33);
         assert_eq!(encoded[5], 0x32);
-        assert_eq!(encoded[6], 0x90);
-        assert_eq!(encoded[7], 0x04);
+        assert_eq!(encoded[6], 0xA0);
+        assert_eq!(encoded[7], 0x03);
 
-        assert_eq!(encoded[8], 0x8c);
+        assert_eq!(encoded[8], 0x40);
         assert_eq!(encoded[9], 0x00);
         assert_eq!(encoded[10], 0x00);
         assert_eq!(encoded[11], 0x00);
