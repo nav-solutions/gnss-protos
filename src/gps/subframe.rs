@@ -1,7 +1,10 @@
 use crate::gps::{
+    GpsDataWord,
     GpsQzssFrame1,
-    GpsQzssFrame2,
-    GpsQzssFrame3,
+    // GpsQzssFrame2,
+    // GpsQzssFrame3,
+    GpsQzssFrameId,
+    GPS_WORDS_PER_FRAME,
 };
 
 /// GPS / QZSS Interpreted subframes
@@ -9,12 +12,11 @@ use crate::gps::{
 pub enum GpsQzssSubframe {
     /// GPS Ephemeris Frame #1
     Ephemeris1(GpsQzssFrame1),
+    // /// GPS Ephemeris Frame #2
+    // Ephemeris2(GpsQzssFrame2),
 
-    /// GPS Ephemeris Frame #2
-    Ephemeris2(GpsQzssFrame2),
-
-    /// GPS Ephemeris Frame #3
-    Ephemeris3(GpsQzssFrame3),
+    // /// GPS Ephemeris Frame #3
+    // Ephemeris3(GpsQzssFrame3),
 }
 
 impl Default for GpsQzssSubframe {
@@ -41,61 +43,58 @@ impl GpsQzssSubframe {
         }
     }
 
-    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    pub fn as_eph2(&self) -> Option<GpsQzssFrame2> {
-        match self {
-            Self::Ephemeris2(frame) => Some(*frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    // pub fn as_eph2(&self) -> Option<GpsQzssFrame2> {
+    //     match self {
+    //         Self::Ephemeris2(frame) => Some(*frame),
+    //         _ => None,
+    //     }
+    // }
 
-    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
-        match self {
-            Self::Ephemeris2(frame) => Some(frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    // pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
+    //     match self {
+    //         Self::Ephemeris2(frame) => Some(frame),
+    //         _ => None,
+    //     }
+    // }
 
-    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {
-        match self {
-            Self::Ephemeris3(frame) => Some(*frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    // pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {
+    //     match self {
+    //         Self::Ephemeris3(frame) => Some(*frame),
+    //         _ => None,
+    //     }
+    // }
 
-    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
-        match self {
-            Self::Ephemeris3(frame) => Some(frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    // pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
+    //     match self {
+    //         Self::Ephemeris3(frame) => Some(frame),
+    //         _ => None,
+    //     }
+    // }
 
-    /// Decodes a [GpsQzssSubframe] from a 8 [GpsDataByte] slice
-    /// supports padding on each word termination (not intra words)
-    pub(crate) fn decode(frame_id: GpsQzssFrameId, bytes: &[GpsDataByte]) -> Self {
-        // for i in 0..8 {
-        //     let dword = ByteArray::new(&bytes[8+i*4..8+i*4+4])
-        //         .value_u32();
-
-        //     let _ = subframe.decode_word(i +3, dword);  // IMPROVE
-        //
-
+    /// Decodes [Self] from 8 [GpsDataWord]s.
+    /// This method does not care for frames parity.
+    pub(crate) fn decode(
+        frame_id: GpsQzssFrameId,
+        words: &[GpsDataWord; GPS_WORDS_PER_FRAME - 2],
+    ) -> Self {
         match frame_id {
-            GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::decode(bytes)),
-            GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::decode(bytes)),
-            GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::decode(bytes)),
+            GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::from_words(words)),
+            _ => panic!("NOT YET"),
+            // GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::from_words(words)),
+            // GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::from_words(words)),
         }
     }
 
-    /// Encode this [GpsQzssSubframe] into 8 [u32] data burst.
-    pub(crate) fn encode(&self) -> [u32; 8] {
+    /// Encodes this [GpsQzssSubframe] as a burst of 8 [GpsDataWord]s.
+    pub(crate) fn to_words(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME - 2] {
         match self {
-            Self::Ephemeris1(subframe) => subframe.encode(),
-            Self::Ephemeris2(subframe) => subframe.encode(),
-            Self::Ephemeris3(subframe) => subframe.encode(),
+            Self::Ephemeris1(subframe) => subframe.to_words(),
+            // Self::Ephemeris2(subframe) => subframe.to_words(),
+            // Self::Ephemeris3(subframe) => subframe.to_words(),
         }
     }
 }

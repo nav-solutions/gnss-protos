@@ -470,7 +470,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Encodes this [GpsQzssFrame1] as a burst of 8 [GpsDataWord]s.
-    pub(crate) fn encode(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME - 2] {
+    pub(crate) fn to_words(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME - 2] {
         [
             self.word3().to_word(),
             self.word4().to_word(),
@@ -965,39 +965,39 @@ mod test {
     //     }
     // }
 
-    // #[test]
-    // fn user_range_accuracy() {
-    //     for (value_m, encoded_ura) in [
-    //         (0.1, 0),
-    //         (1.0, 0),
-    //         (2.4, 0),
-    //         (2.5, 1),
-    //         (2.6, 1),
-    //         (3.4, 1),
-    //         (3.5, 2),
-    //         (95.0, 8),
-    //         (96.0, 8),
-    //         (96.1, 9),
-    //         (3071.0, 13),
-    //         (3072.0, 13),
-    //         (3072.1, 14),
-    //         (4000.1, 14),
-    //     ] {
-    //         let ura = GpsQzssFrame1::compute_ura(value_m);
-    //         assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
+    #[test]
+    fn user_range_accuracy() {
+        for (value_m, encoded_ura) in [
+            (0.1, 0),
+            (1.0, 0),
+            (2.4, 0),
+            (2.5, 1),
+            (2.6, 1),
+            (3.4, 1),
+            (3.5, 2),
+            (95.0, 8),
+            (96.0, 8),
+            (96.1, 9),
+            (3071.0, 13),
+            (3072.0, 13),
+            (3072.1, 14),
+            (4000.1, 14),
+        ] {
+            let ura = GpsQzssFrame1::compute_ura(value_m);
+            assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
 
-    //         let mut frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
+            let mut frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
 
-    //         assert_eq!(frame1.ura, encoded_ura);
+            assert_eq!(frame1.ura, encoded_ura);
 
-    //         let mut expected = GpsQzssFrame1::default();
-    //         expected.ura = encoded_ura;
+            let mut expected = GpsQzssFrame1::default();
+            expected.ura = encoded_ura;
 
-    //         // assert_eq!(
-    //         //     frame1.with_nominal_user_range_accuracy_m(value_m).ura,
-    //         //     encoded_ura,
-    //         //     "failed for value={}m, encoded={}", value_m, encoded_ura,
-    //         // );
-    //     }
-    // }
+            // assert_eq!(
+            //     frame1.with_nominal_user_range_accuracy_m(value_m).ura,
+            //     encoded_ura,
+            //     "failed for value={}m, encoded={}", value_m, encoded_ura,
+            // );
+        }
+    }
 }

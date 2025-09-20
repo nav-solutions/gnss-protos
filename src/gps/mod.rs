@@ -34,7 +34,7 @@ pub use word::GpsDataWord;
 // pub use decoder::GpsQzssDecoder;
 
 // mod decoding;
-// mod encoding;
+mod encoding;
 
 mod errors;
 pub use errors::GpsError;
@@ -57,8 +57,8 @@ pub use how::GpsQzssHow;
 mod tlm;
 pub use tlm::GpsQzssTelemetry;
 
-// mod frame;
-// pub use frame::GpsQzssFrame;
+mod frame;
+pub use frame::GpsQzssFrame;
 
-// mod subframe;
-// pub subframe::GpsQzssSubframe;
+mod subframe;
+pub use subframe::GpsQzssSubframe;

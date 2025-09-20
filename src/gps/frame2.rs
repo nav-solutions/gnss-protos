@@ -1,7 +1,8 @@
 use crate::{
     gps::{
-        bytes::{ByteArray, GpsDataByte},
         GpsError,
+        GpsDataByte,
+        GpsDataWord,
     },
     twos_complement,
 };
