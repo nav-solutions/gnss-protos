@@ -532,6 +532,8 @@ impl Word3 {
         value |= ((self.health & 0x3f) as u32) << WORD3_HEALTH_SHIFT;
         value |= ((self.iodc_msb & 0x03) as u32) << WORD3_IODC_SHIFT;
 
+        value <<= 2;
+
         GpsDataWord::from(value)
     }
 }
@@ -545,27 +547,28 @@ pub(crate) struct Word4 {
 impl Word4 {
     /// Interprets this [GpsDataWord] as [Word4].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let l2_p_data_flag = (dword & WORD4_L2P_DATA_MASK) > 0;
-        // let reserved = ((dword & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
-        // Self {
-        //     l2_p_data_flag,
-        //     reserved,
-        // }
+        let value = word.value();
+        let l2_p_data_flag = (value & WORD4_L2P_DATA_MASK) > 0;
+        let reserved = ((value & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
+
+        Self {
+            l2_p_data_flag,
+            reserved,
+        }
     }
 
     /// Encodes this [Word4] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
+        let mut value = 0u32;
 
-        // if self.l2_p_data_flag {
-        //     value |= WORD4_L2P_DATA_MASK;
-        // }
+        if self.l2_p_data_flag {
+            value |= WORD4_L2P_DATA_MASK;
+        }
 
-        // value |= (self.reserved & 0x7fffff) << WORD4_RESERVED_SHIFT;
+        value |= (self.reserved & 0x7fffff) << WORD4_RESERVED_SHIFT;
+        value <<= 2;
 
-        // value
-        Default::default()
+        GpsDataWord::from(value)
     }
 }
 
@@ -578,17 +581,16 @@ pub(crate) struct Word5 {
 impl Word5 {
     /// Interprets this [GpsDataWord] as [Word5].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let reserved = (dword & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
-        // Self { reserved }
+        let reserved = (word.value() & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
+        Self { reserved }
     }
 
     /// Encodes this [Word5] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
-        // value |= (self.reserved & 0x0ffffff) << WORD5_RESERVED_SHIFT;
-        // value
-        Default::default()
+        let mut value = 0;
+        value |= (self.reserved & 0x0ffffff) << WORD5_RESERVED_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -601,17 +603,16 @@ pub(crate) struct Word6 {
 impl Word6 {
     /// Interprets this [GpsDataWord] as [Word6].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let reserved = (dword & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
-        // Self { reserved }
+        let reserved = (word.value() & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
+        Self { reserved }
     }
 
     /// Encodes this [Word6] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
-        // value |= (self.reserved & 0x0ffffff) << WORD6_RESERVED_SHIFT;
-        // value
-        Default::default()
+        let mut value = 0;
+        value |= (self.reserved & 0x0ffffff) << WORD6_RESERVED_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -627,19 +628,19 @@ pub(crate) struct Word7 {
 impl Word7 {
     /// Interprets this [GpsDataWord] as [Word7].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let reserved = ((dword & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
-        // let tgd = ((dword & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
-        // Self { reserved, tgd }
+        let value = word.value();
+        let reserved = ((value & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
+        let tgd = ((value & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
+        Self { reserved, tgd }
     }
 
     /// Encodes this [Word7] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
-        // value |= ((self.reserved as u32) & 0x0ffff) << WORD7_RESERVED_SHIFT;
-        // value |= ((self.tgd as u32) & 0xff) << WORD7_TGD_SHIFT;
-        // value
-        Default::default()
+        let mut value = 0;
+        value |= ((self.reserved as u32) & 0x0ffff) << WORD7_RESERVED_SHIFT;
+        value |= ((self.tgd as u32) & 0xff) << WORD7_TGD_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -655,19 +656,19 @@ pub(crate) struct Word8 {
 impl Word8 {
     /// Interprets this [GpsDataWord] as [Word8].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let iodc_lsb = ((dword & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
-        // let toc = ((dword & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
-        // Self { iodc_lsb, toc }
+        let value = word.value();
+        let iodc_lsb = ((value & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
+        let toc = ((value & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
+        Self { iodc_lsb, toc }
     }
 
     /// Encodes this [Word8] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
-        // value |= ((self.iodc_lsb as u32) & 0xff) << WORD8_IODC_SHIFT;
-        // value |= ((self.toc as u32) & 0x0ffff) << WORD8_TOC_SHIFT;
-        // value
-        Default::default()
+        let mut value = 0;
+        value |= ((self.iodc_lsb as u32) & 0xff) << WORD8_IODC_SHIFT;
+        value |= ((self.toc as u32) & 0x0ffff) << WORD8_TOC_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -683,19 +684,19 @@ pub(crate) struct Word9 {
 impl Word9 {
     /// Interprets this [GpsDataWord] as [Word9].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let af2 = ((dword & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
-        // let af1 = ((dword & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
-        // Self { af2, af1 }
+        let value = word.value();
+        let af2 = ((value & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
+        let af1 = ((value & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
+        Self { af2, af1 }
     }
 
     /// Encodes this [Word9] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // let mut value = 0;
-        // value |= ((self.af2 as u32) & 0x0ff) << WORD9_AF2_SHIFT;
-        // value |= ((self.af1 as u32) & 0x0ffff) << WORD9_AF1_SHIFT;
-        // value
-        Default::default()
+        let mut value = 0;
+        value |= ((self.af2 as u32) & 0x0ff) << WORD9_AF2_SHIFT;
+        value |= ((self.af1 as u32) & 0x0ffff) << WORD9_AF1_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -708,21 +709,21 @@ pub(crate) struct Word10 {
 impl Word10 {
     /// Interprets this [GpsDataWord] as [Word10].
     pub fn from_word(word: GpsDataWord) -> Self {
-        Self::default()
-        // let af0 = ((dword & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
-        // let af0 = twos_complement(af0, 0x3fffff, 0x200000);
-        // Self { af0 }
+        let af0 = ((word.value() & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
+        let af0 = twos_complement(af0, 0x3fffff, 0x200000);
+        Self { af0 }
     }
 
     /// Encodes this [Word10] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        // ((self.af0 & 0x3fffff) as u32) << WORD10_AF0_SHIFT
-        Default::default()
+        let mut value = ((self.af0 & 0x3fffff) as u32) << WORD10_AF0_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[cfg(test)]
-mod frame1 {
+mod test {
     use super::*;
 
     #[test]
@@ -771,114 +772,132 @@ mod frame1 {
                 iodc_msb: 0,
             },
         ] {
-            let encoded = dword3.to_word();
-            let decoded = Word3::from_word(encoded);
+            let gps_word = dword3.to_word();
+            let decoded = Word3::from_word(gps_word);
             assert_eq!(decoded, dword3);
+            assert_eq!(
+                decoded.to_word(),
+                gps_word,
+                "Reciprocal failed for {:?}",
+                dword3
+            );
         }
     }
 
-    // #[test]
-    // fn dword4_encoding() {
-    //     for dword4 in [
-    //         Word4 {
-    //             l2_p_data_flag: true,
-    //             reserved: 0,
-    //         },
-    //         Word4 {
-    //             l2_p_data_flag: false,
-    //             reserved: 1,
-    //         },
-    //         Word4 {
-    //             l2_p_data_flag: true,
-    //             reserved: 123,
-    //         },
-    //     ] {
-    //         let encoded = dword4.encode();
-    //         let decoded = Word4::decode(encoded);
-    //         assert_eq!(decoded, dword4);
-    //     }
-    // }
+    #[test]
+    fn dword4_encoding() {
+        for dword4 in [
+            Word4 {
+                l2_p_data_flag: true,
+                reserved: 0,
+            },
+            Word4 {
+                l2_p_data_flag: false,
+                reserved: 1,
+            },
+            Word4 {
+                l2_p_data_flag: true,
+                reserved: 123,
+            },
+        ] {
+            let gps_word = dword4.to_word();
+            let decoded = Word4::from_word(gps_word);
+            assert_eq!(decoded, dword4);
+            assert_eq!(
+                decoded.to_word(),
+                gps_word,
+                "Reciprocal failed for {:?}",
+                dword4
+            );
+        }
+    }
 
-    // #[test]
-    // fn dword5_encoding() {
-    //     for dword5 in [Word5 { reserved: 0 }, Word5 { reserved: 120 }] {
-    //         let encoded = dword5.encode();
-    //         let decoded = Word5::decode(encoded);
-    //         assert_eq!(decoded, dword5);
-    //     }
-    // }
+    #[test]
+    fn dword5_encoding() {
+        for dword5 in [Word5 { reserved: 0 }, Word5 { reserved: 120 }] {
+            let gps_word = dword5.to_word();
+            let decoded = Word5::from_word(gps_word);
+            assert_eq!(decoded, dword5);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
-    // #[test]
-    // fn dword6_encoding() {
-    //     for dword6 in [Word6 { reserved: 0 }, Word6 { reserved: 120 }] {
-    //         let encoded = dword6.encode();
-    //         let decoded = Word6::decode(encoded);
-    //         assert_eq!(decoded, dword6);
-    //     }
-    // }
+    #[test]
+    fn dword6_encoding() {
+        for dword6 in [Word6 { reserved: 0 }, Word6 { reserved: 120 }] {
+            let gps_word = dword6.to_word();
+            let decoded = Word6::from_word(gps_word);
+            assert_eq!(decoded, dword6);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
-    // #[test]
-    // fn dword7_encoding() {
-    //     for dword7 in [
-    //         Word7 {
-    //             reserved: 0,
-    //             tgd: 1,
-    //         },
-    //         Word7 {
-    //             reserved: 120,
-    //             tgd: 0,
-    //         },
-    //         Word7 {
-    //             reserved: 120,
-    //             tgd: 23,
-    //         },
-    //     ] {
-    //         let encoded = dword7.encode();
-    //         let decoded = Word7::decode(encoded);
-    //         assert_eq!(decoded, dword7);
-    //     }
-    // }
+    #[test]
+    fn dword7_encoding() {
+        for dword7 in [
+            Word7 {
+                reserved: 0,
+                tgd: 1,
+            },
+            Word7 {
+                reserved: 120,
+                tgd: 0,
+            },
+            Word7 {
+                reserved: 120,
+                tgd: 23,
+            },
+        ] {
+            let gps_word = dword7.to_word();
+            let decoded = Word7::from_word(gps_word);
+            assert_eq!(decoded, dword7);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
-    // #[test]
-    // fn dword8_encoding() {
-    //     for dword8 in [
-    //         Word8 {
-    //             iodc_lsb: 10,
-    //             toc: 30,
-    //         },
-    //         Word8 {
-    //             iodc_lsb: 30,
-    //             toc: 10,
-    //         },
-    //     ] {
-    //         let encoded = dword8.encode();
-    //         let decoded = Word8::decode(encoded);
-    //         assert_eq!(decoded, dword8);
-    //     }
-    // }
+    #[test]
+    fn dword8_encoding() {
+        for dword8 in [
+            Word8 {
+                iodc_lsb: 10,
+                toc: 30,
+            },
+            Word8 {
+                iodc_lsb: 30,
+                toc: 10,
+            },
+        ] {
+            let gps_word = dword8.to_word();
+            let decoded = Word8::from_word(gps_word);
+            assert_eq!(decoded, dword8);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
-    // #[test]
-    // fn dword9_encoding() {
-    //     for dword9 in [Word9 { af2: 10, af1: 9 }, Word9 { af2: 9, af1: 100 }] {
-    //         let encoded = dword9.encode();
-    //         let decoded = Word9::decode(encoded);
-    //         assert_eq!(decoded, dword9);
-    //     }
-    // }
+    #[test]
+    fn dword9_encoding() {
+        for dword9 in [Word9 { af2: 10, af1: 9 }, Word9 { af2: 9, af1: 100 }] {
+            let gps_word = dword9.to_word();
+            let decoded = Word9::from_word(gps_word);
+            assert_eq!(decoded, dword9);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
-    // #[test]
-    // fn dword10_encoding() {
-    //     for dword10 in [
-    //         Word10 { af0: 0 },
-    //         Word10 { af0: 100 },
-    //         Word10 { af0: -1230 },
-    //         Word10 { af0: -3140 },
-    //     ] {
-    //         let encoded = dword10.encode();
-    //         let decoded = Word10::decode(encoded);
-    //         assert_eq!(decoded, dword10);
-    //     }
-    // }
+    #[test]
+    fn dword10_encoding() {
+        for dword10 in [
+            Word10 { af0: 0 },
+            Word10 { af0: 100 },
+            Word10 { af0: -1230 },
+            Word10 { af0: -3140 },
+        ] {
+            let gps_word = dword10.to_word();
+            let decoded = Word10::from_word(gps_word);
+            assert_eq!(decoded, dword10);
+            assert_eq!(decoded.to_word(), gps_word);
+        }
+    }
 
     // #[test]
     // fn frame1_encoding() {
