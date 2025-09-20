@@ -29,30 +29,26 @@ impl Into<u32> for GpsDataWord {
 }
 
 impl GpsDataWord {
-    /// Creates a [GpsDataWord] from a 30-bit slice stored as 4 big-endian
-    /// bytes. We consider two upper padding bits on the MSB, which are inevitably lost.
-    /// We do not supported padding on any other position (all other bits are preserved).
+    /// Creates a [GpsDataWord] from a 30-bit slice stored as 4 big-endian bytes.
     pub fn from_be_bytes(slice: &[u8; 4]) -> Self {
         Self {
             bytes: [
-                GpsDataByte::MsbPadded(slice[0]),
+                GpsDataByte::Byte(slice[0]),
                 GpsDataByte::Byte(slice[1]),
                 GpsDataByte::Byte(slice[2]),
-                GpsDataByte::Byte(slice[3]),
+                GpsDataByte::LsbPadded(slice[3]),
             ],
         }
     }
 
-    /// Creates a [GpsDataWord] from a 30-bit slice stored as 4 little-endian
-    /// bytes. We consider two upper padding bits on the MSB, which are inevitably lost.
-    /// We do not supported padding on any other position (all other bits are preserved).
+    /// Creates a [GpsDataWord] from a 30-bit slice stored as 4 little-endian bytes.
     pub fn from_le_bytes(slice: &[u8; 4]) -> Self {
         Self {
             bytes: [
-                GpsDataByte::MsbPadded(slice[3]),
+                GpsDataByte::Byte(slice[3]),
                 GpsDataByte::Byte(slice[2]),
                 GpsDataByte::Byte(slice[1]),
-                GpsDataByte::Byte(slice[0]),
+                GpsDataByte::LsbPadded(slice[0]),
             ],
         }
     }
@@ -60,10 +56,9 @@ impl GpsDataWord {
     /// Converts this [GpsDataWord] to [u32]
     pub fn value(&self) -> u32 {
         let mut value = self.bytes[3].as_u32();
-        value |= (self.bytes[2].as_u32()) << 8;
-        value |= (self.bytes[1].as_u32()) << 16;
-        value |= (self.bytes[0].as_u32()) << 24;
-
+        value |= self.bytes[2].as_u32() << 6;
+        value |= self.bytes[1].as_u32() << 14;
+        value |= self.bytes[0].as_u32() << 22;
         value
     }
 }
@@ -75,10 +70,10 @@ mod test {
     #[test]
     fn from_be_bytes() {
         for (bytes, value) in [
-            ([0x12, 0x34, 0x56, 0x78], 0x12345678),
-            ([0x78, 0x56, 0x34, 0x12], 0x38563412),
-            ([0x22, 0xC1, 0x3E, 0x1B], 0x22C13E1B),
-            ([0xF2, 0xC1, 0x3E, 0x1B], 0x32C13E1B),
+            ([0x8B, 0x12, 0x48, 0xCA], 0x22C49232),
+            ([0x8B, 0xAA, 0xAA, 0xAA], 0x22EAAAAA),
+            ([0x8B, 0xA5, 0xA5, 0xA5], 0x22E96969),
+            ([0x8B, 0x5A, 0x5A, 0x5A], 0x22D69696),
         ] {
             let word = GpsDataWord::from_be_bytes(&bytes);
             let found = word.value();
@@ -93,9 +88,10 @@ mod test {
     #[test]
     fn from_le_bytes() {
         for (bytes, value) in [
-            ([0x12, 0x34, 0x56, 0x78], 0x38563412),
-            ([0x12, 0x34, 0x56, 0x38], 0x38563412),
-            ([0xF2, 0x34, 0x56, 0x38], 0x385634F2),
+            ([0xCA, 0x48, 0x12, 0x8B], 0x22C49232),
+            ([0xAA, 0xAA, 0xAA, 0x8B], 0x22EAAAAA),
+            ([0xA5, 0xA5, 0xA5, 0x8B], 0x22E96969),
+            ([0x5A, 0x5A, 0x5A, 0x8B], 0x22D69696),
         ] {
             let word = GpsDataWord::from_le_bytes(&bytes);
             let found = word.value();

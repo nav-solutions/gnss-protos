@@ -1,11 +1,10 @@
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// [GpsDataByte] aligned to 32 bits
 pub enum GpsDataByte {
-    /// 2-bit MSB padding.
-    /// Usually used at the beginning or end of GPS word to align GPS stream correctly.
-    MsbPadded(u8),
+    /// 2-bit LSB padding, used to align the received bits to [u32].
+    LsbPadded(u8),
 
-    /// Plain byte (no padding)
+    /// Plain byte (no padding, only meaningful bits).
     Byte(u8),
 }
 
@@ -17,30 +16,29 @@ impl Default for GpsDataByte {
 
 impl core::fmt::LowerExp for GpsDataByte {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MsbPadded(value) => write!(f, "0x{:02}X", value),
-            Self::Byte(value) => write!(f, "0x{:02}X", value),
-        }
+        write!(f, "0x{:02X}", self.as_u8())
     }
 }
 
 impl GpsDataByte {
-    /// Stores provided byte as 2-bit MSB padded [u8]
-    pub fn msb_padded(byte: u8) -> Self {
-        Self::MsbPadded(byte & 0x3f)
+    /// Stores provided un-padded byte with 2-bit LSB padding,
+    /// to align one word to [u32].
+    pub fn padded(byte: u8) -> Self {
+        Self::LsbPadded(byte << 2)
     }
 
+    /// Interprets internal value as [u8] to process
+    /// internal byte correctly.
     pub(crate) fn as_u8(&self) -> u8 {
         match self {
-            Self::MsbPadded(value) => value & 0x3f,
+            Self::LsbPadded(value) => (value >> 2) & 0x3f,
             Self::Byte(value) => *value,
         }
     }
 
+    /// Interprets internal value as [u32] to process
+    /// internal byte correctly.
     pub(crate) fn as_u32(&self) -> u32 {
-        match self {
-            Self::MsbPadded(value) => (value & 0x3f) as u32,
-            Self::Byte(value) => *value as u32,
-        }
+        self.as_u8() as u32
     }
 }

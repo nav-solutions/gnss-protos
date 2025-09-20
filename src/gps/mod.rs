@@ -45,11 +45,11 @@ pub use frame1::GpsQzssFrame1;
 mod frame_id;
 pub use frame_id::GpsQzssFrameId;
 
-// mod how;
-// pub use how::GpsQzssHow;
+mod how;
+pub use how::GpsQzssHow;
 
-// mod tlm;
-// pub use tlm::GpsQzssTelemetry;
+mod tlm;
+pub use tlm::GpsQzssTelemetry;
 
 // mod frame;
 // pub use frame::GpsQzssFrame;

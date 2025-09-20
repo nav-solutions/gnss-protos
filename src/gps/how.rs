@@ -1,4 +1,4 @@
-use crate::gps::GpsError;
+use crate::gps::{GpsDataWord, GpsError};
 
 const TOW_MASK: u32 = 0x3fffE000;
 const TOW_SHIFT: u32 = 13;
@@ -110,11 +110,15 @@ impl GpsQzssHow {
         }
     }
 
-    pub(crate) fn decode(dword: u32) -> Result<Self, GpsError> {
-        let tow = (dword & TOW_MASK) >> TOW_SHIFT;
-        let frame_id = GpsQzssFrameId::decode(((dword & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
-        let alert = (dword & ALERT_MASK) > 0;
-        let anti_spoofing = (dword & AS_MASK) > 0;
+    /// Decodes [GpsQzssHow] from this [GpsDataWord].
+    /// Subframe must be supported for this to work.
+    pub(crate) fn from_word(word: GpsDataWord) -> Result<Self, GpsError> {
+        let value = word.value();
+
+        let tow = (value & TOW_MASK) >> TOW_SHIFT;
+        let frame_id = GpsQzssFrameId::decode(((value & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
+        let alert = (value & ALERT_MASK) > 0;
+        let anti_spoofing = (value & AS_MASK) > 0;
 
         Ok(Self {
             alert,
@@ -124,9 +128,9 @@ impl GpsQzssHow {
         })
     }
 
-    /// Encodes this [GpsQzssHow] word as [u32]
-    pub(crate) fn encode(&self) -> u32 {
-        let mut value = 0;
+    /// Encodes this [GpsQzssHow] word as [GpsDataWord].
+    pub(crate) fn to_word(&self) -> GpsDataWord {
+        let mut value = 0u32;
 
         if self.alert {
             value |= ALERT_MASK;
@@ -139,29 +143,85 @@ impl GpsQzssHow {
         value |= ((self.tow / 6) & 0x1ffff) << TOW_SHIFT;
         value += (self.frame_id.encode() as u32) << FRAMEID_SHIFT;
 
-        value
+        GpsDataWord::from(value)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::{TOW_MASK, TOW_SHIFT};
-    use crate::gps::{GpsQzssFrameId, GpsQzssHow};
+    use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow};
 
     #[test]
     fn how_encoding() {
         for (dword, tow, frame_id, alert, anti_spoofing) in [
-            (0x1527C173, 259956, GpsQzssFrameId::Ephemeris1, false, false),
-            (0x1527C973, 259956, GpsQzssFrameId::Ephemeris1, false, true),
-            (0x1527EA1B, 259962, GpsQzssFrameId::Ephemeris2, false, true),
-            (0x1527E21B, 259962, GpsQzssFrameId::Ephemeris2, false, false),
-            (0x1527F21B, 259962, GpsQzssFrameId::Ephemeris2, true, false),
-            (0x1527FA1B, 259962, GpsQzssFrameId::Ephemeris2, true, true),
-            (0x15280BDB, 259968, GpsQzssFrameId::Ephemeris3, false, true),
-            (0x152803DB, 259968, GpsQzssFrameId::Ephemeris3, false, false),
-            (0x152813DB, 259968, GpsQzssFrameId::Ephemeris3, true, false),
+            (
+                0x1527C173u32,
+                259956,
+                GpsQzssFrameId::Ephemeris1,
+                false,
+                false,
+            ),
+            (
+                0x1527C973u32,
+                259956,
+                GpsQzssFrameId::Ephemeris1,
+                false,
+                true,
+            ),
+            (
+                0x1527EA1Bu32,
+                259962,
+                GpsQzssFrameId::Ephemeris2,
+                false,
+                true,
+            ),
+            (
+                0x1527E21Bu32,
+                259962,
+                GpsQzssFrameId::Ephemeris2,
+                false,
+                false,
+            ),
+            (
+                0x1527F21Bu32,
+                259962,
+                GpsQzssFrameId::Ephemeris2,
+                true,
+                false,
+            ),
+            (
+                0x1527FA1Bu32,
+                259962,
+                GpsQzssFrameId::Ephemeris2,
+                true,
+                true,
+            ),
+            (
+                0x15280BDBu32,
+                259968,
+                GpsQzssFrameId::Ephemeris3,
+                false,
+                true,
+            ),
+            (
+                0x152803DBu32,
+                259968,
+                GpsQzssFrameId::Ephemeris3,
+                false,
+                false,
+            ),
+            (
+                0x152813DBu32,
+                259968,
+                GpsQzssFrameId::Ephemeris3,
+                true,
+                false,
+            ),
         ] {
-            let gps_how = GpsQzssHow::decode(dword).unwrap_or_else(|e| {
+            let gps_word = GpsDataWord::from(dword);
+
+            let gps_how = GpsQzssHow::from_word(gps_word).unwrap_or_else(|e| {
                 panic!("failed to decode gps-how from 0x{:08X} : {}", dword, e);
             });
 
@@ -173,16 +233,8 @@ mod test {
             assert_eq!(gps_how.frame_id, frame_id);
             assert_eq!(gps_how.anti_spoofing, anti_spoofing);
 
-            let encoded = gps_how.encode();
-
-            let decoded = GpsQzssHow::decode(encoded).unwrap_or_else(|e| {
-                panic!(
-                    "failed to decode previously encoded gps-how (0x{:08X}) : {}",
-                    encoded, e
-                );
-            });
-
-            assert_eq!(decoded, gps_how);
+            let encoded = gps_how.to_word();
+            assert_eq!(gps_how.to_word(), gps_word, "Encoding reciprocal issue");
         }
     }
 }
