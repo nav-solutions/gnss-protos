@@ -209,7 +209,7 @@ pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> 
         .enumerate()
         .map(|(index, byte)| {
             if index % 4 == 0 {
-                GpsDataByte::msb_padded(*byte)
+                GpsDataByte::padded(*byte)
             } else {
                 GpsDataByte::Byte(*byte)
             }
@@ -231,7 +231,7 @@ fn test_from_ublox_be_bytes() {
     assert_eq!(
         bytes,
         [
-            GpsDataByte::MsbPadded(0x22),
+            GpsDataByte::LsbPadded(0x22),
             GpsDataByte::Byte(0xC1),
             GpsDataByte::Byte(0x3E),
             GpsDataByte::Byte(0x1B)
@@ -256,27 +256,27 @@ fn test_from_ublox_be_bytes() {
 
     assert_eq!(bytes.len(), 40);
 
-    assert_eq!(bytes[0], GpsDataByte::MsbPadded(0x22));
+    assert_eq!(bytes[0], GpsDataByte::LsbPadded(0x22));
     assert_eq!(bytes[1], GpsDataByte::Byte(0xC1));
     assert_eq!(bytes[2], GpsDataByte::Byte(0x3E));
     assert_eq!(bytes[3], GpsDataByte::Byte(0x1B));
 
-    assert_eq!(bytes[4], GpsDataByte::MsbPadded(0x33));
+    assert_eq!(bytes[4], GpsDataByte::LsbPadded(0x33));
     assert_eq!(bytes[5], GpsDataByte::Byte(0xC9));
     assert_eq!(bytes[6], GpsDataByte::Byte(0x27));
     assert_eq!(bytes[7], GpsDataByte::Byte(0x15));
 
-    assert_eq!(bytes[8], GpsDataByte::MsbPadded(0x13));
+    assert_eq!(bytes[8], GpsDataByte::LsbPadded(0x13));
     assert_eq!(bytes[9], GpsDataByte::Byte(0xE4));
     assert_eq!(bytes[10], GpsDataByte::Byte(0x00));
     assert_eq!(bytes[11], GpsDataByte::Byte(0x04));
 
-    assert_eq!(bytes[12], GpsDataByte::MsbPadded(0x10));
+    assert_eq!(bytes[12], GpsDataByte::LsbPadded(0x10));
     assert_eq!(bytes[13], GpsDataByte::Byte(0x4F));
     assert_eq!(bytes[14], GpsDataByte::Byte(0x5D));
     assert_eq!(bytes[15], GpsDataByte::Byte(0x31));
 
-    assert_eq!(bytes[16], GpsDataByte::MsbPadded(0x17));
+    assert_eq!(bytes[16], GpsDataByte::LsbPadded(0x17));
     assert_eq!(bytes[17], GpsDataByte::Byte(0x44));
     assert_eq!(bytes[18], GpsDataByte::Byte(0xE6));
     assert_eq!(bytes[19], GpsDataByte::Byte(0xD7));

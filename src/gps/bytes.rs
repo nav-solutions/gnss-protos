@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 /// [GpsDataByte] aligned to 32 bits
 pub enum GpsDataByte {
     /// 2-bit LSB padding, used to align the received bits to [u32].
@@ -8,15 +8,22 @@ pub enum GpsDataByte {
     Byte(u8),
 }
 
-impl Default for GpsDataByte {
-    fn default() -> Self {
-        Self::Byte(0)
+impl std::fmt::Debug for GpsDataByte {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:x}", self)
     }
 }
 
-impl core::fmt::LowerExp for GpsDataByte {
+impl core::fmt::LowerHex for GpsDataByte {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{:02X}", self.as_u8())
+    }
+}
+
+impl Default for GpsDataByte {
+    /// Creates a default null [GpsDataByte::Byte].
+    fn default() -> Self {
+        Self::Byte(0)
     }
 }
 

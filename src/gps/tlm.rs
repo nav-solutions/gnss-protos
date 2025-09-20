@@ -1,12 +1,10 @@
-use crate::gps::{GpsDataWord, GpsError};
+use crate::gps::{GpsDataWord, GpsError, GPS_PARITY_MASK, GPS_PARITY_SIZE};
 
-const PREAMBLE_MASK: u32 = 0x42C00000;
-
-const MESSAGE_MASK: u32 = 0x003fff00;
+const PREAMBLE_MASK: u32 = 0x22C0_0000;
 const MESSAGE_SHIFT: u32 = 8;
-
-const INTEGRITY_BIT_MASK: u32 = 0x00000080;
-const RESERVED_BIT_MASK: u32 = 0x00000040;
+const MESSAGE_MASK: u32 = 0x003f_ff00;
+const INTEGRITY_BIT_MASK: u32 = 0x0000_0080;
+const RESERVED_BIT_MASK: u32 = 0x0000_0040;
 
 /// [GpsQzssTelemetry] marks the beginning of each frame
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -69,7 +67,7 @@ impl GpsQzssTelemetry {
     pub(crate) fn from_word(word: GpsDataWord) -> Result<Self, GpsError> {
         let value = word.value();
 
-        if value & PREAMBLE_MASK == PREAMBLE_MASK {
+        if value & PREAMBLE_MASK != PREAMBLE_MASK {
             return Err(GpsError::InvalidPreamble);
         };
 
@@ -86,7 +84,7 @@ impl GpsQzssTelemetry {
 
     /// Encodes this [GpsQzssTelemetry] as [GpsDataWord].
     pub(crate) fn to_word(&self) -> GpsDataWord {
-        let mut value = 0x22C00000u32;
+        let mut value = PREAMBLE_MASK;
 
         value |= (self.message as u32) << MESSAGE_SHIFT;
 
@@ -98,6 +96,10 @@ impl GpsQzssTelemetry {
             value |= RESERVED_BIT_MASK;
         }
 
+        // TODO parity
+
+        value <<= 2;
+
         GpsDataWord::from(value)
     }
 }
@@ -107,12 +109,13 @@ mod tlm {
     use crate::gps::{GpsDataWord, GpsQzssTelemetry};
 
     #[test]
-    fn tlm_encoding() {
+    fn encoding() {
         for (dword, message, integrity, reserved_bit) in [
-            (0x22C13E00u32, 0x13E, false, false),
-            (0x22C13F80u32, 0x13F, true, false),
-            (0x22C13FC0u32, 0x13F, true, true),
-            (0x22C13F40u32, 0x13F, false, true),
+            (0x8B000000, 0x0000, false, false),
+            (0x8B123400, 0x048D, false, false),
+            (0x8B123600, 0x048D, true, false),
+            (0x8B123700, 0x048D, true, true),
+            (0x8B123500, 0x048D, false, true),
         ] {
             let gps_word = GpsDataWord::from(dword);
 
@@ -123,8 +126,6 @@ mod tlm {
             assert_eq!(tlm.message, message);
             assert_eq!(tlm.integrity, integrity);
             assert_eq!(tlm.reserved_bit, reserved_bit);
-
-            let encoded = tlm.to_word();
             assert_eq!(tlm.to_word(), gps_word, "Reciprocal issue");
         }
     }
