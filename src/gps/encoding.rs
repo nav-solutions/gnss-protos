@@ -151,7 +151,7 @@ impl GpsQzssFrame {
 
                 let af2 = (subf.af2 * 2.0_f64.powi(55)).round() as u8;
                 let af1 = (subf.af1 * 2.0_f64.powi(43)).round() as u16;
-                let af0 = (subf.af0 * 2.0_f64.powi(10)).round() as u32;
+                let af0 = (subf.af0 * 2.0_f64.powi(31)).round() as u32;
 
                 encoded[30] = af2;
                 encoded[31] = ((af1 & 0xff00) >> 8) as u8;
@@ -417,6 +417,7 @@ mod encoding {
                     .with_all_signals_ok()
                     .with_time_of_clock_seconds(12_000)
                     .with_l2p_flag()
+                    .with_clock_offset_nanoseconds(1.0)
                     .with_clock_drift_seconds_s(1E-12)
                     .with_clock_drift_rate_seconds_s2(1E-15)
                     .with_reserved23_word(0x12_3456)
@@ -467,7 +468,7 @@ mod encoding {
         assert_eq!(encoded[33], 0x00);
         assert_eq!(encoded[34], 0x00);
         assert_eq!(encoded[35], 0x00);
-        assert_eq!(encoded[36], 0x00);
+        assert_eq!(encoded[36], 0x20);
         assert_eq!(encoded[37], 0x00);
 
         let frame = GpsQzssFrame::default()
@@ -490,8 +491,9 @@ mod encoding {
                     .with_all_signals_ok()
                     .with_ca_or_p_l2_mask(0x1)
                     .with_user_range_accuracy_m(24.0)
+                    .with_clock_offset_nanoseconds(2.0)
                     .with_clock_drift_seconds_s(2E-12)
-                    .with_clock_drift_rate_seconds_s2(2E-15)
+                    .with_clock_drift_rate_seconds_s2(2E-15),
             ));
 
         let encoded = frame.encode_raw();
@@ -534,7 +536,7 @@ mod encoding {
         assert_eq!(encoded[33], 0x00);
         assert_eq!(encoded[34], 0x00);
         assert_eq!(encoded[35], 0x00);
-        assert_eq!(encoded[36], 0x00);
+        assert_eq!(encoded[36], 0x40);
         assert_eq!(encoded[37], 0x00);
 
         let frame = GpsQzssFrame::default()

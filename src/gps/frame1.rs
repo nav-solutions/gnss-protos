@@ -310,8 +310,14 @@ impl GpsQzssFrame1 {
     }
 
     /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in seconds.
-    pub fn with_clock_offset_seconds(mut self, af0: f64) -> Self {
-        self.af0 = af0;
+    pub fn with_clock_offset_seconds(mut self, a0_seconds: f64) -> Self {
+        self.af0 = a0_seconds;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in nanoseconds.
+    pub fn with_clock_offset_nanoseconds(mut self, a0_nanos: f64) -> Self {
+        self.af0 = a0_nanos * 1E-9;
         self
     }
 
