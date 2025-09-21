@@ -328,14 +328,15 @@ mod decoder {
 
         let (size, decoded) = decoder.decode(&buffer, 1024);
 
+        // TODO
         assert_eq!(size, GPS_FRAME_BITS, "returned invalid size");
 
         let decoded = decoded.unwrap_or_else(|| {
             panic!("did not decoded GPS frame!");
         });
 
-        assert_eq!(decoded.telemetry.message, 0);
-        assert_eq!(decoded.telemetry.integrity, false);
-        assert_eq!(decoded.telemetry.reserved_bit, false);
+        assert_eq!(decoded.telemetry.message, 0x1234);
+        assert_eq!(decoded.telemetry.integrity, true);
+        assert_eq!(decoded.telemetry.reserved_bit, true);
     }
 }

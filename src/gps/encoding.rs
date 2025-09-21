@@ -484,6 +484,7 @@ mod encoding {
         let (size, decoded) = decoder.decode(&encoded, encoded_size);
 
         assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+
         assert_eq!(
             decoded,
             Some(frame),

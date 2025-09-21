@@ -134,7 +134,7 @@ impl<const N: usize> FileReader<N> {
 #[test]
 fn test_zeros_padder() {
     let mut buffer = [0; 1024];
-    let mut file = FileReader::<1024>::new("data/GPS/eph-1.bin", 0);
+    let mut file = FileReader::<1024>::new("data/GPS/eph1.bin", 0);
 
     file.read(&mut buffer).unwrap_or_else(|e| {
         panic!("Failed to read test data: {}", e);
@@ -169,9 +169,9 @@ fn test_file_reader() {
     });
 
     assert_eq!(buffer[0], 0x8B);
-    assert_eq!(buffer[1], 0x48);
-    assert_eq!(buffer[2], 0x10);
-    assert_eq!(buffer[3], 0x04);
+    assert_eq!(buffer[1], 0x12);
+    assert_eq!(buffer[2], 0xD3);
+    assert_eq!(buffer[3], 0x02);
 }
 
 #[cfg(feature = "gps")]

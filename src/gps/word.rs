@@ -106,13 +106,13 @@ mod test {
     #[test]
     fn from_u32() {
         for (value, expected_value) in [
-            (0x32563412u32, 0x32563412),
-            (0xF2563412u32, 0x32563412),
-            (0x00563410u32, 0x00563410),
-            (0x00333410u32, 0x00333410),
+            (0x32563412u32, 0x32563412 >> 2),
+            (0xF2563412u32, 0xF2563412 >> 2),
+            (0xFFFF3412u32, 0xFFFF3412 >> 2),
+            (0xFFFF34FFu32, 0xFFFF34FF >> 2),
         ] {
             let word = GpsDataWord::from(value);
-            assert_eq!(word.value(), expected_value);
+            assert_eq!(word.value(), expected_value, "got 0x{:08X} expecting 0x{:08X}", word.value(), expected_value);
         }
     }
 }
