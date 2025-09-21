@@ -143,14 +143,14 @@ impl GpsQzssFrame {
                 encoded[27] = (subf.iodc & 0x03) as u8;
                 encoded[27] <<= 6;
 
-                let toc = subf.toc * 16;
+                let toc = subf.toc / 16;
                 encoded[27] = ((toc & 0xfc00) >> 10) as u8;
                 encoded[28] = ((toc & 0x03fc) >> 2) as u8;
                 encoded[29] = (toc & 0x0003) as u8;
                 encoded[29] <<= 6; // TODO
 
-                let af2 = (subf.af2 * 2.0_f64.powi(10)).round() as u8;
-                let af1 = (subf.af1 * 2.0_f64.powi(10)).round() as u16;
+                let af2 = (subf.af2 * 2.0_f64.powi(55)).round() as u8;
+                let af1 = (subf.af1 * 2.0_f64.powi(43)).round() as u16;
                 let af0 = (subf.af0 * 2.0_f64.powi(10)).round() as u32;
 
                 encoded[30] = af2;
@@ -415,11 +415,14 @@ mod encoding {
                     .with_week(0x123)
                     .with_iodc(0x123)
                     .with_all_signals_ok()
+                    .with_time_of_clock_seconds(12_000)
                     .with_l2p_flag()
+                    .with_clock_drift_seconds_s(1E-12)
+                    .with_clock_drift_rate_seconds_s2(1E-15)
                     .with_reserved23_word(0x12_3456)
                     .with_reserved24_word1(0x34_5678)
                     .with_reserved24_word2(0x98_7654)
-                    .with_total_group_delay_nanos(5.0)
+                    .with_total_group_delay_nanos(0.0)
                     .with_ca_or_p_l2_mask(0x3)
                     .with_user_range_accuracy_m(4.0),
             ));
@@ -453,14 +456,14 @@ mod encoding {
         assert_eq!(encoded[22], 0x00);
         assert_eq!(encoded[23], 0x00);
         assert_eq!(encoded[24], 0x00);
-        assert_eq!(encoded[25], 0x0B);
-        assert_eq!(encoded[26], 0x00);
+        assert_eq!(encoded[25], 0x00);
+        assert_eq!(encoded[26], 0x08);
         assert_eq!(encoded[27], 0x00);
-        assert_eq!(encoded[28], 0x00);
-        assert_eq!(encoded[29], 0x00);
-        assert_eq!(encoded[30], 0x00);
+        assert_eq!(encoded[28], 0xBB);
+        assert_eq!(encoded[29], 0x80);
+        assert_eq!(encoded[30], 0x24);
         assert_eq!(encoded[31], 0x00);
-        assert_eq!(encoded[32], 0x00);
+        assert_eq!(encoded[32], 0x09);
         assert_eq!(encoded[33], 0x00);
         assert_eq!(encoded[34], 0x00);
         assert_eq!(encoded[35], 0x00);
@@ -486,7 +489,9 @@ mod encoding {
                     .with_iodc(0x345)
                     .with_all_signals_ok()
                     .with_ca_or_p_l2_mask(0x1)
-                    .with_user_range_accuracy_m(24.0),
+                    .with_user_range_accuracy_m(24.0)
+                    .with_clock_drift_seconds_s(2E-12)
+                    .with_clock_drift_rate_seconds_s2(2E-15)
             ));
 
         let encoded = frame.encode_raw();
@@ -519,13 +524,13 @@ mod encoding {
         assert_eq!(encoded[23], 0x00);
         assert_eq!(encoded[24], 0x00);
         assert_eq!(encoded[25], 0x00);
-        assert_eq!(encoded[26], 0x00);
+        assert_eq!(encoded[26], 0x11);
         assert_eq!(encoded[27], 0x00);
         assert_eq!(encoded[28], 0x00);
         assert_eq!(encoded[29], 0x00);
-        assert_eq!(encoded[30], 0x00);
+        assert_eq!(encoded[30], 0x48);
         assert_eq!(encoded[31], 0x00);
-        assert_eq!(encoded[32], 0x00);
+        assert_eq!(encoded[32], 0x12);
         assert_eq!(encoded[33], 0x00);
         assert_eq!(encoded[34], 0x00);
         assert_eq!(encoded[35], 0x00);

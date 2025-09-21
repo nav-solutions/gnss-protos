@@ -309,20 +309,20 @@ impl GpsQzssFrame1 {
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term
-    pub fn with_af0(mut self, af0: f64) -> Self {
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in seconds.
+    pub fn with_clock_offset_seconds(mut self, af0: f64) -> Self {
         self.af0 = af0;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (1) term
-    pub fn with_af1(mut self, af1: f64) -> Self {
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (1) term (in seconds per second).
+    pub fn with_clock_drift_seconds_s(mut self, af1: f64) -> Self {
         self.af1 = af1;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (2) term
-    pub fn with_af2(mut self, af2: f64) -> Self {
+    /// Copies and returns [GpsQzssFrame1] with updated clock correction (2) term (in seconds per squared second).
+    pub fn with_clock_drift_rate_seconds_s2(mut self, af2: f64) -> Self {
         self.af2 = af2;
         self
     }
