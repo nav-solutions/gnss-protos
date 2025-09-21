@@ -808,6 +808,9 @@ mod encoding {
                     .with_iodc(0x1)
                     .with_all_signals_ok()
                     .with_l2p_flag()
+                    .with_clock_offset_nanoseconds(1.0)
+                    .with_clock_drift_seconds_s(1E-12)
+                    .with_clock_drift_rate_seconds_s2(1E-15)
                     .with_reserved23_word(0x12_3456)
                     .with_reserved24_word1(0x34_5678)
                     .with_reserved24_word2(0x98_7654)
@@ -843,8 +846,8 @@ mod encoding {
             subframe.toc += 1;
 
             subframe.af0 += 1.0E-9;
-            subframe.af1 += 1.0E-10;
-            subframe.af2 += 1.0E-11;
+            subframe.af1 += 1.0E-12;
+            subframe.af2 += 1.0E-15;
 
             subframe.tgd += 1.0E-9;
 

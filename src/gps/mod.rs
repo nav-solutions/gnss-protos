@@ -30,8 +30,8 @@ pub use word::GpsDataWord;
 
 // mod cdma;
 
-// mod decoder;
-// pub use decoder::GpsQzssDecoder;
+mod decoder;
+pub use decoder::GpsQzssDecoder;
 
 mod decoding;
 mod encoding;
