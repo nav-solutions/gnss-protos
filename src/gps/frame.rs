@@ -3,13 +3,14 @@ use crate::gps::{GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry};
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame {
+    /// [GpsQzssTelemetry] describes the following frame and contains
+    /// the sync-byter, therefore initiates a [GpsQzssFrame].
+    pub telemetry: GpsQzssTelemetry,
+
     /// [GpsQzssHow] describes following frame.
     pub how: GpsQzssHow,
 
-    /// [GpsQzssTelemetry] describes following frame.
-    pub telemetry: GpsQzssTelemetry,
-
-    /// [GpsQzssSubframe] depends on associated How.
+    /// [GpsQzssSubframe] depends on associated [GpsQzssHow].
     pub subframe: GpsQzssSubframe,
 }
 

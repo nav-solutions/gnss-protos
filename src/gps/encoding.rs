@@ -311,7 +311,7 @@ mod encoding {
     use crate::tests::init_logger;
 
     use crate::gps::{
-        // GpsQzssDecoder,
+        GpsQzssDecoder,
         GpsQzssFrame,
         GpsQzssFrame1,
         // GpsQzssFrame2, GpsQzssFrame3,
@@ -335,6 +335,9 @@ mod encoding {
 
     #[test]
     fn default_frame() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
         let default = GpsQzssFrame::default();
         let encoded = default.encode_raw();
         let encoded_size = encoded.len();
@@ -383,11 +386,13 @@ mod encoding {
         assert_eq!(encoded[36], 0x00);
         assert_eq!(encoded[37], 0x00);
 
-        // let mut decoder = GpsQzssDecoder::default();
+        // reciprocal
+        let mut decoder = GpsQzssDecoder::default();
 
-        // let (size, decoded) = decoder.decode(&encoded, encoded_size);
-        // assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
-        // assert_eq!(decoded, Some(default), "reciprocal failed");
+        let (size, decoded) = decoder.decode(&encoded, encoded_size);
+
+        assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+        assert_eq!(decoded, Some(default), "reciprocal failed");
     }
 
     #[test]
@@ -395,7 +400,7 @@ mod encoding {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        // let mut decoder = GpsQzssDecoder::default();
+        let mut decoder = GpsQzssDecoder::default();
 
         let frame = GpsQzssFrame::default()
             .with_telemetry(
@@ -406,7 +411,7 @@ mod encoding {
             )
             .with_how_word(
                 GpsQzssHow::default()
-                    .with_tow_seconds(0x5_6789)
+                    .with_tow_seconds(0x1_6789)
                     .with_alert_bit()
                     .with_anti_spoofing(),
             )
@@ -423,12 +428,14 @@ mod encoding {
                     .with_reserved23_word(0x12_3456)
                     .with_reserved24_word1(0x34_5678)
                     .with_reserved24_word2(0x98_7654)
-                    .with_total_group_delay_nanos(0.0)
+                    .with_reserved16_word(0x1234)
+                    .with_total_group_delay_nanos(1.0)
                     .with_ca_or_p_l2_mask(0x3)
                     .with_user_range_accuracy_m(4.0),
             ));
 
         let encoded = frame.encode_raw();
+        let encoded_size = encoded.len();
 
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x12);
@@ -454,10 +461,10 @@ mod encoding {
         assert_eq!(encoded[19], 0x61);
         assert_eq!(encoded[20], 0xD9);
         assert_eq!(encoded[21], 0x50);
-        assert_eq!(encoded[22], 0x00);
-        assert_eq!(encoded[23], 0x00);
-        assert_eq!(encoded[24], 0x00);
-        assert_eq!(encoded[25], 0x00);
+        assert_eq!(encoded[22], 0x01);
+        assert_eq!(encoded[23], 0x23);
+        assert_eq!(encoded[24], 0x40);
+        assert_eq!(encoded[25], 0x20);
         assert_eq!(encoded[26], 0x08);
         assert_eq!(encoded[27], 0x00);
         assert_eq!(encoded[28], 0xBB);
@@ -470,6 +477,19 @@ mod encoding {
         assert_eq!(encoded[35], 0x00);
         assert_eq!(encoded[36], 0x20);
         assert_eq!(encoded[37], 0x00);
+
+        // reciprocal
+        let mut decoder = GpsQzssDecoder::default();
+
+        let (size, decoded) = decoder.decode(&encoded, encoded_size);
+
+        assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+        assert_eq!(
+            decoded,
+            Some(frame),
+            "reciprocal failed, got {:#?}",
+            decoded
+        );
 
         let frame = GpsQzssFrame::default()
             .with_telemetry(

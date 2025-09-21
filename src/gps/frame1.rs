@@ -200,6 +200,12 @@ impl GpsQzssFrame1 {
         self
     }
 
+    /// Copies and returns [GpsQzssFrame1] with updated 16-bit reserved word
+    pub fn with_reserved16_word(mut self, reserved: u16) -> Self {
+        self.reserved_word7 = reserved;
+        self
+    }
+
     /// Returns true if [GpsQzssFrame1] indicates all-signals are OK.
     pub fn healthy(&self) -> bool {
         self.health == 0
