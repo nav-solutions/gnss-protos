@@ -52,9 +52,8 @@ impl GpsQzssFrame {
         let mut encoded = [0; GPS_FRAME_BYTES];
 
         encoded[0] = GPS_PREAMBLE_BYTE;
-        encoded[1] = ((self.telemetry.message & 0xff00) >> 8) as u8;
-
-        encoded[2] = (self.telemetry.message & 0xff) as u8;
+        encoded[1] = ((self.telemetry.message & 0x3fc0) >> 6) as u8;
+        encoded[2] = (self.telemetry.message & 0x3f) as u8;
         encoded[2] <<= 2;
 
         if self.telemetry.integrity {
@@ -65,7 +64,7 @@ impl GpsQzssFrame {
             encoded[2] |= 0x01;
         }
 
-        encoded[3] <<= 2; // TODO
+        encoded[3] <<= 2; // TODO (PAR)
         encoded[3] |= ((self.how.tow & 0x1_8000) >> 15) as u8;
 
         encoded[4] = ((self.how.tow & 0x0_7f80) >> 7) as u8;
@@ -83,7 +82,7 @@ impl GpsQzssFrame {
 
         encoded[6] |= self.how.frame_id.encode() << 4;
 
-        encoded[7] <<= 4; // TODO
+        encoded[7] <<= 4; // TODO (PAR)
 
         match self.how.frame_id {
             GpsQzssFrameId::Ephemeris1 => {
@@ -102,7 +101,7 @@ impl GpsQzssFrame {
                 encoded[10] <<= 6;
                 encoded[10] |= (((subf.iodc & 0x300) >> 8) as u8) << 4;
 
-                encoded[11] <<= 6; // TODO
+                encoded[11] <<= 6; // TODO (PAR)
 
                 if subf.l2_p_data_flag {
                     encoded[11] |= 0x20;
@@ -438,8 +437,8 @@ mod encoding {
         let encoded_size = encoded.len();
 
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
-        assert_eq!(encoded[1], 0x12);
-        assert_eq!(encoded[2], 0x34 << 2 | 0x02 | 0x01);
+        assert_eq!(encoded[1], 0x48);
+        assert_eq!(encoded[2], 0xD0 | 0x02 | 0x01);
         assert_eq!(encoded[3], 0x02);
 
         assert_eq!(encoded[4], 0xCF);

@@ -11,13 +11,16 @@
 GNSS-Protos
 ===========
 
-The idea behind this library is to offer an easy to use, efficient and regrouped
-framework to encode & decode GNSS protocols.
+The idea behind this library is to offer an easy to use, efficient and compelling framework
+to major GNSS protocols.
 
 You can use this API to learn and go deeper into each protocol, as we strive to document
 each data bit correctly (refer to the online API).
 
-All protocols are gated under a library feature, so you can narrow it down to your use case.
+We have one option per protocol, for example the GPS/QZSS protocol is activated by `gps`.
+So it is possible to narrow-down this library to your own use case.
+
+The library offers both protocol encoding & decoding.
 
 Supported protocols
 ===================
@@ -31,7 +34,7 @@ The `gps` library feature activates support of GPS/QZSS protocol.
 
 Currently we support Ephemeris frames 1, 2 and 3, which is sufficient for real-time
 navigation (we do not support the Almanach frames).
-Frames parity is not fully implemented either.
+The frame parity calculator is being beta-tested.
 
 We provide methods to both encode and decode data frames, and methods
 to work from a stream of padded bytes (re-aligned) (2) or a bit stream buffer for real-time interfaces (1):
