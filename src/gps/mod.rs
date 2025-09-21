@@ -33,7 +33,7 @@ pub use word::GpsDataWord;
 // mod decoder;
 // pub use decoder::GpsQzssDecoder;
 
-// mod decoding;
+mod decoding;
 mod encoding;
 
 mod errors;

@@ -1,19 +1,14 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::Read, sync::Once};
 
-#[cfg(feature = "std")]
-use std::sync::Once;
-
-#[cfg(feature = "std")]
 use log::LevelFilter;
 
-#[cfg(feature = "gps")]
-use crate::gps::GpsDataByte;
+use crate::gps::{
+    GpsDataByte, GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
+};
 
-#[cfg(feature = "std")]
 static INIT: Once = Once::new();
 
 pub fn init_logger() {
-    #[cfg(feature = "std")]
     INIT.call_once(|| {
         env_logger::builder()
             .is_test(true)
@@ -21,29 +16,6 @@ pub fn init_logger() {
             .init();
     });
 }
-
-// TLM : 10001011 0000000000000000 101010   (préambule + padding + parité fictive)
-// HOW : 00000000000000000 0001  111000   (Z-count fictif + SubframeID=1 + parité)
-// W3  : 010101010101010101010101 101010
-// W4  : 001100110011001100110011 110011
-// W5  : 111100001111000011110000 000111
-// W6  : 000111000111000111000111 111000
-// W7  : 101010101010101010101010 010101
-// W8  : 011001100110011001100110 101101
-// W9  : 110000110000110000110000 111100
-// W10 : 111111000000111111000000 000111
-pub const GPS_EPH1_DATA: [u8; 40] = [
-    0x8B, // PREAMBLE
-    0x00, 0x00, // TLM-MSG+I+R
-    0x17, // PAR(TLM=5) + 2b HOW=3
-    0x00, 0x00, // HOW.TOW + A
-    0x90, // A/S + FID=1
-    0x00, // PAR(HOW)
-    0x00, // P1, P2, PAR(MSBx2)
-    0x00, // PAR(LSBx4), BIT29=0, BIT30=0
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-];
 
 /// Inserts desired number of zero (bits) at the begginning of a frame
 pub fn insert_zeros(slice: &[u8], shift_bits: usize) -> Vec<u8> {
@@ -203,45 +175,40 @@ fn test_file_reader() {
 }
 
 #[cfg(feature = "gps")]
-pub fn from_ublox_be_bytes<const N: usize>(bytes: &[u8; N]) -> Vec<GpsDataByte> {
-    bytes
-        .iter()
-        .enumerate()
-        .map(|(index, byte)| {
-            if index % 4 == 0 {
-                GpsDataByte::padded(*byte)
-            } else {
-                GpsDataByte::Byte(*byte)
-            }
-        })
-        .collect()
+pub fn from_ublox_bytes<const N: usize>(bytes: &[u8; N]) -> [GpsDataWord; GPS_WORDS_PER_FRAME] {
+    let mut ret: [GpsDataWord; GPS_WORDS_PER_FRAME] = Default::default();
+
+    let mut count = 0;
+    let mut value = 0u32;
+
+    for i in 0..N {
+        match i % 4 {
+            0 => value |= ((bytes[i % 4 + count * 4] << 2) as u32) << 24,
+            1 => value |= (bytes[i % 4 + count * 4] as u32) << 18,
+            2 => value |= (bytes[i % 4 + count * 4] as u32) << 10,
+            3 => {
+                value |= bytes[i % 4 + count * 4] as u32;
+                ret[count] = GpsDataWord::from(value);
+                count += 1;
+                value = 0;
+
+                if count == GPS_WORDS_PER_FRAME {
+                    return ret;
+                }
+            },
+            _ => unreachable!("compiler issue"),
+        }
+    }
+
+    ret
 }
 
 #[test]
-#[cfg(feature = "gps")]
-fn test_from_ublox_be_bytes() {
-    let ubx_bytes = [
-        // TLM
-        0x22, 0xC1, 0x3E, 0x1B,
-    ];
-
-    let bytes = from_ublox_be_bytes(&ubx_bytes);
-    assert_eq!(bytes.len(), 4);
-
-    assert_eq!(
-        bytes,
-        [
-            GpsDataByte::LsbPadded(0x22),
-            GpsDataByte::Byte(0xC1),
-            GpsDataByte::Byte(0x3E),
-            GpsDataByte::Byte(0x1B)
-        ]
-    );
-
-    let ubx_bytes = [
+fn test_from_ublox_bytes() {
+    let data = [
         // TLM
         0x22, 0xC1, 0x3E, 0x1B, // HOW
-        0x73, 0xC9, 0x27, 0x15, // WORD3
+        0x15, 0x27, 0xC9, 0x73, // WORD3
         0x13, 0xE4, 0x00, 0x04, //WORD4
         0x10, 0x4F, 0x5D, 0x31, //WORD5
         0x97, 0x44, 0xE6, 0xD7, // WORD6
@@ -252,32 +219,85 @@ fn test_from_ublox_be_bytes() {
         0x31, 0x2C, 0x30, 0x33,
     ];
 
-    let bytes = from_ublox_be_bytes(&ubx_bytes);
+    let words = from_ublox_bytes(&data);
 
-    assert_eq!(bytes.len(), 40);
+    let tlm = GpsQzssTelemetry::from_word(words[0]).unwrap_or_else(|e| {
+        panic!("failed to decode telemetry: {}", e);
+    });
 
-    assert_eq!(bytes[0], GpsDataByte::LsbPadded(0x22));
-    assert_eq!(bytes[1], GpsDataByte::Byte(0xC1));
-    assert_eq!(bytes[2], GpsDataByte::Byte(0x3E));
-    assert_eq!(bytes[3], GpsDataByte::Byte(0x1B));
+    assert_eq!(tlm.message, 0x13E);
+    assert_eq!(tlm.integrity, false);
+    assert_eq!(tlm.reserved_bit, false);
 
-    assert_eq!(bytes[4], GpsDataByte::LsbPadded(0x33));
-    assert_eq!(bytes[5], GpsDataByte::Byte(0xC9));
-    assert_eq!(bytes[6], GpsDataByte::Byte(0x27));
-    assert_eq!(bytes[7], GpsDataByte::Byte(0x15));
+    let how = GpsQzssHow::from_word(words[1]).unwrap_or_else(|e| {
+        panic!("failed to decode how: {}", e);
+    });
 
-    assert_eq!(bytes[8], GpsDataByte::LsbPadded(0x13));
-    assert_eq!(bytes[9], GpsDataByte::Byte(0xE4));
-    assert_eq!(bytes[10], GpsDataByte::Byte(0x00));
-    assert_eq!(bytes[11], GpsDataByte::Byte(0x04));
+    assert_eq!(how.alert, false);
+    assert_eq!(how.anti_spoofing, true);
+    assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris1);
 
-    assert_eq!(bytes[12], GpsDataByte::LsbPadded(0x10));
-    assert_eq!(bytes[13], GpsDataByte::Byte(0x4F));
-    assert_eq!(bytes[14], GpsDataByte::Byte(0x5D));
-    assert_eq!(bytes[15], GpsDataByte::Byte(0x31));
+    let data = [
+        // TLM
+        0x22, 0xC1, 0x3E, 0x1B, // HOW
+        0x15, 0x27, 0xEA, 0x1B, // WORD3
+        0x12, 0x7F, 0xF1, 0x65, // WORD4
+        0x8C, 0x68, 0x1F, 0x7C, // WORD5
+        0x02, 0x49, 0x34, 0x15, // WORD6
+        0xBF, 0xF8, 0x81, 0x1E, // WORD7
+        0x99, 0x1B, 0x81, 0x14, // W0RD8
+        0x04, 0x3E, 0x68, 0x6E, // WORD9
+        0x83, 0x34, 0x72, 0x21, // WORD10
+        0x90, 0x42, 0x9F, 0x7B,
+    ];
 
-    assert_eq!(bytes[16], GpsDataByte::LsbPadded(0x17));
-    assert_eq!(bytes[17], GpsDataByte::Byte(0x44));
-    assert_eq!(bytes[18], GpsDataByte::Byte(0xE6));
-    assert_eq!(bytes[19], GpsDataByte::Byte(0xD7));
+    let words = from_ublox_bytes(&data);
+
+    let tlm = GpsQzssTelemetry::from_word(words[0]).unwrap_or_else(|e| {
+        panic!("failed to decode telemetry: {}", e);
+    });
+
+    assert_eq!(tlm.message, 0x13E);
+    assert_eq!(tlm.integrity, false);
+    assert_eq!(tlm.reserved_bit, false);
+
+    let how = GpsQzssHow::from_word(words[1]).unwrap_or_else(|e| {
+        panic!("failed to decode how: {}", e);
+    });
+
+    assert_eq!(how.alert, false);
+    assert_eq!(how.anti_spoofing, true);
+    assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris2);
+
+    let data = [
+        // TLM
+        0x22, 0xC1, 0x3E, 0x1B, // HOW
+        0x15, 0x28, 0x0B, 0xDB, // WORD3
+        0x00, 0x0A, 0xEA, 0x34, // WORD4
+        0x03, 0x3C, 0xFF, 0xEE, // WORD5
+        0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+        0x13, 0x6F, 0xB6, 0x4E, // WORD7
+        0x86, 0xF4, 0xAB, 0x2C, // WORD8
+        0x06, 0x71, 0xEB, 0x44, // WORD9
+        0x3F, 0xEA, 0xF6, 0x02, // WORD10
+        0x92, 0x45, 0x52, 0x13,
+    ];
+
+    let words = from_ublox_bytes(&data);
+
+    let tlm = GpsQzssTelemetry::from_word(words[0]).unwrap_or_else(|e| {
+        panic!("failed to decode telemetry: {}", e);
+    });
+
+    assert_eq!(tlm.message, 0x13E);
+    assert_eq!(tlm.integrity, false);
+    assert_eq!(tlm.reserved_bit, false);
+
+    let how = GpsQzssHow::from_word(words[1]).unwrap_or_else(|e| {
+        panic!("failed to decode how: {}", e);
+    });
+
+    assert_eq!(how.alert, false);
+    assert_eq!(how.anti_spoofing, true);
+    assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris3);
 }

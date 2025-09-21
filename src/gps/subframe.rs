@@ -77,10 +77,7 @@ impl GpsQzssSubframe {
 
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
-    pub(crate) fn decode(
-        frame_id: GpsQzssFrameId,
-        words: &[GpsDataWord; GPS_WORDS_PER_FRAME - 2],
-    ) -> Self {
+    pub(crate) fn decode(frame_id: GpsQzssFrameId, words: &[GpsDataWord]) -> Self {
         match frame_id {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::from_words(words)),
             _ => panic!("NOT YET"),

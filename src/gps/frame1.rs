@@ -335,7 +335,7 @@ impl GpsQzssFrame1 {
 
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
-    pub(crate) fn from_words(words: &[GpsDataWord; GPS_WORDS_PER_FRAME - 2]) -> Self {
+    pub(crate) fn from_words(words: &[GpsDataWord]) -> Self {
         let mut s = Self::default();
 
         for i in 0..GPS_WORDS_PER_FRAME - 2 {
