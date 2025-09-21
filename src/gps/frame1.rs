@@ -361,14 +361,6 @@ impl GpsQzssFrame1 {
         s
     }
 
-    /// Decodes [Self] from a 240-bit stream.
-    /// This method does not care for frames parity.
-    pub(crate) fn from_raw(bytes: &[u8; GPS_SUBFRAME_BITS]) -> Self {
-        let mut s = Self::default();
-
-        s
-    }
-
     /// Updates scaled content from [Word3]
     fn set_word3(&mut self, word: Word3) {
         self.week = word.week;
@@ -739,7 +731,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn dword3_encoding() {
+    fn dword3() {
         for dword3 in [
             Word3 {
                 week: 1,
@@ -797,7 +789,7 @@ mod test {
     }
 
     #[test]
-    fn dword4_encoding() {
+    fn dword4() {
         for dword4 in [
             Word4 {
                 l2_p_data_flag: true,
@@ -825,7 +817,7 @@ mod test {
     }
 
     #[test]
-    fn dword5_encoding() {
+    fn dword5() {
         for dword5 in [Word5 { reserved: 0 }, Word5 { reserved: 120 }] {
             let gps_word = dword5.to_word();
             let decoded = Word5::from_word(gps_word);
@@ -835,7 +827,7 @@ mod test {
     }
 
     #[test]
-    fn dword6_encoding() {
+    fn dword6() {
         for dword6 in [Word6 { reserved: 0 }, Word6 { reserved: 120 }] {
             let gps_word = dword6.to_word();
             let decoded = Word6::from_word(gps_word);
@@ -845,7 +837,7 @@ mod test {
     }
 
     #[test]
-    fn dword7_encoding() {
+    fn dword7() {
         for dword7 in [
             Word7 {
                 reserved: 0,
@@ -859,6 +851,18 @@ mod test {
                 reserved: 120,
                 tgd: 23,
             },
+            Word7 {
+                reserved: 120,
+                tgd: -1,
+            },
+            Word7 {
+                reserved: 127,
+                tgd: -10,
+            },
+            Word7 {
+                reserved: 127,
+                tgd: -100,
+            },
         ] {
             let gps_word = dword7.to_word();
             let decoded = Word7::from_word(gps_word);
@@ -868,7 +872,7 @@ mod test {
     }
 
     #[test]
-    fn dword8_encoding() {
+    fn dword8() {
         for dword8 in [
             Word8 {
                 iodc_lsb: 10,
@@ -887,7 +891,7 @@ mod test {
     }
 
     #[test]
-    fn dword9_encoding() {
+    fn dword9() {
         for dword9 in [Word9 { af2: 10, af1: 9 }, Word9 { af2: 9, af1: 100 }] {
             let gps_word = dword9.to_word();
             let decoded = Word9::from_word(gps_word);
@@ -897,7 +901,7 @@ mod test {
     }
 
     #[test]
-    fn dword10_encoding() {
+    fn dword10() {
         for dword10 in [
             Word10 { af0: 0 },
             Word10 { af0: 100 },
@@ -911,71 +915,69 @@ mod test {
         }
     }
 
-    // #[test]
-    // fn frame1_encoding() {
-    //     for (
-    //         week,
-    //         ca_or_p_l2,
-    //         ura,
-    //         health,
-    //         iodc,
-    //         toc,
-    //         tgd,
-    //         af0,
-    //         af1,
-    //         af2,
-    //         l2_p_data_flag,
-    //         reserved_word4,
-    //         reserved_word5,
-    //         reserved_word6,
-    //         reserved_word7,
-    //     ) in [
-    //         (1, 2, 3, 4, 5, 6, 7.0, 8.0, 9.0, 10.0, false, 11, 12, 13, 14),
-    //         (0, 1, 2, 3, 4, 5, 6.0, 7.0, 8.0, 9.0, true, 10, 11, 12, 13),
-    //     ] {
-    //         let frame1 = GpsQzssFrame1 {
-    //             week,
-    //             ca_or_p_l2,
-    //             ura,
-    //             health,
-    //             iodc,
-    //             toc,
-    //             tgd: tgd * 1.0E-9,
-    //             af0: af0 * 1.0E-10,
-    //             af1: af1 * 1.0E-11,
-    //             af2: af2 * 1.0E-11,
-    //             l2_p_data_flag,
-    //             reserved_word4,
-    //             reserved_word5,
-    //             reserved_word6,
-    //             reserved_word7,
-    //         };
+    #[test]
+    fn encoding() {
+        for (
+            week,
+            ca_or_p_l2,
+            ura,
+            health,
+            iodc,
+            toc,
+            tgd,
+            af0,
+            af1,
+            af2,
+            l2_p_data_flag,
+            reserved_word4,
+            reserved_word5,
+            reserved_word6,
+            reserved_word7,
+        ) in [
+            (
+                350, 1, 2, 3, 10, 50_000, 6.0E-9, 7.0E-9, 8.0E-13, 9.0E-15, true, 10, 11, 12, 13,
+            ),
+            (
+                900, 1, 2, 3, 10, 24_992, -1.0E-9, -7.0E-9, 8.0E-13, 9.0E-15, true, 10, 11, 12, 13,
+            ),
+        ] {
+            let frame1 = GpsQzssFrame1 {
+                week,
+                ca_or_p_l2,
+                ura,
+                health,
+                iodc,
+                toc,
+                tgd: tgd,
+                af0: af0,
+                af1: af1,
+                af2: af2,
+                l2_p_data_flag,
+                reserved_word4,
+                reserved_word5,
+                reserved_word6,
+                reserved_word7,
+            };
 
-    //         let encoded = frame1.encode();
+            let words = frame1.to_words();
 
-    //         let mut decoded = GpsQzssFrame1::default();
+            let decoded = GpsQzssFrame1::from_words(&words);
 
-    //         // for (i, dword) in encoded.iter().enumerate() {
-    //         //     decoded.decode_word(i + 3, *dword).unwrap_or_else(|_| {
-    //         //         panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
-    //         //     });
-    //         // }
+            assert_eq!(decoded.ura, frame1.ura);
+            assert_eq!(decoded.week, frame1.week);
+            assert_eq!(decoded.toc, frame1.toc);
+            assert_eq!(decoded.ca_or_p_l2, frame1.ca_or_p_l2);
+            assert_eq!(decoded.l2_p_data_flag, frame1.l2_p_data_flag);
+            assert_eq!(decoded.reserved_word4, frame1.reserved_word4);
+            assert_eq!(decoded.reserved_word5, frame1.reserved_word5);
+            assert_eq!(decoded.reserved_word6, frame1.reserved_word6);
+            assert_eq!(decoded.reserved_word7, frame1.reserved_word7);
 
-    //         assert_eq!(decoded.ura, frame1.ura);
-    //         assert_eq!(decoded.week, frame1.week);
-    //         assert_eq!(decoded.toc, frame1.toc);
-    //         assert_eq!(decoded.ca_or_p_l2, frame1.ca_or_p_l2);
-    //         assert_eq!(decoded.l2_p_data_flag, frame1.l2_p_data_flag);
-    //         assert_eq!(decoded.reserved_word4, frame1.reserved_word4);
-    //         assert_eq!(decoded.reserved_word5, frame1.reserved_word5);
-    //         assert_eq!(decoded.reserved_word6, frame1.reserved_word6);
-    //         assert_eq!(decoded.reserved_word7, frame1.reserved_word7);
-
-    //         assert!((decoded.af0 - frame1.af0).abs() < 1E-9);
-    //         // assert!((decoded.af1 - frame1.af1).abs() < 1E-9);
-    //         assert!((decoded.af2 - frame1.af2).abs() < 1E-9);
-    //     }
-    // }
+            assert!((decoded.af0 - frame1.af0).abs() < 1E-10);
+            assert!((decoded.af1 - frame1.af1).abs() < 1E-14);
+            assert!((decoded.af2 - frame1.af2).abs() < 1E-14);
+        }
+    }
 
     #[test]
     fn user_range_accuracy() {
