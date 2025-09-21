@@ -1,6 +1,3 @@
-[submodule "tools"]
-	path = tools
-	url = https://github.com/rtk-rs/tools
 [submodule "data"]
 	path = data
 	url = git@github.com:nav-solutions/data.git

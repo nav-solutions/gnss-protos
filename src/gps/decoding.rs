@@ -74,51 +74,51 @@ mod test {
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
 
-    // #[test]
-    // fn eph1_bytes_decoding_noparity() {
-    //     #[cfg(all(feature = "std", feature = "log"))]
-    //     init_logger();
+    #[test]
+    fn eph_1_decoding_noparity() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
 
-    //     let mut found = false;
+        let mut found = false;
 
-    //     let bytes = from_ublox_be_bytes(&[
-    //         // TLM
-    //         0x22, 0xC1, 0x3E, 0x1B, // HOW
-    //         0x15, 0x27, 0xC9, 0x73, // WORD3
-    //         0x13, 0xE4, 0x00, 0x04, // WORD4
-    //         0x10, 0x4F, 0x5D, 0x31, // WORD5
-    //         0x97, 0x44, 0xE6, 0xD7, // WORD6
-    //         0x07, 0x75, 0x57, 0x83, // WORD7
-    //         0x33, 0x0C, 0x80, 0xB5, // WORD8
-    //         0x92, 0x50, 0x42, 0xA1, // WORD9
-    //         0x80, 0x00, 0x16, 0x84, // WORD10
-    //         0x31, 0x2C, 0x30, 0x33,
-    //     ]);
+        let words = from_ublox_bytes(&[
+            // TLM
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x15, 0x27, 0xC9, 0x73, // WORD3
+            0x13, 0xE4, 0x00, 0x04, // WORD4
+            0x10, 0x4F, 0x5D, 0x31, // WORD5
+            0x97, 0x44, 0xE6, 0xD7, // WORD6
+            0x07, 0x75, 0x57, 0x83, // WORD7
+            0x33, 0x0C, 0x80, 0xB5, // WORD8
+            0x92, 0x50, 0x42, 0xA1, // WORD9
+            0x80, 0x00, 0x16, 0x84, // WORD10
+            0x31, 0x2C, 0x30, 0x33,
+        ]);
 
-    //     let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
-    //         panic!("Failed to decode valid message");
-    //     });
+        let decoded = GpsQzssFrame::decode(&words, false).unwrap_or_else(|| {
+            panic!("Failed to decode valid message");
+        });
 
-    //     assert_eq!(decoded.telemetry.message, 0x13E);
-    //     assert_eq!(decoded.telemetry.integrity, false);
-    //     assert_eq!(decoded.telemetry.reserved_bit, false);
+        assert_eq!(decoded.telemetry.message, 0x13E);
+        assert_eq!(decoded.telemetry.integrity, false);
+        assert_eq!(decoded.telemetry.reserved_bit, false);
 
-    //     assert_eq!(decoded.how.alert, false);
-    //     assert_eq!(decoded.how.anti_spoofing, true);
-    //     assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
+        assert_eq!(decoded.how.alert, false);
+        assert_eq!(decoded.how.anti_spoofing, true);
+        assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
 
-    //     let frame1 = decoded.subframe.as_eph1().unwrap_or_else(|| {
-    //         panic!("Decoded invalid subframe");
-    //     });
+        let frame1 = decoded.subframe.as_eph1().unwrap_or_else(|| {
+            panic!("Decoded invalid subframe");
+        });
 
-    //     assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
-    //     assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
-    //     assert_eq!(frame1.af2, 0.0);
+        assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
+        assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
+        assert_eq!(frame1.af2, 0.0);
 
-    //     assert_eq!(frame1.week, 318);
-    //     assert_eq!(frame1.toc, 266_400);
-    //     assert_eq!(frame1.health, 0);
-    // }
+        assert_eq!(frame1.week, 318);
+        assert_eq!(frame1.toc, 266_400);
+        assert_eq!(frame1.health, 0);
+    }
 
     // #[test]
     // fn eph2_bytes_decoding_noparity() {

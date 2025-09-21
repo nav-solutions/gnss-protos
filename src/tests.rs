@@ -183,11 +183,11 @@ pub fn from_ublox_bytes<const N: usize>(bytes: &[u8; N]) -> [GpsDataWord; GPS_WO
 
     for i in 0..N {
         match i % 4 {
-            0 => value |= ((bytes[i % 4 + count * 4] << 2) as u32) << 24,
+            0 => value |= (bytes[i % 4 + count * 4] as u32) << 26,
             1 => value |= (bytes[i % 4 + count * 4] as u32) << 18,
             2 => value |= (bytes[i % 4 + count * 4] as u32) << 10,
             3 => {
-                value |= bytes[i % 4 + count * 4] as u32;
+                value |= (bytes[i % 4 + count * 4] as u32) << 2;
                 ret[count] = GpsDataWord::from(value);
                 count += 1;
                 value = 0;
