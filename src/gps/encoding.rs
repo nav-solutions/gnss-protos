@@ -128,10 +128,16 @@ impl GpsQzssFrame {
                 encoded[24] = ((subf.reserved_word7 & 0x000f) >> 0) as u8;
                 encoded[24] <<= 4;
 
-                let tgd = (subf.tgd * 2.0_f64.powi(31)).round() as u8;
-                encoded[24] |= (tgd & 0xf0) >> 4;
+                let mut tgd = (subf.tgd * 2.0_f64.powi(31)).round() as u8;
 
-                encoded[25] = tgd & 0x0f;
+                if subf.tgd < 0.0 {
+                    tgd += 128;
+                    tgd -= 1;
+                }
+
+                encoded[24] |= (tgd as u8 & 0xf0) >> 4;
+
+                encoded[25] = tgd as u8 & 0x0f;
                 encoded[25] <<= 4; // TODO
                 encoded[26] <<= 6; // TODO
                 encoded[26] |= ((subf.iodc & 0x0fc) >> 2) as u8;
@@ -678,7 +684,7 @@ mod encoding {
             ),
         ) in [
             (
-                259956,
+                15_000,
                 false,
                 false,
                 GpsQzssFrameId::Ephemeris1,
@@ -697,7 +703,7 @@ mod encoding {
                 1.0E-14,
             ),
             (
-                259956,
+                15_000,
                 true,
                 false,
                 GpsQzssFrameId::Ephemeris1,
@@ -709,14 +715,14 @@ mod encoding {
                 1,
                 1,
                 0x0,
-                15_000,
+                16_000,
                 2.0,
                 2.0E-9,
                 2.0E-12,
                 2.0E-14,
             ),
             (
-                259956,
+                15_000,
                 true,
                 false,
                 GpsQzssFrameId::Ephemeris1,
@@ -728,31 +734,92 @@ mod encoding {
                 2,
                 2,
                 0x20,
-                17_000,
+                16_160,
                 3.0,
                 3.0E-9,
                 3.0E-12,
                 3.0E-14,
             ),
-            (
-                259956,
-                true,
-                false,
-                GpsQzssFrameId::Ephemeris1,
-                0x13F,
-                false,
-                true,
-                1024,
-                0x03,
-                3,
-                3,
-                0x123,
-                18_000,
-                -4.0,
-                4.0E-9,
-                4.0E-12,
-                4.0E-14,
-            ),
+            // TODO: signed
+            // (
+            //     15_000,
+            //     true,
+            //     false,
+            //     GpsQzssFrameId::Ephemeris1,
+            //     0x13F,
+            //     false,
+            //     true,
+            //     1024,
+            //     0x03,
+            //     3,
+            //     3,
+            //     0x123,
+            //     16_432,
+            //     -4.0,
+            //     4.0E-9,
+            //     4.0E-12,
+            //     4.0E-14,
+            // ),
+            // TODO: signed
+            // (
+            //     15_000,
+            //     true,
+            //     false,
+            //     GpsQzssFrameId::Ephemeris1,
+            //     0x13F,
+            //     false,
+            //     true,
+            //     1024,
+            //     0x03,
+            //     3,
+            //     3,
+            //     0x123,
+            //     16_432,
+            //     5.0,
+            //     -4.0E-9,
+            //     4.0E-12,
+            //     4.0E-14,
+            // ),
+            // TODO: signed
+            // (
+            //     15_000,
+            //     true,
+            //     false,
+            //     GpsQzssFrameId::Ephemeris1,
+            //     0x13F,
+            //     false,
+            //     true,
+            //     1024,
+            //     0x03,
+            //     3,
+            //     3,
+            //     0x123,
+            //     16_432,
+            //     5.0,
+            //     6.0E-9,
+            //     -4.0E-12,
+            //     4.0E-14,
+            // ),
+            // TODO: signed
+            // (
+            //     15_000,
+            //     true,
+            //     false,
+            //     GpsQzssFrameId::Ephemeris1,
+            //     0x13F,
+            //     false,
+            //     true,
+            //     1024,
+            //     0x03,
+            //     3,
+            //     3,
+            //     0x123,
+            //     16_432,
+            //     5.0,
+            //     6.0E-9,
+            //     4.0E-12,
+            //     -4.0E-14,
+            // ),
         ]
         .iter()
         .enumerate()

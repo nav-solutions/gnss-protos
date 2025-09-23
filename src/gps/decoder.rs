@@ -272,11 +272,12 @@ impl GpsQzssDecoder {
         dword |= (buffer[18] as u32) << (32 - 2);
         self.words[3] = GpsDataWord::from(dword);
 
-        dword = (buffer[26] as u32) << 6;
-        dword |= (buffer[25] as u32) << (8 - 4);
-        dword |= (buffer[24] as u32) << (16 - 4);
-        dword |= (buffer[23] as u32) << (24 - 4);
-        dword |= (buffer[22] as u32) << (32 - 4);
+        dword = buffer[25] as u32;
+        dword |= (buffer[24] as u32) << 8;
+        dword |= (buffer[23] as u32) << 16;
+        dword |= (buffer[22] as u32) << 24;
+        dword <<= 4;
+        dword |= ((buffer[26] & 0xC0) as u32) >> 6;
         self.words[4] = GpsDataWord::from(dword);
 
         dword = (buffer[29] as u32);

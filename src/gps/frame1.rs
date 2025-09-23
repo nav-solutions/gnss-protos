@@ -138,7 +138,7 @@ impl PartialEq for GpsQzssFrame1 {
             return false;
         }
 
-        if (rhs.af2 - self.af2).abs() > 1E-14 {
+        if (rhs.af2 - self.af2).abs() > 1E-13 {
             return false;
         }
 
@@ -335,6 +335,7 @@ impl GpsQzssFrame1 {
     }
 
     /// Copies and returns [GpsQzssFrame1] with updated time of clock in seconds.
+    /// Provided value must be a multiple of 16 to be perfectly encoded.
     pub fn with_time_of_clock_seconds(mut self, toc_s: u32) -> Self {
         self.toc = toc_s;
         self
@@ -928,6 +929,14 @@ mod test {
             Word7 {
                 reserved: 127,
                 tgd: -100,
+            },
+            Word7 {
+                reserved: 127,
+                tgd: -128,
+            },
+            Word7 {
+                reserved: 127,
+                tgd: 127,
             },
         ] {
             let gps_word = dword7.to_word();

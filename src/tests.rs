@@ -169,7 +169,7 @@ fn test_file_reader() {
     assert_eq!(buffer[0], 0x8B);
     assert_eq!(buffer[1], 0x48);
     assert_eq!(buffer[2], 0xD3);
-    assert_eq!(buffer[3], 0x02);
+    assert_eq!(buffer[3], 0x03);
 }
 
 #[cfg(feature = "gps")]

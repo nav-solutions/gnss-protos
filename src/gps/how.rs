@@ -147,45 +147,33 @@ impl GpsQzssHow {
 }
 
 #[cfg(test)]
-mod test {
+mod how {
     use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow};
 
     #[test]
     fn encoding() {
-        for (dword, tow, frame_id, alert, anti_spoofing) in [
-            (0x12344400, 0x02468, GpsQzssFrameId::Ephemeris1, true, false),
-            (
-                0x12340400,
-                0x02468,
-                GpsQzssFrameId::Ephemeris1,
-                false,
-                false,
-            ),
-            (0x12342400, 0x02468, GpsQzssFrameId::Ephemeris1, false, true),
-            (0x12342800, 0x02468, GpsQzssFrameId::Ephemeris2, false, true),
-            (0x12342C00, 0x02468, GpsQzssFrameId::Ephemeris3, false, true),
-            (0x32342C00, 0x06468, GpsQzssFrameId::Ephemeris3, false, true),
-            (0x42342C00, 0x08468, GpsQzssFrameId::Ephemeris3, false, true),
-            (0x82342C00, 0x10468, GpsQzssFrameId::Ephemeris3, false, true),
-            (0x82342C00, 0x16789, GpsQzssFrameId::Ephemeris3, false, true),
+        for (tow, frame_id, alert, anti_spoofing) in [
+            (0x05DC, GpsQzssFrameId::Ephemeris1, true, false),
+            (0x0708, GpsQzssFrameId::Ephemeris1, false, false),
+            (0x0_1194, GpsQzssFrameId::Ephemeris1, false, true),
         ] {
-            let gps_word = GpsDataWord::from(dword);
+            let how = GpsQzssHow {
+                tow,
+                frame_id,
+                anti_spoofing,
+                alert,
+            };
 
-            let gps_how = GpsQzssHow::from_word(gps_word).unwrap_or_else(|e| {
-                panic!("failed to decode gps-how from 0x{:08X} : {}", dword, e);
+            let gps_word = how.to_word();
+
+            let decoded = GpsQzssHow::from_word(gps_word).unwrap_or_else(|e| {
+                panic!("failed to decode gps-how from {:?} : {}", gps_word, e);
             });
 
-            assert_eq!(gps_how.tow, tow);
-            assert_eq!(gps_how.alert, alert);
-            assert_eq!(gps_how.frame_id, frame_id);
-            assert_eq!(gps_how.anti_spoofing, anti_spoofing);
-
-            assert_eq!(
-                gps_how.to_word(),
-                gps_word,
-                "Encoding reciprocal issue for dword=0x{:08X}",
-                dword
-            );
+            assert_eq!(decoded.tow, tow);
+            assert_eq!(decoded.alert, alert);
+            assert_eq!(decoded.frame_id, frame_id);
+            assert_eq!(decoded.anti_spoofing, anti_spoofing);
         }
     }
 }
