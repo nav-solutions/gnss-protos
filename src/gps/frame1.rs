@@ -43,7 +43,7 @@ const WORD10_AF0_MASK: u32 = 0x3fffff00;
 const WORD10_AF0_SHIFT: u32 = 8;
 
 /// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct GpsQzssFrame1 {
     /// 10-bit wrapped week counter.
     pub week: u16,
@@ -106,6 +106,72 @@ pub struct GpsQzssFrame1 {
 
     /// 16-bit reserved word #7
     pub reserved_word7: u16,
+}
+
+impl PartialEq for GpsQzssFrame1 {
+    fn eq(&self, rhs: &Self) -> bool {
+        if rhs.week != self.week {
+            return false;
+        }
+
+        if rhs.ca_or_p_l2 != self.ca_or_p_l2 {
+            return false;
+        }
+
+        if rhs.ura != self.ura {
+            return false;
+        }
+
+        if rhs.health != self.health {
+            return false;
+        }
+
+        if rhs.iodc != self.iodc {
+            return false;
+        }
+
+        if rhs.toc != self.toc {
+            return false;
+        }
+
+        if (rhs.tgd - self.tgd).abs() > 1e-9 {
+            return false;
+        }
+
+        if (rhs.af2 - self.af2).abs() > 1E-14 {
+            return false;
+        }
+
+        if (rhs.af1 - self.af1).abs() > 1E-12 {
+            return false;
+        }
+
+        if (rhs.af0 - self.af0).abs() > 1E-9 {
+            return false;
+        }
+
+        if rhs.reserved_word4 != self.reserved_word4 {
+            return false;
+        }
+
+        if rhs.l2_p_data_flag != self.l2_p_data_flag {
+            return false;
+        }
+
+        if rhs.reserved_word5 != self.reserved_word5 {
+            return false;
+        }
+
+        if rhs.reserved_word6 != self.reserved_word6 {
+            return false;
+        }
+
+        if rhs.reserved_word7 != self.reserved_word7 {
+            return false;
+        }
+
+        true
+    }
 }
 
 impl GpsQzssFrame1 {
