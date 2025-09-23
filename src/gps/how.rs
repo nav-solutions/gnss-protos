@@ -1,7 +1,7 @@
-use crate::gps::{GpsDataWord, GpsError, GPS_PARITY_MASK, GPS_PARITY_SIZE};
+use crate::gps::{GpsDataWord, GpsError};
 
-const TOW_MASK: u32 = 0x3fffE000;
-const TOW_SHIFT: u32 = 13;
+const ZCOUNT_MASK: u32 = 0x3fffE000;
+const ZCOUNT_SHIFT: u32 = 13;
 
 const ALERT_MASK: u32 = 0x00001000;
 const AS_MASK: u32 = 0x00000800;
@@ -14,18 +14,26 @@ use crate::gps::GpsQzssFrameId;
 #[cfg(doc)]
 use crate::gps::GpsQzssTelemetry;
 
-/// [GpsQzssHow] (GPS HandOver Word) marks the beginning of each frame, following [GpsQzssTelemetry],
+/// [GpsQzssHow] (GPS Hand Over Word) marks the beginning of each frame, following [GpsQzssTelemetry],
 /// and defines the content to follow.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssHow {
-    /// 17-bit TOW (in seconds)
+    /// TOW: elapsed time within current GPS week (in seconds),
+    /// at the instant of transmission of the 1st bit of the next frame to follow
+    /// this [GpsQzssHow] word.
     pub tow: u32,
 
-    /// When alert is asserted, the SV URA may be worse than indicated in subframe 1
+    /// The alert bit serves two purposes.
+    /// For block 000 satellites, '1' here indicates a maneuver.
+    /// For other satellites, '1' here means the URA may be worse than indicated in subframe 1
     /// and user shall use this SV at their own risk.
     pub alert: bool,
 
-    /// A-S mode is ON in that SV
+    /// The A/S bit serves two purposes.
+    /// For block 000 satellites, '1' here means the satellite is "synchronous",
+    /// the leading edge of the TLM sync is the 1.5 second epoch instant, otherwise it
+    /// is asynchronous.   
+    /// For other satellite, this indicates A/S is active.
     pub anti_spoofing: bool,
 
     /// Following Frame ID (to decode following data words)
@@ -44,7 +52,9 @@ impl std::fmt::Display for GpsQzssHow {
 }
 
 impl GpsQzssHow {
-    /// Copies and returns [GpsQzssHow] with updated TOW in seconds
+    /// Copies and returns [GpsQzssHow] with updated TOW in seconds.
+    /// This value should be aligned to midnight and always a multiple of 6 seconds,
+    /// the message transmission rate.
     pub fn with_tow_seconds(mut self, tow_seconds: u32) -> Self {
         self.tow = tow_seconds;
         self
@@ -82,32 +92,20 @@ impl GpsQzssHow {
 
     /// Constructs a default EPH-1 [GpsQzssHow]
     pub fn ephemeris1() -> Self {
-        Self {
-            tow: 0,
-            alert: false,
-            anti_spoofing: false,
-            frame_id: GpsQzssFrameId::Ephemeris1,
-        }
+        Self::default()
+            .with_frame_id(GpsQzssFrameId::Ephemeris1)
     }
 
     /// Constructs a default EPH-2 [GpsQzssHow]
     pub fn ephemeris2() -> Self {
-        Self {
-            tow: 0,
-            alert: false,
-            anti_spoofing: false,
-            frame_id: GpsQzssFrameId::Ephemeris2,
-        }
+        Self::default()
+            .with_frame_id(GpsQzssFrameId::Ephemeris1)
     }
 
     /// Constructs a default EPH-3 [GpsQzssHow]
     pub fn ephemeris3() -> Self {
-        Self {
-            tow: 0,
-            alert: false,
-            anti_spoofing: false,
-            frame_id: GpsQzssFrameId::Ephemeris3,
-        }
+        Self::default()
+            .with_frame_id(GpsQzssFrameId::Ephemeris3)
     }
 
     /// Decodes [GpsQzssHow] from this [GpsDataWord].
@@ -115,7 +113,7 @@ impl GpsQzssHow {
     pub(crate) fn from_word(word: GpsDataWord) -> Result<Self, GpsError> {
         let value = word.value();
 
-        let tow = (value & TOW_MASK) >> TOW_SHIFT;
+        let zcount = (value & ZCOUNT_MASK) >> ZCOUNT_SHIFT;
         let frame_id = GpsQzssFrameId::decode(((value & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
         let alert = (value & ALERT_MASK) > 0;
         let anti_spoofing = (value & AS_MASK) > 0;
@@ -124,7 +122,7 @@ impl GpsQzssHow {
             alert,
             frame_id,
             anti_spoofing,
-            tow: tow * 6,
+            tow: zcount * 3 /2,
         })
     }
 
@@ -140,7 +138,7 @@ impl GpsQzssHow {
             value |= AS_MASK;
         }
 
-        value |= ((self.tow / 6) & 0x1ffff) << TOW_SHIFT;
+        value |= ((self.tow * 2 / 3) & 0x1ffff) << ZCOUNT_SHIFT;
         value += (self.frame_id.encode() as u32) << FRAMEID_SHIFT;
 
         // TODO parity
@@ -153,7 +151,6 @@ impl GpsQzssHow {
 
 #[cfg(test)]
 mod test {
-    use super::{TOW_MASK, TOW_SHIFT};
     use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow};
 
     #[test]
@@ -173,6 +170,7 @@ mod test {
             (0x32342C00, 0x06468, GpsQzssFrameId::Ephemeris3, false, true),
             (0x42342C00, 0x08468, GpsQzssFrameId::Ephemeris3, false, true),
             (0x82342C00, 0x10468, GpsQzssFrameId::Ephemeris3, false, true),
+            (0x82342C00, 0x16789, GpsQzssFrameId::Ephemeris3, false, true),
         ] {
             let gps_word = GpsDataWord::from(dword);
 
@@ -180,10 +178,11 @@ mod test {
                 panic!("failed to decode gps-how from 0x{:08X} : {}", dword, e);
             });
 
-            assert_eq!(gps_how.tow, tow * 6);
+            assert_eq!(gps_how.tow, tow);
             assert_eq!(gps_how.alert, alert);
             assert_eq!(gps_how.frame_id, frame_id);
             assert_eq!(gps_how.anti_spoofing, anti_spoofing);
+
             assert_eq!(
                 gps_how.to_word(),
                 gps_word,

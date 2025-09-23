@@ -1,5 +1,5 @@
 use crate::{
-    gps::{GpsDataByte, GpsDataWord, GpsError, GPS_SUBFRAME_BITS, GPS_WORDS_PER_FRAME},
+    gps::{GpsDataWord, GPS_WORDS_PER_FRAME},
     twos_complement,
 };
 

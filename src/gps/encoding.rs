@@ -1,11 +1,7 @@
 use crate::gps::{
-    GpsDataByte, GpsDataWord, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
-    GPS_WORD_BITS,
+   GpsDataWord, GpsQzssFrame, GpsQzssFrameId,
+    GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
 };
-
-#[cfg(feature = "log")]
-use log::{error, trace};
 
 impl GpsQzssFrame {
     /// Returns total number of bytes needed to encode this [GpsQzssFrame] to binary
@@ -65,11 +61,12 @@ impl GpsQzssFrame {
         }
 
         encoded[3] <<= 2; // TODO (PAR)
-        encoded[3] |= ((self.how.tow & 0x1_8000) >> 15) as u8;
 
-        encoded[4] = ((self.how.tow & 0x0_7f80) >> 7) as u8;
+        let tow = self.how.tow * 2 / 3;
 
-        encoded[5] = (self.how.tow & 0x0_007f) as u8;
+        encoded[3] |= ((tow & 0x1_8000) >> 15) as u8;
+        encoded[4] = ((tow & 0x0_7f80) >> 7) as u8;
+        encoded[5] = (tow & 0x0_007f) as u8;
         encoded[5] <<= 1;
 
         if self.how.alert {
@@ -97,7 +94,7 @@ impl GpsQzssFrame {
                 encoded[9] <<= 4;
                 encoded[9] |= (subf.health & 0x3c) >> 2;
 
-                encoded[10] |= subf.health & 0x03;
+                encoded[10] = subf.health & 0x03;
                 encoded[10] <<= 6;
                 encoded[10] |= (((subf.iodc & 0x300) >> 8) as u8) << 4;
 
@@ -304,10 +301,12 @@ impl GpsQzssFrame {
 #[cfg(test)]
 mod encoding {
     use std::fs::File;
-    use std::io::{Read, Write};
+    use std::io::{Write};
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
+
+    use log::info;
 
     use crate::gps::{
         GpsQzssDecoder,
@@ -408,9 +407,9 @@ mod encoding {
                     .with_integrity()
                     .with_reserved_bit(),
             )
-            .with_how_word(
+            .with_hand_over_word(
                 GpsQzssHow::default()
-                    .with_tow_seconds(0x1_6789)
+                    .with_tow_seconds(18_510)
                     .with_alert_bit()
                     .with_anti_spoofing(),
             )
@@ -439,10 +438,10 @@ mod encoding {
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x48);
         assert_eq!(encoded[2], 0xD0 | 0x02 | 0x01);
-        assert_eq!(encoded[3], 0x02);
+        assert_eq!(encoded[3], 0x00);
 
-        assert_eq!(encoded[4], 0xCF);
-        assert_eq!(encoded[5], 0x13);
+        assert_eq!(encoded[4], 0x60);
+        assert_eq!(encoded[5], 0x69);
         assert_eq!(encoded[6], 0x90);
         assert_eq!(encoded[7], 0x04);
 
@@ -498,7 +497,7 @@ mod encoding {
                     .without_integrity()
                     .with_reserved_bit(),
             )
-            .with_how_word(
+            .with_hand_over_word(
                 GpsQzssHow::default()
                     .with_tow_seconds(0x4_6789)
                     .with_alert_bit()
@@ -566,13 +565,29 @@ mod encoding {
                     .without_integrity()
                     .without_reserved_bit(),
             )
-            .with_how_word(
+            .with_hand_over_word(
                 GpsQzssHow::default()
                     .with_tow_seconds(0x0_1234)
                     .without_alert_bit()
                     .without_anti_spoofing(),
             )
-            .with_subframe(GpsQzssSubframe::default());
+            .with_subframe(GpsQzssSubframe::Ephemeris1(
+                GpsQzssFrame1::default()
+                    .with_week(0x321)
+                    .with_iodc(0x321)
+                    .with_all_signals_ok()
+                    .with_time_of_clock_seconds(24_000)
+                    .with_clock_offset_nanoseconds(2.0)
+                    .with_clock_drift_seconds_s(2E-12)
+                    .with_clock_drift_rate_seconds_s2(2E-15)
+                    .with_reserved23_word(0x12_3456)
+                    .with_reserved24_word1(0x34_5678)
+                    .with_reserved24_word2(0x98_7654)
+                    .with_reserved16_word(0x1234)
+                    .with_total_group_delay_nanos(3.0)
+                    .with_ca_or_p_l2_mask(0x2)
+                    .with_user_range_accuracy_m(8.0),
+            ));
 
         let encoded = frame.encode_raw();
 
@@ -616,17 +631,32 @@ mod encoding {
         assert_eq!(encoded[35], 0x00);
         assert_eq!(encoded[36], 0x00);
         assert_eq!(encoded[37], 0x00);
+
+        // reciprocal
+        let mut decoder = GpsQzssDecoder::default();
+        
+        let (size, decoded) = decoder.decode(&encoded, encoded_size);
+
+        assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+
+        assert_eq!(
+            decoded,
+            Some(frame),
+            "reciprocal failed, got {:#?}",
+            decoded
+        );
     }
 
     #[test]
-    fn ephemeris1_1() {
+    fn ephemeris1_reciprocal() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        // let mut decoder = GpsQzssDecoder::default();
+        let mut decoder = GpsQzssDecoder::default();
 
-        for (ith, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bit)) in
-            [(
+        for (test_num, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bit, week, ca_or_p_l2, ura, health, iodc, toc, tgd, af0, af1, af2)) in
+            [
+            (
                 259956,
                 false,
                 false,
@@ -634,32 +664,125 @@ mod encoding {
                 0x13E,
                 false,
                 false,
-            )]
+                10,
+                0x0,
+                0,
+                0,
+                0x10,
+                10_000,
+                1.0,
+                1.0E-9,
+                1.0E-12,
+                1.0E-14,
+            ),
+            (
+                259956,
+                true,
+                false,
+                GpsQzssFrameId::Ephemeris1,
+                0x13F,
+                false,
+                true,
+                100,
+                0x1,
+                1,
+                1,
+                0x0,
+                15_000,
+                2.0,
+                2.0E-9,
+                2.0E-12,
+                2.0E-14,
+            ),
+            (
+                259956,
+                true,
+                false,
+                GpsQzssFrameId::Ephemeris1,
+                0x13F,
+                false,
+                true,
+                1024,
+                0x02,
+                2,
+                2,
+                0x20,
+                17_000,
+                3.0,
+                3.0E-9,
+                3.0E-12,
+                3.0E-14,
+            ),
+            (
+                259956,
+                true,
+                false,
+                GpsQzssFrameId::Ephemeris1,
+                0x13F,
+                false,
+                true,
+                1024,
+                0x03,
+                3,
+                3,
+                0x123,
+                18_000,
+                -4.0,
+                4.0E-9,
+                4.0E-12,
+                4.0E-14,
+            ),
+            ]
             .iter()
             .enumerate()
         {
-            let frame = GpsQzssFrame {
-                how: GpsQzssHow {
-                    tow: *tow,
-                    alert: *alert,
-                    frame_id: *frame_id,
-                    anti_spoofing: *anti_spoofing,
-                },
-                telemetry: GpsQzssTelemetry {
-                    message: *message,
-                    integrity: *integrity,
-                    reserved_bit: *tlm_reserved_bit,
-                },
-                subframe: Default::default(),
-            };
+            let mut how = GpsQzssHow::default()
+                .with_tow_seconds(*tow);
 
-            let encoded = frame.encode();
+            let mut telemetry = GpsQzssTelemetry::default()
+                .with_message(*message);
+                
+            let mut subframe = GpsQzssFrame1::default()
+                .with_week(*week)
+                .with_iodc(*iodc)
+                .with_health_mask(*health)
+                .with_time_of_clock_seconds(*toc)
+                .with_total_group_delay_nanos(*tgd)
+                .with_ca_or_p_l2_mask(*ca_or_p_l2)
+                .with_clock_offset_seconds(*af0)
+                .with_clock_drift_seconds_s(*af1)
+                .with_clock_drift_rate_seconds_s2(*af2);
+
+            if *alert {
+                how = how.with_alert_bit();
+            }
+
+            if *anti_spoofing {
+                how = how.with_anti_spoofing();
+            }
+
+            if *integrity {
+                telemetry = telemetry.with_integrity();
+            }
+
+            if *tlm_reserved_bit {
+                telemetry = telemetry.with_reserved_bit();
+            }
+
+            let frame = GpsQzssFrame::default()
+                .with_telemetry(telemetry)
+                .with_hand_over_word(how)
+                .with_subframe(GpsQzssSubframe::Ephemeris1(subframe));
+
+            let encoded = frame.encode_raw();
             let encoded_size = encoded.len();
-            assert_eq!(encoded_size, GPS_FRAME_BYTES, "encoded invalid size!");
+            assert_eq!(encoded.len(), GPS_FRAME_BYTES, "encoded invalid size!");
 
-            // let (size, decoded) = decoder.decode(&encoded, encoded_size);
-            // assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
-            // assert_eq!(decoded, Some(frame), "reciprocal failed");
+            let (size, decoded) = decoder.decode(&encoded, encoded.len());
+            assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+            assert_eq!(decoded, Some(frame), "reciprocal failed");
+
+            info!("test ({}): {:?}", test_num, frame);
         }
     }
 
@@ -677,7 +800,7 @@ mod encoding {
     //                 .with_integrity()
     //                 .with_reserved_bit(),
     //         )
-    //         .with_how_word(
+    //         .with_hand_over_word(
     //             GpsQzssHow::default()
     //                 .with_tow_seconds(0x9_9999)
     //                 .with_alert_bit()
@@ -746,7 +869,7 @@ mod encoding {
     //                 .with_integrity()
     //                 .with_reserved_bit(),
     //         )
-    //         .with_how_word(
+    //         .with_hand_over_word(
     //             GpsQzssHow::default()
     //                 .with_tow_seconds(0x9_9999)
     //                 .without_alert_bit()
@@ -816,7 +939,7 @@ mod encoding {
                     .with_integrity()
                     .with_reserved_bit(),
             )
-            .with_how_word(
+            .with_hand_over_word(
                 GpsQzssHow::default()
                     .with_tow_seconds(0x5_6789)
                     .with_alert_bit()
@@ -893,7 +1016,7 @@ mod encoding {
     //                 .with_integrity()
     //                 .with_reserved_bit(),
     //         )
-    //         .with_how_word(
+    //         .with_hand_over_word(
     //             GpsQzssHow::default()
     //                 .with_tow_seconds(0x9_8765)
     //                 .with_alert_bit()
@@ -952,7 +1075,7 @@ mod encoding {
                     .with_integrity()
                     .with_reserved_bit(),
             )
-            .with_how_word(
+            .with_hand_over_word(
                 GpsQzssHow::default()
                     .with_tow_seconds(0x9_8765)
                     .with_alert_bit()
@@ -979,7 +1102,7 @@ mod encoding {
         //             .with_integrity()
         //             .with_reserved_bit(),
         //     )
-        //     .with_how_word(
+        //     .with_hand_over_word(
         //         GpsQzssHow::default()
         //             .with_tow_seconds(0x9_8765)
         //             .with_alert_bit()

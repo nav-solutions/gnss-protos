@@ -15,8 +15,8 @@ pub struct GpsQzssFrame {
 }
 
 impl GpsQzssFrame {
-    /// Copies and returns with updated [GpsQzssHow] data word
-    pub fn with_how_word(mut self, how: GpsQzssHow) -> Self {
+    /// Copies and returns with updated [GpsQzssHow].
+    pub fn with_hand_over_word(mut self, how: GpsQzssHow) -> Self {
         self.how = how;
         self
     }

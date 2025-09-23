@@ -6,8 +6,68 @@ use crate::gps::{
 #[cfg(feature = "log")]
 use log::{debug, error, trace};
 
-/// [GpsQzssDecoder] can decode GPS (or QZSS) protocol.
-/// By [Default], our [GpsQzssDecoder] does not verify parity.
+/// [GpsQzssDecoder] can decode GPS (or QZSS) messages.
+/// By [Default], our [GpsQzssDecoder] does not verify parity,
+/// so does not invalid any message.
+///
+/// ```
+/// use std::fs::File;
+/// use std::io::Read;
+///
+/// use gnss_protos::gps::{GpsDecoder, GPS_FRAME_BITS};
+///
+/// // Feeds some of our GPS messages example,
+/// // which is equivalent to real-time acquisition
+///
+/// let mut buffer = [0u8; 1024];
+///
+/// let mut fd = File::open("data/GPS/eph1.bin")
+///     .unwrap();
+///
+/// read(&mut buffer).unwrap();
+///
+/// // The decoder does not verify parity at the moment
+/// let mut decoder = GpsDecoder::default();
+///
+/// // parse first message
+/// let (size, decoded) = decoder.decode(&buffer);
+///
+/// // this is not exactly std/io compatible, because we consider bits
+/// // here, not bytes.
+/// assert_eq!(size, GPS_FRAME_BITS);
+///
+/// let decoded = decoded.unwrap(); // message found
+///
+/// assert_eq!(decoded.telemetry.message, 0x1234);
+/// assert_eq!(decoded.telemetry.integrity, true);
+/// assert_eq!(decoded.telemetry.reserved_bit, true);
+///
+/// assert_eq!(decoded.how.tow, 0x5_6789);
+/// assert_eq!(decoded.how.alert, true);
+/// assert_eq!(decoded.how.anti_spoofing, true);
+///
+/// // we have 128 frames in this file
+/// for i in 1..128 {
+///     let (size, decoded) = decoder.decode(&buffer);
+///     assert_eq!(size, GPS_FRAME_BITS);
+///
+///     // test pattern
+///     assert_eq!(decoded.telemetry.message, 0x1234 +i);
+///     assert_eq!(decoded.how.tow, 0x5_6789 +i);
+///
+///     if i % 2 == 0 {
+///         assert_eq!(decoded.telemetry.integrity, false);
+///         assert_eq!(decoded.telemetry.reserved_bit, false);
+///         assert_eq!(decoded.how.alert, false);
+///         assert_eq!(decoded.how.anti_spoofing, false);
+///     } else {
+///         assert_eq!(decoded.telemetry.integrity, true);
+///         assert_eq!(decoded.telemetry.reserved_bit, true);
+///         assert_eq!(decoded.how.alert, true);
+///         assert_eq!(decoded.how.anti_spoofing, true);
+///     }
+/// }
+/// ```
 #[derive(Debug, Copy, Clone)]
 pub struct GpsQzssDecoder {
     /// Aligned bits
@@ -24,8 +84,8 @@ impl Default for GpsQzssDecoder {
     /// Creates a default [GpsQzssDecoder] that does not verify parity.
     fn default() -> Self {
         Self {
-            parity_verification: false,
             words: Default::default(),
+            parity_verification: false,
             buffer: [0; GPS_FRAME_BYTES],
         }
     }
@@ -199,7 +259,7 @@ impl GpsQzssDecoder {
         dword = (buffer[15] as u32) << 24;
         dword |= (buffer[16] as u32) << 16;
         dword |= (buffer[17] as u32) << 8;
-        dword |= (buffer[18] as u32);
+        dword |= buffer[18] as u32;
         self.words[2] = GpsDataWord::from(dword);
 
         dword = (buffer[22] as u32) << 4;
@@ -225,7 +285,7 @@ impl GpsQzssDecoder {
         dword = (buffer[30] as u32) << 24;
         dword |= (buffer[31] as u32) << 16;
         dword |= (buffer[32] as u32) << 8;
-        dword |= (buffer[33] as u32);
+        dword |= buffer[33] as u32;
         self.words[6] = GpsDataWord::from(dword);
         
         dword = (buffer[37] as u32) << 4;

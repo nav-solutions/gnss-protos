@@ -3,7 +3,7 @@ use std::{fs::File, io::Read, sync::Once};
 use log::LevelFilter;
 
 use crate::gps::{
-    GpsDataByte, GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
+    GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
 };
 
 static INIT: Once = Once::new();
