@@ -1,4 +1,4 @@
-use crate::gps::{GpsDataWord, GpsError, GPS_PARITY_MASK, GPS_PARITY_SIZE};
+use crate::gps::{GpsDataWord, GpsError};
 
 const PREAMBLE_MASK: u32 = 0x22C0_0000;
 const MESSAGE_SHIFT: u32 = 8;

@@ -5,7 +5,7 @@ fn count_bits(value: u32) -> u32 {
     let mut count = 0;
     let mut mask = 0x01u32;
 
-    for i in 0..32 {
+    for _ in 0..32 {
         if value & mask > 0 {
             count += 1;
         }
@@ -35,7 +35,7 @@ impl Default for GpsDataWord {
 impl core::ops::BitOrAssign<u8> for GpsDataWord {
     fn bitor_assign(&mut self, rhs: u8) {
         let mut value = self.value();
-        value |= (rhs as u32);
+        value |= rhs as u32;
         *self = Self::from(value << 2)
     }
 }
@@ -54,9 +54,9 @@ impl From<u32> for GpsDataWord {
     }
 }
 
-impl Into<u32> for GpsDataWord {
-    fn into(self) -> u32 {
-        self.value()
+impl From<GpsDataWord> for u32 {
+    fn from(val: GpsDataWord) -> Self {
+        val.value()
     }
 }
 
@@ -113,7 +113,7 @@ impl GpsDataWord {
                 d ^= 1 << 6;
             }
 
-            if ((b29 + count_bits(BITMASKS[5]) & d) % 2) > 0 {
+            if (((b29 + count_bits(BITMASKS[5])) & d) % 2) > 0 {
                 d ^= 1 << 7;
             }
         }
@@ -124,12 +124,12 @@ impl GpsDataWord {
             b ^= 0x3fffffc0;
         }
 
-        b |= (b29 + count_bits(BITMASKS[0]) & d % 2) << 5;
-        b |= (b30 + count_bits(BITMASKS[1]) & d % 2) << 4;
-        b |= (b29 + count_bits(BITMASKS[2]) & d % 2) << 3;
-        b |= (b30 + count_bits(BITMASKS[3]) & d % 2) << 2;
-        b |= (b30 + count_bits(BITMASKS[4]) & d % 2) << 1;
-        b |= b29 + count_bits(BITMASKS[5]) & d % 2;
+        b |= ((b29 + count_bits(BITMASKS[0])) & (d % 2)) << 5;
+        b |= ((b30 + count_bits(BITMASKS[1])) & (d % 2)) << 4;
+        b |= ((b29 + count_bits(BITMASKS[2])) & (d % 2)) << 3;
+        b |= ((b30 + count_bits(BITMASKS[3])) & (d % 2)) << 2;
+        b |= ((b30 + count_bits(BITMASKS[4])) & (d % 2)) << 1;
+        b |= (b29 + count_bits(BITMASKS[5])) & (d % 2);
 
         b &= 0x3fffffff;
 

@@ -118,7 +118,7 @@ impl GpsQzssDecoder {
                 value |= (slice[i] & byte1_mask) << j;
 
                 byte1_mask >>= 1;
-                byte2_mask |= 0x1 << 8 - j;
+                byte2_mask |= 0x1 << (8 - j);
 
                 if value == GPS_PREAMBLE_BYTE {
                     return Some(i * 8 + j);
@@ -142,7 +142,7 @@ impl GpsQzssDecoder {
     /// You are expected to discard all processed _bits_ not to decode the same frame twice.
     /// - Optional [GpsQzssFrame] correctly decoded. First in order of appearance in the buffer.
     pub fn decode(&mut self, buffer: &[u8], size: usize) -> (usize, Option<GpsQzssFrame>) {
-        let mut dword = 0u32;
+        let mut dword;
 
         // locate preamble
         let preamble_offset_bit = Self::find_preamble(buffer, size);
@@ -184,7 +184,7 @@ impl GpsQzssDecoder {
             },
         };
 
-        dword = (buffer[7] as u32);
+        dword = buffer[7] as u32;
         dword |= (buffer[6] as u32) << 8;
         dword |= (buffer[5] as u32) << 16;
         dword |= (buffer[4] as u32) << 24;
@@ -252,7 +252,7 @@ impl GpsQzssDecoder {
         dword |= ((buffer[26] & 0xC0) as u32) >> 6;
         self.words[4] = GpsDataWord::from(dword);
 
-        dword = (buffer[29] as u32);
+        dword = buffer[29] as u32;
         dword |= (buffer[28] as u32) << 8;
         dword |= (buffer[27] as u32) << 16;
         dword |= (buffer[26] as u32) << 24;
@@ -279,7 +279,7 @@ impl GpsQzssDecoder {
             subframe: GpsQzssSubframe::decode(how.frame_id, &self.words),
         };
 
-        return (preamble_offset_bit + GPS_FRAME_BITS, Some(frame));
+        (preamble_offset_bit + GPS_FRAME_BITS, Some(frame))
     }
 }
 

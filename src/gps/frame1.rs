@@ -620,7 +620,7 @@ impl Word4 {
     pub fn from_word(word: GpsDataWord) -> Self {
         let value = word.value();
         let l2_p_data_flag = (value & WORD4_L2P_DATA_MASK) > 0;
-        let reserved = ((value & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT) as u32;
+        let reserved = (value & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT;
 
         Self {
             l2_p_data_flag,
@@ -780,7 +780,7 @@ pub(crate) struct Word10 {
 impl Word10 {
     /// Interprets this [GpsDataWord] as [Word10].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let af0 = ((word.value() & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT) as u32;
+        let af0 = (word.value() & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT;
         let af0 = twos_complement(af0, 0x3fffff, 0x200000);
         Self { af0 }
     }

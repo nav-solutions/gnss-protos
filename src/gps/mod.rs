@@ -13,9 +13,6 @@ pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
 /// Total GPS/QZSS frame size (in bytes!)
 pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 
-/// Total number of bits in a subframe
-pub(crate) const GPS_SUBFRAME_BITS: usize = (GPS_WORDS_PER_FRAME - 2) * GPS_WORD_BITS;
-
 /// Parity bit mask (for each [GpsDataWord])
 pub(crate) const GPS_PARITY_MASK: u32 = 0x0000_003f;
 

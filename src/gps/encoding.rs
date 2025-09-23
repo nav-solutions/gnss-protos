@@ -37,9 +37,9 @@ impl GpsQzssFrame {
 
         // calculate parity for each word
         for (ith, word) in words.iter_mut().enumerate() {
-            let parity = word.parity(&Default::default(), false);
-
-            *word |= 0x00u8;
+            // TODO
+            // let parity = word.parity(&Default::default(), false);
+            // *word |= 0x00u8;
         }
 
         words
@@ -70,7 +70,12 @@ impl GpsQzssFrame {
             encoded[2] |= 0x01;
         }
 
-        encoded[3] <<= 2; // TODO (PAR)
+        let gps_word =
+            GpsDataWord::from_be_bytes(&[encoded[0], encoded[1], encoded[2], encoded[3]]);
+        let parity = gps_word.parity(&Default::default(), false);
+
+        encoded[3] = parity;
+        encoded[3] <<= 2;
 
         let tow = self.how.tow * 2 / 3;
 
@@ -87,9 +92,18 @@ impl GpsQzssFrame {
             encoded[6] |= 0x80;
         }
 
-        encoded[6] |= self.how.frame_id.encode() << 4;
+        let gps_word = GpsDataWord::from_be_bytes(&[
+            ((encoded[3] & 0x03) << 6) | (encoded[4] & 0xfc) >> 2,
+            ((encoded[4] & 0x03) << 6) | (encoded[5] & 0xfc) >> 2,
+            ((encoded[5] & 0x03) << 6) | (encoded[6] & 0xfc) >> 2,
+            ((encoded[6] & 0x03) << 6) | (encoded[7] & 0xfc) >> 2,
+        ]);
 
-        encoded[7] <<= 4; // TODO (PAR)
+        let parity = gps_word.parity(&Default::default(), true);
+
+        encoded[6] |= self.how.frame_id.encode() << 4;
+        encoded[6] |= (parity & 0xf0) >> 4;
+        encoded[7] |= (parity & 0x0f) << 4;
 
         match self.how.frame_id {
             GpsQzssFrameId::Ephemeris1 => {
@@ -123,19 +137,19 @@ impl GpsQzssFrame {
 
                 encoded[15] = ((subf.reserved_word5 & 0xff_0000) >> 16) as u8;
                 encoded[16] = ((subf.reserved_word5 & 0x00_ff00) >> 8) as u8;
-                encoded[17] = ((subf.reserved_word5 & 0x00_00ff) >> 0) as u8;
+                encoded[17] = (subf.reserved_word5 & 0x00_00ff) as u8;
                 encoded[18] <<= 2; // TODO
 
                 encoded[18] |= ((subf.reserved_word6 & 0xc0_0000) >> 22) as u8;
                 encoded[19] = ((subf.reserved_word6 & 0x3f_c000) >> 14) as u8;
                 encoded[20] = ((subf.reserved_word6 & 0x00_3fc0) >> 6) as u8;
-                encoded[21] = ((subf.reserved_word6 & 0x00_003f) >> 0) as u8;
+                encoded[21] = (subf.reserved_word6 & 0x00_003f) as u8;
                 encoded[21] <<= 2;
                 encoded[22] <<= 4; // TODO
 
                 encoded[22] |= ((subf.reserved_word7 & 0xf000) >> 12) as u8;
                 encoded[23] = ((subf.reserved_word7 & 0x0ff0) >> 4) as u8;
-                encoded[24] = ((subf.reserved_word7 & 0x000f) >> 0) as u8;
+                encoded[24] = (subf.reserved_word7 & 0x000f) as u8;
                 encoded[24] <<= 4;
 
                 let mut tgd = (subf.tgd * 2.0_f64.powi(31)).round() as u8;
@@ -145,9 +159,9 @@ impl GpsQzssFrame {
                     tgd -= 1;
                 }
 
-                encoded[24] |= (tgd as u8 & 0xf0) >> 4;
+                encoded[24] |= (tgd & 0xf0) >> 4;
 
-                encoded[25] = tgd as u8 & 0x0f;
+                encoded[25] = tgd & 0x0f;
                 encoded[25] <<= 4; // TODO
                 encoded[26] <<= 6; // TODO
                 encoded[26] |= ((subf.iodc & 0x0fc) >> 2) as u8;
@@ -167,13 +181,13 @@ impl GpsQzssFrame {
 
                 encoded[30] = af2;
                 encoded[31] = ((af1 & 0xff00) >> 8) as u8;
-                encoded[32] = ((af1 & 0x00ff) >> 0) as u8;
+                encoded[32] = (af1 & 0x00ff) as u8;
                 encoded[33] <<= 2; // TODO
 
                 encoded[33] |= ((af0 & 0x30_0000) >> 20) as u8;
                 encoded[34] = ((af0 & 0x0f_f000) >> 12) as u8;
                 encoded[35] = ((af0 & 0x00_0ff0) >> 4) as u8;
-                encoded[36] = ((af0 & 0x00_000f) >> 0) as u8;
+                encoded[36] = (af0 & 0x00_000f) as u8;
                 encoded[36] <<= 4; // TODO
 
                 encoded[37] <<= 4;
@@ -454,7 +468,7 @@ mod encoding {
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x48);
         assert_eq!(encoded[2], 0xD0 | 0x02 | 0x01);
-        assert_eq!(encoded[3], 0x00);
+        assert_eq!(encoded[3], 0x4C);
 
         assert_eq!(encoded[4], 0x60);
         assert_eq!(encoded[5], 0x69);
@@ -536,7 +550,7 @@ mod encoding {
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x48);
         assert_eq!(encoded[2], 0x34 << 2 | 0x01);
-        assert_eq!(encoded[3], 0x01);
+        assert_eq!(encoded[3], 0x4D);
 
         assert_eq!(encoded[4], 0xDF);
         assert_eq!(encoded[5], 0x61);
@@ -610,7 +624,7 @@ mod encoding {
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
         assert_eq!(encoded[1], 0x04);
         assert_eq!(encoded[2], 0x23 << 2);
-        assert_eq!(encoded[3], 0x00);
+        assert_eq!(encoded[3], 0x30);
 
         assert_eq!(encoded[4], 0x4E);
         assert_eq!(encoded[5], 0x20);
