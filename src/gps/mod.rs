@@ -19,6 +19,9 @@ pub(crate) const GPS_SUBFRAME_BITS: usize = (GPS_WORDS_PER_FRAME - 2) * GPS_WORD
 /// Parity bit mask (for each [GpsDataWord])
 pub(crate) const GPS_PARITY_MASK: u32 = 0x0000_003f;
 
+/// Payload bit mask
+pub(crate) const GPS_PAYLOAD_MASK: u32 = 0xffff_ffc0;
+
 /// Number of parity bits for each [GpsDataWord]
 pub(crate) const GPS_PARITY_SIZE: usize = 6;
 

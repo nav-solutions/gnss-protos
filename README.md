@@ -39,7 +39,7 @@ The frame parity calculator is being beta-tested.
 We provide methods to both encode and decode data frames, and methods
 to work from a stream of padded bytes (re-aligned) (2) or a bit stream buffer for real-time interfaces (1):
 
-1. The `GpsDecoder` is the solution when working with real-time GPS/QZSS streams.
+1. The `GpsQzssDecoder` is the solution when working with real-time GPS/QZSS streams.
 It is capable to synchronize itself to the frame start (which is not aligned to a byte).
 But you have to manage your buffer and operate the API correctly.
 This method returns the number of processed _bits_ (not bytes). You are expected
@@ -47,13 +47,9 @@ to discard all processed _bits_ each time you invoke the decoder, not to process
 the same frame twice. If you discard bytes not bits, you will inevitably loose messages.
 
 ```rust
-use gnss_protos::gps::GpsDecoder;
+use gnss_protos::GpsQzssDecoder;
 
-// The decoder does not verify parity at the moment
-let mut decoder = GpsDecoder::default();
-
-// Feed one of our test frames into it,
-// which is equivalent to real-time acquisition
+// TODO
 ```
 
 2. `GpsQzssFrame` supports a `decode()` that works with a possibly padded Byte.
@@ -64,7 +60,7 @@ We used this approach to interface correctly to U-Blox receivers for example
 (that pad and align the frames internally).
 
 ```rust
-use gnss_protos::gps::GpsDecoder;
+// TODO
 ```
 
 License

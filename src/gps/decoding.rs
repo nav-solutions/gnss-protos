@@ -24,6 +24,12 @@ impl GpsQzssFrame {
         words: &[GpsDataWord; GPS_WORDS_PER_FRAME],
         check_parity: bool,
     ) -> Option<GpsQzssFrame> {
+        // if check_parity {
+        //     let parity = words[0].parity(&Default::default(), false);
+        //     let value = words[0].value() & 0x3f;
+        //     panic!("PARITY expecting 0x{:02X}, got 0x{:02X}", parity, value);
+        // }
+
         // TLM
         let telemetry = match GpsQzssTelemetry::from_word(words[0]) {
             Ok(tlm) => tlm,
@@ -38,6 +44,13 @@ impl GpsQzssFrame {
             },
         };
 
+        // TODO
+        // if check_parity {
+        //     let parity = words[1].parity(&Default::default(), false);
+        //     let value = words[1].value() & 0x3f;
+        //     panic!("PARITY expecting 0x{:02X}, got 0x{:02X}", parity, value);
+        // }
+
         // HOW
         let how = match GpsQzssHow::from_word(words[1]) {
             Ok(how) => how,
@@ -51,6 +64,15 @@ impl GpsQzssFrame {
                 return None;
             },
         };
+
+        // TODO
+        // if check_parity {
+        //  for i in 2..GPS_WORDS_PER_FRAME {
+        //      let parity = words[i].parity(&Default::default(), false);
+        //      let value = words[i].value() & 0x3f;
+        //      panic!("PARITY expecting 0x{:02X}, got 0x{:02X}", parity, value);
+        //  }
+        // }
 
         Some(GpsQzssFrame {
             subframe: GpsQzssSubframe::decode(how.frame_id, &words[2..]),
@@ -73,11 +95,9 @@ mod test {
     use crate::tests::init_logger;
 
     #[test]
-    fn eph_1_decoding_noparity() {
+    fn ublox_eph_1() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
-
-        let mut found = false;
 
         let words = from_ublox_bytes(&[
             // TLM
@@ -93,29 +113,31 @@ mod test {
             0x31, 0x2C, 0x30, 0x33,
         ]);
 
-        let decoded = GpsQzssFrame::decode(&words, false).unwrap_or_else(|| {
-            panic!("Failed to decode valid message");
-        });
+        for check_parity in [false, true] {
+            let decoded = GpsQzssFrame::decode(&words, check_parity).unwrap_or_else(|| {
+                panic!("Failed to decode valid message");
+            });
 
-        assert_eq!(decoded.telemetry.message, 0x13E);
-        assert_eq!(decoded.telemetry.integrity, false);
-        assert_eq!(decoded.telemetry.reserved_bit, false);
+            assert_eq!(decoded.telemetry.message, 0x13E);
+            assert_eq!(decoded.telemetry.integrity, false);
+            assert_eq!(decoded.telemetry.reserved_bit, false);
 
-        assert_eq!(decoded.how.alert, false);
-        assert_eq!(decoded.how.anti_spoofing, true);
-        assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
+            assert_eq!(decoded.how.alert, false);
+            assert_eq!(decoded.how.anti_spoofing, true);
+            assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
 
-        let frame1 = decoded.subframe.as_eph1().unwrap_or_else(|| {
-            panic!("Decoded invalid subframe");
-        });
+            let frame1 = decoded.subframe.as_eph1().unwrap_or_else(|| {
+                panic!("Decoded invalid subframe");
+            });
 
-        assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
-        assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
-        assert_eq!(frame1.af2, 0.0);
+            assert!((frame1.af1 - 1.023181539495E-11).abs() < 1e-14);
+            assert!((frame1.af0 - -4.524961113930E-04).abs() < 1.0e-11);
+            assert_eq!(frame1.af2, 0.0);
 
-        assert_eq!(frame1.week, 318);
-        assert_eq!(frame1.toc, 266_400);
-        assert_eq!(frame1.health, 0);
+            assert_eq!(frame1.week, 318);
+            assert_eq!(frame1.toc, 266_400);
+            assert_eq!(frame1.health, 0);
+        }
     }
 
     // #[test]

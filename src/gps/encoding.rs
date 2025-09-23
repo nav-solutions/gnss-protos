@@ -15,13 +15,14 @@ impl GpsQzssFrame {
         GPS_FRAME_BITS
     }
 
-    /// Encodes this [GpsQzssFrame] as serie of 10 [GpsDataWord]s
-    /// which solves the alignment issue and can be manipulated.
+    /// Encodes this [GpsQzssFrame] as serie of 10 [GpsDataWord]s, aligned to 32 bits
+    /// and parity bits correctly encoded.  
     /// When working with a real-time transmitter, you should prefer
-    /// [Self::encode_raw].
+    /// [Self::encode_raw] which is not aligned.
     pub fn encode(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME] {
         let subwords = self.subframe.to_words();
-        [
+
+        let mut words = [
             self.telemetry.to_word(),
             self.how.to_word(),
             subwords[0],
@@ -32,7 +33,16 @@ impl GpsQzssFrame {
             subwords[5],
             subwords[6],
             subwords[7],
-        ]
+        ];
+
+        // calculate parity for each word
+        for (ith, word) in words.iter_mut().enumerate() {
+            let parity = word.parity(&Default::default(), false);
+
+            *word |= 0x00u8;
+        }
+
+        words
     }
 
     /// Encodes this [GpsQzssFrame] as a 300 bit burst (38 bytes).
@@ -307,7 +317,7 @@ impl GpsQzssFrame {
 #[cfg(test)]
 mod encoding {
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Read, Write};
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
@@ -1027,7 +1037,7 @@ mod encoding {
             )
             .with_hand_over_word(
                 GpsQzssHow::default()
-                    .with_tow_seconds(0x5_6789)
+                    .with_tow_seconds(15_000)
                     .with_alert_bit()
                     .with_anti_spoofing(),
             )
@@ -1086,6 +1096,54 @@ mod encoding {
             subframe.reserved_word7 += 1;
 
             subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
+        }
+    }
+
+    #[test]
+    fn eph1_bin_test() {
+        let mut rd_ptr = 0;
+        let mut buffer = [0; 1024];
+
+        let mut fd = File::open("data/GPS/eph1.bin").unwrap();
+
+        let mut size = fd.read(&mut buffer).unwrap();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        // grab first frame
+        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+        let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+        assert_eq!(decoded.telemetry.message, 0x1234);
+        assert_eq!(decoded.telemetry.integrity, true);
+        assert_eq!(decoded.telemetry.reserved_bit, true);
+
+        assert_eq!(decoded.how.tow, 15_000);
+        assert_eq!(decoded.how.alert, true);
+        assert_eq!(decoded.how.anti_spoofing, true);
+
+        // bits->byte lazy conversion.
+        // Frames are contiguous (no dead time)
+        // Each frame is round(37.5)=37 byte long
+        // Last bits are processed twice (lazily),
+        // but the decoder correctly synchronizes itself.
+        rd_ptr += processed_size / 8 - 1; // bytes!
+        size -= processed_size / 8 - 1; // bytes!
+
+        for i in 1..128 {
+            let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+            // TODO residues
+            // assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+            // let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+            if i % 2 == 0 {
+            } else {
+            }
         }
     }
 

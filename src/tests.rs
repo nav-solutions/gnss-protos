@@ -298,4 +298,36 @@ fn test_from_ublox_bytes() {
     assert_eq!(how.alert, false);
     assert_eq!(how.anti_spoofing, true);
     assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris3);
+
+    let data = [
+        // TLM
+        0x22, 0xC1, 0x3E, 0x1B, // HOW
+        0x15, 0x27, 0xC9, 0x73, // WORD3
+        0x00, 0x0A, 0xEA, 0x34, // WORD4
+        0x03, 0x3C, 0xFF, 0xEE, // WORD5
+        0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+        0x13, 0x6F, 0xB6, 0x4E, // WORD7
+        0x86, 0xF4, 0xAB, 0x2C, // WORD8
+        0x06, 0x71, 0xEB, 0x44, // WORD9
+        0x3F, 0xEA, 0xF6, 0x02, // WORD10
+        0x92, 0x45, 0x52, 0x13,
+    ];
+
+    let words = from_ublox_bytes(&data);
+
+    let tlm = GpsQzssTelemetry::from_word(words[0]).unwrap_or_else(|e| {
+        panic!("failed to decode telemetry: {}", e);
+    });
+
+    assert_eq!(tlm.message, 0x13E);
+    assert_eq!(tlm.integrity, false);
+    assert_eq!(tlm.reserved_bit, false);
+
+    let how = GpsQzssHow::from_word(words[1]).unwrap_or_else(|e| {
+        panic!("failed to decode how: {}", e);
+    });
+
+    assert_eq!(how.alert, false);
+    assert_eq!(how.anti_spoofing, true);
+    assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris1);
 }

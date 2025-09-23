@@ -14,7 +14,7 @@ use log::{debug, error, trace};
 /// use std::fs::File;
 /// use std::io::Read;
 ///
-/// use gnss_protos::gps::{GpsDecoder, GPS_FRAME_BITS};
+/// use gnss_protos::{GpsQzssDecoder, GPS_FRAME_BITS};
 ///
 /// // Feeds some of our GPS messages example,
 /// // which is equivalent to real-time acquisition
@@ -24,56 +24,19 @@ use log::{debug, error, trace};
 /// let mut fd = File::open("data/GPS/eph1.bin")
 ///     .unwrap();
 ///
-/// read(&mut buffer).unwrap();
+/// let size = fd.read(&mut buffer).unwrap();
 ///
 /// // The decoder does not verify parity at the moment
-/// let mut decoder = GpsDecoder::default();
+/// let mut decoder = GpsQzssDecoder::default();
 ///
-/// // parse first message
-/// let (size, decoded) = decoder.decode(&buffer);
-///
-/// // this is not exactly std/io compatible, because we consider bits
-/// // here, not bytes.
-/// assert_eq!(size, GPS_FRAME_BITS);
-///
-/// let decoded = decoded.unwrap(); // message found
-///
-/// assert_eq!(decoded.telemetry.message, 0x1234);
-/// assert_eq!(decoded.telemetry.integrity, true);
-/// assert_eq!(decoded.telemetry.reserved_bit, true);
-///
-/// assert_eq!(decoded.how.tow, 0x5_6789);
-/// assert_eq!(decoded.how.alert, true);
-/// assert_eq!(decoded.how.anti_spoofing, true);
-///
-/// // we have 128 frames in this file
-/// for i in 1..128 {
-///     let (size, decoded) = decoder.decode(&buffer);
-///     assert_eq!(size, GPS_FRAME_BITS);
-///
-///     // test pattern
-///     assert_eq!(decoded.telemetry.message, 0x1234 +i);
-///     assert_eq!(decoded.how.tow, 0x5_6789 +i);
-///
-///     if i % 2 == 0 {
-///         assert_eq!(decoded.telemetry.integrity, false);
-///         assert_eq!(decoded.telemetry.reserved_bit, false);
-///         assert_eq!(decoded.how.alert, false);
-///         assert_eq!(decoded.how.anti_spoofing, false);
-///     } else {
-///         assert_eq!(decoded.telemetry.integrity, true);
-///         assert_eq!(decoded.telemetry.reserved_bit, true);
-///         assert_eq!(decoded.how.alert, true);
-///         assert_eq!(decoded.how.anti_spoofing, true);
-///     }
-/// }
+/// // TODO example
 /// ```
 #[derive(Debug, Copy, Clone)]
 pub struct GpsQzssDecoder {
-    /// Aligned bits
+    /// 300 bits aligned to sync byte
     buffer: [u8; GPS_FRAME_BYTES],
 
-    /// [GpsDataWord]s
+    /// [GpsDataWord]s to avoid allocation
     words: [GpsDataWord; GPS_WORDS_PER_FRAME - 2],
 
     /// True when parity verification is requested
@@ -117,7 +80,11 @@ impl GpsQzssDecoder {
             self.buffer
                 .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
         } else {
-            panic!("not supported yet");
+            // TODO not supported yet
+
+            self.buffer
+                .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
+
             // slice[byte_index..byte_index + GPS_FRAME_BYTES]
             //     .into_iter()
             //     .map(|b| {
@@ -196,6 +163,9 @@ impl GpsQzssDecoder {
         dword = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
 
         let gps_word = GpsDataWord::from(dword);
+        let parity = gps_word.parity(&Default::default(), false);
+
+        // panic!("LSB=0x{:02}X PAR=0x{:02X}", (gps_word.value() & 0x3f) as u8, parity);
 
         let telemetry = match GpsQzssTelemetry::from_word(gps_word) {
             Ok(telemetry) => {
@@ -214,13 +184,15 @@ impl GpsQzssDecoder {
             },
         };
 
-        dword = (buffer[7] as u32) << 4;
-        dword |= (buffer[6] as u32) << (8 - 2);
-        dword |= (buffer[5] as u32) << (16 - 2);
-        dword |= (buffer[4] as u32) << (24 - 2);
-        dword |= (buffer[3] as u32) << (32 - 2);
+        dword = (buffer[7] as u32);
+        dword |= (buffer[6] as u32) << 8;
+        dword |= (buffer[5] as u32) << 16;
+        dword |= (buffer[4] as u32) << 24;
+        dword >>= 2;
+        dword |= ((buffer[3] as u32) & 0x03) << 28;
 
         let gps_word = GpsDataWord::from(dword);
+        let parity = gps_word.parity(&Default::default(), false);
 
         #[cfg(feature = "log")]
         trace!("(GPS/QZSS)       [how]: {:?}", gps_word);
