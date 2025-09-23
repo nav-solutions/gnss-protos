@@ -243,11 +243,14 @@ impl GpsQzssDecoder {
         };
 
         // collect 8 data words
-        dword = (buffer[11] as u32) << 6;
-        dword |= (buffer[10] as u32) << (8 - 4);
-        dword |= (buffer[9] as u32) << (16 - 4);
-        dword |= (buffer[8] as u32) << (24 - 4);
-        dword |= (buffer[7] as u32) << (32 - 4);
+        dword = ((buffer[11] & 0xC0) as u32) >> 4;
+        dword |= ((buffer[10] & 0x0f) as u32) << 4;
+        dword |= (((buffer[10] & 0xf0) as u32) >> 4) << 8;
+        dword |= ((buffer[9] & 0x0f) as u32) << 12;
+        dword |= (((buffer[9] & 0xf0) as u32) >> 4) << 16;
+        dword |= ((buffer[8] & 0x0f) as u32) << 20;
+        dword |= (((buffer[8] & 0xf0) as u32) >> 4) << 24;
+        dword |= ((buffer[7] & 0x0f) as u32) << 28;
         self.words[0] = GpsDataWord::from(dword);
 
         dword = (buffer[14] as u32) << (8 - 6);
@@ -275,19 +278,20 @@ impl GpsQzssDecoder {
         dword |= (buffer[23] as u32) << (24 - 4);
         dword |= (buffer[22] as u32) << (32 - 4);
         self.words[4] = GpsDataWord::from(dword);
-        
-        dword = (buffer[29] as u32) << (8 - 6);
-        dword |= (buffer[28] as u32) << (16 - 6);
-        dword |= (buffer[27] as u32) << (24 - 6);
-        dword |= (buffer[26] as u32) << (32 - 6);
+
+        dword = (buffer[29] as u32);
+        dword |= (buffer[28] as u32) << 8;
+        dword |= (buffer[27] as u32) << 16;
+        dword |= (buffer[26] as u32) << 24;
+        dword <<= 2;
         self.words[5] = GpsDataWord::from(dword);
-        
+
         dword = (buffer[30] as u32) << 24;
         dword |= (buffer[31] as u32) << 16;
         dword |= (buffer[32] as u32) << 8;
         dword |= buffer[33] as u32;
         self.words[6] = GpsDataWord::from(dword);
-        
+
         dword = (buffer[37] as u32) << 4;
         dword |= (buffer[36] as u32) << (8 - 2);
         dword |= (buffer[35] as u32) << (16 - 2);

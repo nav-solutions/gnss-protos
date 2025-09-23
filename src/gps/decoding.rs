@@ -1,10 +1,9 @@
 use crate::gps::{
-    GpsDataWord, GpsQzssFrame, GpsQzssHow, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
+    GpsDataWord, GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
 };
 
 #[cfg(feature = "log")]
-use log::{error};
+use log::error;
 
 impl GpsQzssFrame {
     /// Decodes a burst of [GPS_WORDS_PER_FRAME] [GpsDataWord]s, with possible
@@ -67,7 +66,7 @@ mod test {
 
     use crate::{
         gps::{GpsQzssFrame, GpsQzssFrameId},
-        tests::{from_ublox_bytes},
+        tests::from_ublox_bytes,
     };
 
     #[cfg(all(feature = "std", feature = "log"))]

@@ -69,38 +69,37 @@ impl GpsDataWord {
         let value = self.value();
 
         let (b29, b30) = if let Some(rhs) = rhs {
-            let value = rhs.value() as u8; 
+            let value = rhs.value() as u8;
             ((value & 0x00000001) >> 3, (value & 0x00000002) >> 2)
         } else {
             (0, 0)
         };
 
-        let (mut b0, mut b1, mut b2, mut b3, mut b4, mut b5)
-                = (b29, b30, b29, b30, b29, b30);
+        let (mut b0, mut b1, mut b2, mut b3, mut b4, mut b5) = (b29, b30, b29, b30, b29, b30);
 
         b0 ^= (value & 0x01) as u8;
-        b0 ^= ((value & 0x02) >>1) as u8;
-        b0 ^= ((value & 0x04) >>2) as u8;
-        b0 ^= ((value & 0x10) >>4) as u8;
-        b0 ^= ((value & 0x20) >>5) as u8;
-        b0 ^= ((value & 0x200) >>9) as u8;
-        b0 ^= ((value & 0x400) >>10) as u8;
-        b0 ^= ((value & 0x800) >>11) as u8;
-        b0 ^= ((value & 0x1000) >>12) as u8;
-        b0 ^= ((value & 0x2000) >>13) as u8;
-        b0 ^= ((value & 0x10000) >>16) as u8;
-        b0 ^= ((value & 0x20000) >>17) as u8;
-        b0 ^= ((value & 0x40000) >>19) as u8;
-        b0 ^= ((value & 0x40000) >>22) as u8;
-        
+        b0 ^= ((value & 0x02) >> 1) as u8;
+        b0 ^= ((value & 0x04) >> 2) as u8;
+        b0 ^= ((value & 0x10) >> 4) as u8;
+        b0 ^= ((value & 0x20) >> 5) as u8;
+        b0 ^= ((value & 0x200) >> 9) as u8;
+        b0 ^= ((value & 0x400) >> 10) as u8;
+        b0 ^= ((value & 0x800) >> 11) as u8;
+        b0 ^= ((value & 0x1000) >> 12) as u8;
+        b0 ^= ((value & 0x2000) >> 13) as u8;
+        b0 ^= ((value & 0x10000) >> 16) as u8;
+        b0 ^= ((value & 0x20000) >> 17) as u8;
+        b0 ^= ((value & 0x40000) >> 19) as u8;
+        b0 ^= ((value & 0x40000) >> 22) as u8;
+
         b1 ^= (value & 0x02) as u8;
 
         b2 ^= (value & 0x01) as u8;
-        
+
         b3 ^= (value & 0x02) as u8;
-        
+
         b3 ^= (value & 0x01) as u8;
-        
+
         b5 ^= (value & 0x04) as u8;
 
         let mut b = b0 & 0x1;
@@ -175,49 +174,56 @@ mod test {
             (0xFFFF34FFu32, 0xFFFF34FF >> 2),
         ] {
             let word = GpsDataWord::from(value);
-            assert_eq!(word.value(), expected_value, "got 0x{:08X} expecting 0x{:08X}", word.value(), expected_value);
+            assert_eq!(
+                word.value(),
+                expected_value,
+                "got 0x{:08X} expecting 0x{:08X}",
+                word.value(),
+                expected_value
+            );
         }
     }
 
     #[test]
     fn parity_calc() {
-        for (bin, b29, b30, expected) in [
-            (
-				0b101101001001011010010101110110u32,
-				0,
-				0,
-				0b000000u8,
-			),		 
-        ] { 
-			let word = GpsDataWord::from(bin << 6);
+        for (bin, b29, b30, expected) in [(0b101101001001011010010101110110u32, 0, 0, 0b000000u8)] {
+            let word = GpsDataWord::from(bin << 6);
 
-			let parity = if b29 == 0 && b30 == 0 {
-				word.parity(None)
-			} else {
-				word.parity(None)
-			};
+            let parity = if b29 == 0 && b30 == 0 {
+                word.parity(None)
+            } else {
+                word.parity(None)
+            };
 
-	        assert_eq!(parity, expected, "got 0x{:02X}, expecting 0x{:02X}", parity, expected);	
+            assert_eq!(
+                parity, expected,
+                "got 0x{:02X}, expecting 0x{:02X}",
+                parity, expected
+            );
         }
     }
 
     #[test]
     fn parity_ok_checker() {
-        for (b29, b30, dword) in [
-            (0, 0, 0x8B1248CA),
-        ] {
+        for (b29, b30, dword) in [(0, 0, 0x8B1248CA)] {
             let word = GpsDataWord::from(dword);
-            assert!(word.parity_check(None).is_ok(), "failed for 0x{:08X}", dword);
+            assert!(
+                word.parity_check(None).is_ok(),
+                "failed for 0x{:08X}",
+                dword
+            );
         }
     }
 
     #[test]
     fn parity_nok_checker() {
-        for dword in [
-            0x8B1248CA,
-        ] {
+        for dword in [0x8B1248CA] {
             let word = GpsDataWord::from(dword);
-            assert!(word.parity_check(None).is_err(), "failed for 0x{:08X}", dword);
+            assert!(
+                word.parity_check(None).is_err(),
+                "failed for 0x{:08X}",
+                dword
+            );
         }
     }
 }

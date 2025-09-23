@@ -1,6 +1,6 @@
 use crate::gps::{
-   GpsDataWord, GpsQzssFrame, GpsQzssFrameId,
-    GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+    GpsDataWord, GpsQzssFrame, GpsQzssFrameId, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE,
+    GPS_WORDS_PER_FRAME,
 };
 
 impl GpsQzssFrame {
@@ -140,7 +140,7 @@ impl GpsQzssFrame {
                 encoded[27] <<= 6;
 
                 let toc = subf.toc / 16;
-                encoded[27] = ((toc & 0xfc00) >> 10) as u8;
+                encoded[27] |= ((toc & 0xfc00) >> 10) as u8;
                 encoded[28] = ((toc & 0x03fc) >> 2) as u8;
                 encoded[29] = (toc & 0x0003) as u8;
                 encoded[29] <<= 6; // TODO
@@ -301,7 +301,7 @@ impl GpsQzssFrame {
 #[cfg(test)]
 mod encoding {
     use std::fs::File;
-    use std::io::{Write};
+    use std::io::Write;
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
@@ -464,7 +464,7 @@ mod encoding {
         assert_eq!(encoded[24], 0x40);
         assert_eq!(encoded[25], 0x20);
         assert_eq!(encoded[26], 0x08);
-        assert_eq!(encoded[27], 0x00);
+        assert_eq!(encoded[27], 0xC0);
         assert_eq!(encoded[28], 0xBB);
         assert_eq!(encoded[29], 0x80);
         assert_eq!(encoded[30], 0x24);
@@ -634,7 +634,7 @@ mod encoding {
 
         // reciprocal
         let mut decoder = GpsQzssDecoder::default();
-        
+
         let (size, decoded) = decoder.decode(&encoded, encoded_size);
 
         assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
@@ -654,8 +654,28 @@ mod encoding {
 
         let mut decoder = GpsQzssDecoder::default();
 
-        for (test_num, (tow, alert, anti_spoofing, frame_id, message, integrity, tlm_reserved_bit, week, ca_or_p_l2, ura, health, iodc, toc, tgd, af0, af1, af2)) in
-            [
+        for (
+            test_num,
+            (
+                tow,
+                alert,
+                anti_spoofing,
+                frame_id,
+                message,
+                integrity,
+                tlm_reserved_bit,
+                week,
+                ca_or_p_l2,
+                ura,
+                health,
+                iodc,
+                toc,
+                tgd,
+                af0,
+                af1,
+                af2,
+            ),
+        ) in [
             (
                 259956,
                 false,
@@ -732,16 +752,14 @@ mod encoding {
                 4.0E-12,
                 4.0E-14,
             ),
-            ]
-            .iter()
-            .enumerate()
+        ]
+        .iter()
+        .enumerate()
         {
-            let mut how = GpsQzssHow::default()
-                .with_tow_seconds(*tow);
+            let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
 
-            let mut telemetry = GpsQzssTelemetry::default()
-                .with_message(*message);
-                
+            let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
+
             let mut subframe = GpsQzssFrame1::default()
                 .with_week(*week)
                 .with_iodc(*iodc)

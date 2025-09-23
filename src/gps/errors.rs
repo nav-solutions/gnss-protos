@@ -19,8 +19,8 @@ pub enum GpsError {
     /// Size is too small to encode a correct data frame
     #[error("buffer to small for this GPS frame")]
     WouldNotFit,
-    
-    /// Invalid Word Parity 
+
+    /// Invalid Word Parity
     #[error("invalid word parity")]
     Parity,
 }

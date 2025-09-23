@@ -2,9 +2,7 @@ use std::{fs::File, io::Read, sync::Once};
 
 use log::LevelFilter;
 
-use crate::gps::{
-    GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME,
-};
+use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME};
 
 static INIT: Once = Once::new();
 

@@ -92,20 +92,17 @@ impl GpsQzssHow {
 
     /// Constructs a default EPH-1 [GpsQzssHow]
     pub fn ephemeris1() -> Self {
-        Self::default()
-            .with_frame_id(GpsQzssFrameId::Ephemeris1)
+        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris1)
     }
 
     /// Constructs a default EPH-2 [GpsQzssHow]
     pub fn ephemeris2() -> Self {
-        Self::default()
-            .with_frame_id(GpsQzssFrameId::Ephemeris1)
+        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris1)
     }
 
     /// Constructs a default EPH-3 [GpsQzssHow]
     pub fn ephemeris3() -> Self {
-        Self::default()
-            .with_frame_id(GpsQzssFrameId::Ephemeris3)
+        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris3)
     }
 
     /// Decodes [GpsQzssHow] from this [GpsDataWord].
@@ -122,7 +119,7 @@ impl GpsQzssHow {
             alert,
             frame_id,
             anti_spoofing,
-            tow: zcount * 3 /2,
+            tow: zcount * 3 / 2,
         })
     }
 
