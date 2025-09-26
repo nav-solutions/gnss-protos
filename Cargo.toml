@@ -1,11 +1,11 @@
 [package]
 name = "gnss-protos"
-version = "0.0.2"
+version = "0.1.0-beta"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS protos encoder and decoder"
-homepage = "https://github.com/rtk-rs"
-repository = "https://github.com/rtk-rs/gnss-protos"
+homepage = "https://github.com/nav-solutions"
+repository = "https://github.com/nav-solutions/gnss-protos"
 keywords = ["geo", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
 edition = "2021"
@@ -16,12 +16,12 @@ exclude = [
 ]
 
 [features]
-default = []
+default = ["gps"]
 
 # STD support. Currently only used in test mode.
 std = []
 
-# Unlock GPS protocol
+# Unlock GPS (+QZSS) protocol
 gps = []
 
 [package.metadata.docs.rs]
@@ -29,8 +29,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 
 [dependencies]
+thiserror = "1"
 log = { version = "0.4", optional = true }
 num-traits = { version = "0.2", default-features = false }
 
 [dev-dependencies]
+log = "0.4"
 env_logger = "0.11"

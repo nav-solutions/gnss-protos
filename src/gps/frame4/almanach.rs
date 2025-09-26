@@ -42,9 +42,9 @@ const WORD9_AF1_SHIFT: u32 = 6;
 const WORD10_AF0_MASK: u32 = 0x3fffff00;
 const WORD10_AF0_SHIFT: u32 = 8;
 
-/// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
-#[derive(Debug, Default, Copy, Clone)]
-pub struct GpsQzssFrame1 {
+/// [AlmanachSat25Sat32] gives Almanach information for
+/// sallite 25 (included) through 32 (included).
+pub struct AlmanachSat25Sat32 {
     /// 10-bit wrapped week counter.
     pub week: u16,
 
@@ -108,7 +108,7 @@ pub struct GpsQzssFrame1 {
     pub reserved_word7: u16,
 }
 
-impl PartialEq for GpsQzssFrame1 {
+impl PartialEq for GpsQzssAlmanach {
     fn eq(&self, rhs: &Self) -> bool {
         if rhs.week != self.week {
             return false;
@@ -174,43 +174,7 @@ impl PartialEq for GpsQzssFrame1 {
     }
 }
 
-impl GpsQzssFrame1 {
-    /// Computes binary URA from value in meters
-    fn compute_ura(value_m: f64) -> u8 {
-        if value_m <= 2.4 {
-            0
-        } else if value_m <= 3.4 {
-            1
-        } else if value_m <= 4.85 {
-            2
-        } else if value_m <= 6.85 {
-            3
-        } else if value_m <= 9.65 {
-            4
-        } else if value_m <= 13.65 {
-            5
-        } else if value_m <= 24.0 {
-            6
-        } else if value_m <= 48.0 {
-            7
-        } else if value_m <= 96.0 {
-            8
-        } else if value_m <= 192.0 {
-            9
-        } else if value_m <= 384.0 {
-            10
-        } else if value_m <= 768.0 {
-            11
-        } else if value_m <= 1536.0 {
-            12
-        } else if value_m <= 3072.0 {
-            13
-        } else if value_m <= 6144.0 {
-            14
-        } else {
-            15
-        }
-    }
+impl GpsQzssAlmanach {
 
     /// Calculates nominal User Range Accuracy in meters
     pub fn nominal_user_range_accuracy(&self) -> f64 {
@@ -556,7 +520,7 @@ impl GpsQzssFrame1 {
 }
 
 #[derive(Debug, Copy, Default, Clone, PartialEq)]
-struct Word3 {
+pub(crate) struct Word3 {
     /// 10-bit week counter
     pub week: u16,
 
@@ -610,7 +574,7 @@ impl Word3 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word4 {
+pub(crate) struct Word4 {
     pub l2_p_data_flag: bool,
     pub reserved: u32,
 }
@@ -644,7 +608,7 @@ impl Word4 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word5 {
+pub(crate) struct Word5 {
     /// 24-bit reserved
     pub reserved: u32,
 }
@@ -666,7 +630,7 @@ impl Word5 {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-struct Word6 {
+pub(crate) struct Word6 {
     /// 24-bit reserved
     pub reserved: u32,
 }
@@ -688,7 +652,7 @@ impl Word6 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word7 {
+pub(crate) struct Word7 {
     /// 16-bit reserved
     pub reserved: u16,
 
@@ -716,7 +680,7 @@ impl Word7 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word8 {
+pub(crate) struct Word8 {
     /// 8-bit IODC LSB to associate with Word # 3
     pub iodc_lsb: u8,
 
@@ -744,7 +708,7 @@ impl Word8 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word9 {
+pub(crate) struct Word9 {
     /// 8 bit af2
     pub af2: i8,
 
@@ -772,7 +736,7 @@ impl Word9 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-struct Word10 {
+pub(crate) struct Word10 {
     /// 22-bit af0
     pub af0: i32,
 }

@@ -1,144 +1,73 @@
-//! GPS / QZSS protocol
+/// GPS preamble (SYNC) byte
+pub const GPS_PREAMBLE_BYTE: u8 = 0x8B;
 
-/// GPS uses 30 bit data words, and is not aligned.
-pub const GPS_WORD_SIZE: usize = 30;
+/// GPS data word size (in bits!)
+pub const GPS_WORD_BITS: usize = 30;
 
-/// Minimal allocation to encode a correct GPS data frame.
-pub const GPS_MIN_SIZE: usize = GPS_WORD_SIZE * 10;
+/// Number of words in a frame
+pub const GPS_WORDS_PER_FRAME: usize = 10;
+
+/// Total GPS/QZSS frame size (in bits!)
+pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
+
+/// Total GPS/QZSS frame size (in bytes!)
+pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
+
+/// Parity bit mask (for each [GpsDataWord])
+pub(crate) const GPS_PARITY_MASK: u32 = 0x0000_003f;
+
+/// Payload bit mask
+pub(crate) const GPS_PAYLOAD_MASK: u32 = 0xffff_ffc0;
+
+/// Number of parity bits for each [GpsDataWord]
+pub(crate) const GPS_PARITY_SIZE: usize = 6;
 
 mod bytes;
-mod decoder;
-mod errors;
-mod frame1;
-mod frame2;
-mod frame3;
-mod frame_id;
-mod how;
-mod tlm;
-
 pub use bytes::GpsDataByte;
-pub use decoder::GpsQzssDecoder;
-pub use errors::GpsError;
-pub use frame_id::GpsQzssFrameId;
-pub use how::GpsQzssHow;
-pub use tlm::GpsQzssTelemetry;
 
+mod word;
+pub use word::GpsDataWord;
+
+// mod cdma;
+
+// mod almanach;
+// pub use almanach::GpsQzssAlmanach;
+
+mod decoder;
+pub use decoder::GpsQzssDecoder;
+
+mod decoding;
+mod encoding;
+
+mod errors;
+pub use errors::GpsError;
+
+mod frame1;
 pub use frame1::GpsQzssFrame1;
+
+mod frame2;
 pub use frame2::GpsQzssFrame2;
+
+mod frame3;
 pub use frame3::GpsQzssFrame3;
 
-/// GPS / QZSS interpreted frame.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct GpsQzssFrame {
-    /// [GpsQzssHow] describes following frame.
-    pub how: GpsQzssHow,
+// mod frame4;
+// pub use frame4::GpsQzssFrame4;
 
-    /// [GpsQzssTelemetry] describes following frame.
-    pub telemetry: GpsQzssTelemetry,
+// mod frame5;
+// pub use frame5::GpsQzssFrame5;
 
-    /// [GpsQzssSubframe] depends on associated How.
-    pub subframe: GpsQzssSubframe,
-}
+mod frame_id;
+pub use frame_id::GpsQzssFrameId;
 
-/// GPS / QZSS Interpreted subframes
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum GpsQzssSubframe {
-    /// GPS Ephemeris Frame #1
-    Ephemeris1(GpsQzssFrame1),
+mod how;
+pub use how::GpsQzssHow;
 
-    /// GPS Ephemeris Frame #2
-    Ephemeris2(GpsQzssFrame2),
+mod tlm;
+pub use tlm::GpsQzssTelemetry;
 
-    /// GPS Ephemeris Frame #3
-    Ephemeris3(GpsQzssFrame3),
-}
+mod frame;
+pub use frame::GpsQzssFrame;
 
-impl Default for GpsQzssSubframe {
-    fn default() -> Self {
-        Self::Ephemeris1(Default::default())
-    }
-}
-
-impl GpsQzssSubframe {
-    /// Unwraps self as [GpsQzssFrame1] reference (if feasible)
-    pub fn as_eph1(&self) -> Option<&GpsQzssFrame1> {
-        match self {
-            Self::Ephemeris1(frame) => Some(frame),
-            _ => None,
-        }
-    }
-
-    /// Unwraps self as mutable [GpsQzssFrame1] reference (if feasible)
-    pub fn as_mut_eph1(&mut self) -> Option<&mut GpsQzssFrame1> {
-        match self {
-            Self::Ephemeris1(frame) => Some(frame),
-            _ => None,
-        }
-    }
-
-    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    pub fn as_eph2(&self) -> Option<&GpsQzssFrame2> {
-        match self {
-            Self::Ephemeris2(frame) => Some(frame),
-            _ => None,
-        }
-    }
-
-    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
-        match self {
-            Self::Ephemeris2(frame) => Some(frame),
-            _ => None,
-        }
-    }
-
-    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    pub fn as_eph3(&self) -> Option<&GpsQzssFrame3> {
-        match self {
-            Self::Ephemeris3(frame) => Some(frame),
-            _ => None,
-        }
-    }
-
-    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
-        match self {
-            Self::Ephemeris3(frame) => Some(frame),
-            _ => None,
-        }
-    }
-}
-
-// /// Verifies 24-bit LSB (right aligned) parity
-// pub(crate) fn check_parity(value: u32) -> bool {
-//     let data = value >> 6;
-//     let expected = parity_encoding(data);
-//     let parity = (value & 0x3f) as u8;
-//
-//     if expected == parity {
-//         true
-//     } else {
-//         #[cfg(feature = "log")]
-//         error!(
-//             "GPS: parity error - expected 0x{:02X} - got 0x{:02X}",
-//             expected, parity
-//         );
-//
-//         false
-//     }
-// }
-//
-// /// Encodes 24-bit LSB into 6 bit parity (right aligned!)
-// pub(crate) fn parity_encoding(value: u32) -> u8 {
-//     let generator = 0x61_u32;
-//     let mut reg = value << 6;
-//
-//     for _ in 0..24 {
-//         if reg & (1 << 29) != 0 {
-//             reg ^= generator << 23;
-//         }
-//         reg <<= 1;
-//     }
-//
-//     ((reg >> 30) & 0x3f) as u8
-// }
+mod subframe;
+pub use subframe::GpsQzssSubframe;
