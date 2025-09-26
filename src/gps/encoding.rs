@@ -1501,6 +1501,33 @@ mod encoding {
     }
 
     #[test]
+    fn eph2_bin_test() {
+        let mut rd_ptr = 0;
+        let mut buffer = [0; 1024];
+
+        let mut fd = File::open("data/GPS/eph2.bin").unwrap();
+
+        let mut size = fd.read(&mut buffer).unwrap();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        // grab first frame
+        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+        let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+        assert_eq!(decoded.telemetry.message, 0x3456);
+        assert_eq!(decoded.telemetry.integrity, true);
+        assert_eq!(decoded.telemetry.reserved_bit, true);
+
+        assert_eq!(decoded.how.tow, 15_360);
+        assert_eq!(decoded.how.alert, true);
+        assert_eq!(decoded.how.anti_spoofing, true);
+    }
+
+    #[test]
     fn generate_eph3_bin() {
         let mut fd = File::create("data/GPS/eph3.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
@@ -1515,7 +1542,7 @@ mod encoding {
             )
             .with_hand_over_word(
                 GpsQzssHow::default()
-                    .with_tow_seconds(15_360)
+                    .with_tow_seconds(99_999)
                     .with_alert_bit()
                     .with_anti_spoofing(),
             )
@@ -1552,6 +1579,33 @@ mod encoding {
     }
 
     #[test]
+    fn eph3_bin_test() {
+        let mut rd_ptr = 0;
+        let mut buffer = [0; 1024];
+
+        let mut fd = File::open("data/GPS/eph3.bin").unwrap();
+
+        let mut size = fd.read(&mut buffer).unwrap();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        // grab first frame
+        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+        let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+        assert_eq!(decoded.telemetry.message, 0x3456);
+        assert_eq!(decoded.telemetry.integrity, true);
+        assert_eq!(decoded.telemetry.reserved_bit, true);
+
+        assert_eq!(decoded.how.tow, 26_271);
+        assert_eq!(decoded.how.alert, true);
+        assert_eq!(decoded.how.anti_spoofing, true);
+    }
+
+    #[test]
     fn generate_burst_bin() {
         let mut fd = File::create("data/GPS/burst.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
@@ -1584,70 +1638,127 @@ mod encoding {
                     .with_user_range_accuracy_m(4.0),
             ));
 
-        // let mut eph_2 = GpsQzssFrame::default()
-        //     .with_telemetry(
-        //         GpsQzssTelemetry::default()
-        //             .with_message(0x3457)
-        //             .with_integrity()
-        //             .with_reserved_bit(),
-        //     )
-        //     .with_hand_over_word(
-        //         GpsQzssHow::default()
-        //             .with_tow_seconds(0x9_8765)
-        //             .with_alert_bit()
-        //             .with_anti_spoofing(),
-        //     )
-        //     .with_subframe(GpsQzssSubframe::Ephemeris2(
-        //         GpsQzssFrame2::default()
-        //             .with_toe(54_326)
-        //             .with_iode(0x01)
-        //             .with_mean_anomaly_semi_circles(0.1)
-        //             .with_mean_motion_difference_semi_circles(0.1)
-        //             .with_square_root_semi_major_axis(0.1)
-        //             .with_eccentricity(0.1)
-        //             .with_aodo(0x12)
-        //             .with_cuc_radians(0.1)
-        //             .with_cus_radians(0.1)
-        //             .with_fit_interval_flag(),
-        //     ));
+        let mut eph_2 = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x3457)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_hand_over_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x9_8765)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris2(
+                GpsQzssFrame2::default()
+                    .with_toe_seconds(15_000)
+                    .with_iode(0x01)
+                    .with_square_root_semi_major_axis(5153.0)
+                    .with_eccentricity(0.1)
+                    .with_aodo(0x12)
+                    .with_cuc_radians(1e-6)
+                    .with_cus_radians(2e-6)
+                    .with_fit_interval_flag(),
+            ));
+
+        let mut eph_3 = GpsQzssFrame::default()
+            .with_telemetry(
+                GpsQzssTelemetry::default()
+                    .with_message(0x89AB)
+                    .with_integrity()
+                    .with_reserved_bit(),
+            )
+            .with_hand_over_word(
+                GpsQzssHow::default()
+                    .with_tow_seconds(0x0_1234)
+                    .with_alert_bit()
+                    .with_anti_spoofing(),
+            )
+            .with_subframe(GpsQzssSubframe::Ephemeris3(
+                GpsQzssFrame3::default()
+                    .with_cic_radians(1e-6)
+                    .with_cis_radians(2e-6)
+                    .with_iode(0x54),
+            ));
 
         for i in 0..128 {
+            // EPH-1
             let encoded = eph_1.encode_raw();
-
             fd.write(&encoded).unwrap_or_else(|e| {
-                panic!("Failed to write encoded frame #{}: {}", i, e);
+                panic!("Failed to write eph-1 #{}: {}", i, e);
+            });
+
+            // EPH-2
+            let encoded = eph_2.encode_raw();
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write eph-2 #{}: {}", i, e);
+            });
+
+            // EPH-3
+            let encoded = eph_3.encode_raw();
+            fd.write(&encoded).unwrap_or_else(|e| {
+                panic!("Failed to write eph-3 #{}: {}", i, e);
             });
 
             eph_1.telemetry.message += 1;
+            eph_2.telemetry.message += 1;
+            eph_3.telemetry.message += 1;
+
             eph_1.telemetry.integrity = !eph_1.telemetry.integrity;
+            eph_2.telemetry.integrity = !eph_2.telemetry.integrity;
+            eph_3.telemetry.integrity = !eph_3.telemetry.integrity;
+
             eph_1.telemetry.reserved_bit = !eph_1.telemetry.reserved_bit;
+            eph_2.telemetry.reserved_bit = !eph_2.telemetry.reserved_bit;
+            eph_3.telemetry.reserved_bit = !eph_3.telemetry.reserved_bit;
 
             eph_1.how.tow += 1;
+            eph_2.how.tow += 1;
+            eph_3.how.tow += 1;
+
             eph_1.how.alert = !eph_1.how.alert;
+            eph_2.how.alert = !eph_2.how.alert;
+            eph_3.how.alert = !eph_3.how.alert;
+
             eph_1.how.anti_spoofing = !eph_1.how.anti_spoofing;
+            eph_2.how.anti_spoofing = !eph_2.how.anti_spoofing;
+            eph_3.how.anti_spoofing = !eph_3.how.anti_spoofing;
 
-            let subframe = eph_1.subframe.as_mut_eph1().unwrap();
+            let subf1 = eph_1.subframe.as_mut_eph1().unwrap();
+            let subf2 = eph_2.subframe.as_mut_eph2().unwrap();
+            let subf3 = eph_3.subframe.as_mut_eph3().unwrap();
 
-            // let encoded = eph_2.encode();
+            subf1.ura += 1;
+            subf1.week += 1;
+            subf1.ca_or_p_l2 += 1;
+            subf1.toc += 1;
+            subf1.tgd += 1.0e-9;
+            subf1.af0 += 1.0e-9;
+            subf1.af1 += 1.0e-11;
+            subf1.af2 += 1.0e-15;
+            subf1.reserved_word4 += 1;
+            subf1.reserved_word5 += 1;
+            subf1.reserved_word6 += 1;
+            subf1.reserved_word7 += 1;
+            subf1.l2_p_data_flag = !subf1.l2_p_data_flag;
 
-            // fd.write(&encoded).unwrap_or_else(|e| {
-            //     panic!("Failed to write encoded frame #{}: {}", i, e);
-            // });
+            subf2.toe += 16;
+            subf2.aodo += 1;
+            subf2.cuc += 1e-6;
+            subf2.cus += 1e-6;
+            subf2.e += 0.001;
+            subf2.dn += 1e-9;
+            subf2.iode += 1;
+            subf2.fit_int_flag = !subf2.fit_int_flag;
 
-            // eph_2.telemetry.message += 1;
-            // eph_2.telemetry.integrity = !eph_2.telemetry.integrity;
-            // eph_2.telemetry.reserved_bit = !eph_2.telemetry.reserved_bit;
-
-            // eph_2.how.tow += 1;
-            // eph_2.how.alert = !eph_2.how.alert;
-            // eph_2.how.anti_spoofing = !eph_2.how.anti_spoofing;
-
-            // let subframe = eph_2.subframe.as_mut_eph2().unwrap();
-
-            // subframe.toe += 1;
-            // subframe.aodo += 1;
-            // subframe.iode += 1;
-            // subframe.fit_int_flag = !subframe.fit_int_flag;
+            subf3.iode += 1;
+            subf3.crc += 1.0;
+            subf3.cic += 1.0e-6;
+            subf3.cis += 1.0e-6;
+            subf3.i0 += 0.001;
+            subf3.idot += 1e-9;
         }
     }
 }
