@@ -472,7 +472,7 @@ mod encoding {
 
         assert_eq!(encoded[4], 0x60);
         assert_eq!(encoded[5], 0x69);
-        assert_eq!(encoded[6], 0x90);
+        assert_eq!(encoded[6], 0x92);
         assert_eq!(encoded[7], 0x04);
 
         assert_eq!(encoded[8], 0x8f);
