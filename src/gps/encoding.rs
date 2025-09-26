@@ -207,16 +207,17 @@ impl GpsQzssFrame {
                 encoded[10] <<= 4; // TODO
 
                 let dn = (subf.dn * 2.0_f64.powi(43)).round() as u16;
+
                 encoded[11] |= ((dn & 0xfc00) >> 10) as u8;
 
                 encoded[12] |= ((dn & 0x03fc) >> 2) as u8;
-                encoded[13] |= (dn & 0x0003) as u8;
+                encoded[13] = (dn & 0x0003) as u8;
                 encoded[13] <<= 6;
 
                 let m0 = (subf.m0 * 2.0_f64.powi(31)).round() as u32;
 
-                encoded[13] |= ((m0 & 0xfc000000) >> 26) as u8;
-                encoded[14] |= ((m0 & 0x03000000) >> 24) as u8;
+                encoded[13] |= (((m0 & 0xfc000000) >> 26) as u8) & 0x3f;
+                encoded[14] = ((m0 & 0x03000000) >> 24) as u8;
                 encoded[14] <<= 6; //TODO
 
                 encoded[15] |= ((m0 & 0x00ff0000) >> 16) as u8;
@@ -260,7 +261,7 @@ impl GpsQzssFrame {
                 encoded[31] |= ((sqrt_a & 0x0000ff00) >> 8) as u8;
                 encoded[32] |= (sqrt_a & 0x000000ff) as u8;
 
-                let toe = (subf.toe * 16) as u16;
+                let toe = (subf.toe / 16) as u16;
 
                 encoded[33] <<= 2; // TODO
                 encoded[33] |= ((toe & 0xc000) >> 14) as u8;
@@ -287,8 +288,7 @@ impl GpsQzssFrame {
                 let cic = (subf.cic * 2.0_f64.powi(29)).round() as u16;
 
                 encoded[7] |= ((cic & 0xf000) >> 12) as u8;
-                encoded[8] |= (cic & 0x0ff0) as u8;
-                encoded[8] <<= 4;
+                encoded[8] |= ((cic & 0x0ff0) >> 4) as u8;
 
                 encoded[9] |= (cic & 0x000f) as u8;
                 encoded[9] <<= 4;
@@ -296,19 +296,19 @@ impl GpsQzssFrame {
                 let omega0 = (subf.omega0 * 2.0_f64.powi(31)).round() as u32;
 
                 encoded[9] |= (omega0 >> 28) as u8;
-                encoded[10] = (omega0 >> 24) as u8;
+                encoded[10] = ((omega0 >> 24) & 0x0f) as u8;
                 encoded[10] <<= 4; // TODO
 
                 encoded[11] |= ((omega0 & 0x00fc0000) >> 18) as u8;
-                encoded[12] = ((omega0 & 0x0003fC00) >> 12) as u8;
-                encoded[13] = ((omega0 & 0x000003fC) >> 3) as u8;
+                encoded[12] = ((omega0 & 0x0003fc00) >> 10) as u8;
+                encoded[13] = ((omega0 & 0x000003fC) >> 2) as u8;
                 encoded[14] = (omega0 & 0x00000003) as u8;
                 // TODO
 
                 let cis = (subf.cis * 2.0_f64.powi(29)).round() as u32;
 
                 encoded[15] = ((cis & 0xff00) >> 8) as u8;
-                encoded[16] = cis as u8;
+                encoded[16] = (cis & 0x00ff) as u8;
 
                 let i0 = (subf.i0 * 2.0_f64.powi(31)).round() as u32;
 
@@ -902,7 +902,6 @@ mod encoding {
         .enumerate()
         {
             let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
-
             let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
 
             let mut subframe = GpsQzssFrame1::default()
@@ -973,9 +972,12 @@ mod encoding {
                 GpsQzssFrame2::default()
                     .with_iode(0x12)
                     .with_crs_meters(1.8)
-                    .with_mean_motion_difference_semi_circles(100.0)
+                    .with_cuc_radians(9e-7)
+                    .with_cus_radians(2e-6)
+                    .with_eccentricity(0.001)
+                    .with_mean_motion_difference_semi_circles(4e-9)
                     .with_mean_anomaly_semi_circles(9.768415465951e-001)
-                    .with_toe_seconds(266_400)
+                    .with_toe_seconds(345_600)
                     .with_square_root_semi_major_axis(5.153602432251e+003)
                     .with_fit_interval_flag()
                     .with_aodo(0x15),
@@ -985,9 +987,9 @@ mod encoding {
         let encoded_size = encoded.len();
 
         assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
-        // assert_eq!(encoded[1], 0x19);
+        assert_eq!(encoded[1], 0x66);
         assert_eq!(encoded[2], 0x99 << 2 | 0x02 | 0x01);
-        // assert_eq!(encoded[3], 0x03);
+        assert_eq!(encoded[3], 0x9C);
 
         // assert_eq!(encoded[4], 0x33);
         // assert_eq!(encoded[5], 0x33);
@@ -1042,6 +1044,112 @@ mod encoding {
     }
 
     #[test]
+    fn ephemeris2_reciprocal() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for (
+            test_num,
+            (
+                tow,
+                alert,
+                anti_spoofing,
+                frame_id,
+                message,
+                integrity,
+                tlm_reserved_bit,
+                toe,
+                dn,
+                sqrt_a,
+                iode,
+                cuc,
+                cus,
+                aodo,
+            ),
+        ) in [
+            (
+                15_000,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris2,
+                0x13E,
+                true,
+                false,
+                435_500,
+                1.0e-1,
+                5153.0,
+                0x12,
+                1e-6,
+                2e-6,
+                0x34,
+            ),
+            (
+                15_000,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris2,
+                0x13E,
+                false,
+                true,
+                435_500,
+                1.0e-1,
+                5152.0,
+                0x21,
+                2e-6,
+                1e-6,
+                0x52,
+            ),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
+            let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
+            let mut subframe = GpsQzssFrame2::default()
+                .with_toe_seconds(*toe)
+                .with_mean_motion_difference_semi_circles(*dn)
+                .with_square_root_semi_major_axis(*sqrt_a)
+                .with_iode(*iode)
+                .with_aodo(*aodo)
+                .with_cuc_radians(*cuc)
+                .with_cus_radians(*cus);
+
+            if *alert {
+                how = how.with_alert_bit();
+            }
+
+            if *anti_spoofing {
+                how = how.with_anti_spoofing();
+            }
+
+            if *integrity {
+                telemetry = telemetry.with_integrity();
+            }
+
+            if *tlm_reserved_bit {
+                telemetry = telemetry.with_reserved_bit();
+            }
+
+            let frame = GpsQzssFrame::default()
+                .with_telemetry(telemetry)
+                .with_hand_over_word(how)
+                .with_subframe(GpsQzssSubframe::Ephemeris2(subframe));
+
+            let encoded = frame.encode_raw();
+            let encoded_size = encoded.len();
+            assert_eq!(encoded.len(), GPS_FRAME_BYTES, "encoded invalid size!");
+
+            let (size, decoded) = decoder.decode(&encoded, encoded.len());
+            assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+            assert_eq!(decoded, Some(frame), "reciprocal failed");
+
+            info!("test ({}): {:?}", test_num, frame);
+        }
+    }
+
+    #[test]
     fn ephemeris3_raw() {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
@@ -1064,12 +1172,12 @@ mod encoding {
             .with_subframe(GpsQzssSubframe::Ephemeris3(
                 GpsQzssFrame3::default()
                     .with_iode(0x32)
-                    .with_cic_semi_circles(1.2e-7)
-                    .with_cis_semi_circles(-1.2e-7)
+                    .with_cic_radians(1.2e-7)
+                    .with_cis_radians(1.2e-7)
                     .with_crc_meters(250.0)
                     .with_i0_semi_circles(0.95)
                     .with_idot_semi_circles_s(2e-10)
-                    .with_omega0_semi_circles(1.0)
+                    .with_omega0_semi_circles(6.0e-1)
                     .with_omega_semi_circles(0.5e-1)
                     .with_omega_dot_semi_circles_s(8e-9),
             ));
@@ -1091,6 +1199,118 @@ mod encoding {
             "reciprocal failed, got {:#?}",
             decoded,
         );
+    }
+
+    #[test]
+    fn ephemeris3_reciprocal() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        for (
+            test_num,
+            (
+                tow,
+                alert,
+                anti_spoofing,
+                frame_id,
+                message,
+                integrity,
+                tlm_reserved_bit,
+                cic,
+                cis,
+                crc,
+                omega,
+                i0,
+                omega_dot,
+                iode,
+                idot,
+                omega0,
+            ),
+        ) in [
+            (
+                15_000,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris3,
+                0x13E,
+                true,
+                false,
+                1e-6,
+                2e-6,
+                12.0,
+                0.1,
+                3e-1,
+                0.3,
+                0x34,
+                1.6e-10,
+                6e-1,
+            ),
+            (
+                15_000,
+                false,
+                false,
+                GpsQzssFrameId::Ephemeris3,
+                0x13E,
+                false,
+                true,
+                2e-6,
+                1e-6,
+                14.0,
+                0.2,
+                4e-1,
+                0.4,
+                0x43,
+                1.5e-10,
+                7e-1,
+            ),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
+            let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
+            let mut subframe = GpsQzssFrame3::default()
+                .with_cic_radians(*cic)
+                .with_crc_meters(*crc)
+                .with_iode(*iode)
+                .with_omega_semi_circles(*omega)
+                .with_omega_dot_semi_circles_s(*omega_dot)
+                .with_i0_semi_circles(*i0)
+                .with_cis_radians(*cis);
+
+            if *alert {
+                how = how.with_alert_bit();
+            }
+
+            if *anti_spoofing {
+                how = how.with_anti_spoofing();
+            }
+
+            if *integrity {
+                telemetry = telemetry.with_integrity();
+            }
+
+            if *tlm_reserved_bit {
+                telemetry = telemetry.with_reserved_bit();
+            }
+
+            let frame = GpsQzssFrame::default()
+                .with_telemetry(telemetry)
+                .with_hand_over_word(how)
+                .with_subframe(GpsQzssSubframe::Ephemeris3(subframe));
+
+            let encoded = frame.encode_raw();
+            let encoded_size = encoded.len();
+            assert_eq!(encoded.len(), GPS_FRAME_BYTES, "encoded invalid size!");
+
+            let (size, decoded) = decoder.decode(&encoded, encoded.len());
+            assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
+            assert_eq!(decoded, Some(frame), "reciprocal failed");
+
+            info!("test ({}): {:?}", test_num, frame);
+        }
     }
 
     #[test]
@@ -1302,7 +1522,9 @@ mod encoding {
             .with_subframe(GpsQzssSubframe::Ephemeris3(
                 GpsQzssFrame3::default()
                     .with_iode(0x01)
-                    .with_cic_semi_circles(1e-9)
+                    .with_cic_radians(1e-7)
+                    .with_cis_radians(2e-7)
+                    .with_omega_semi_circles(1.0)
                     .with_idot_semi_circles_s(1e-9)
                     .with_crc_meters(87.0),
             ));

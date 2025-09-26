@@ -21,4 +21,5 @@ Cargo.lock
 *.swo
 *.swp
 *.rs~
+*.rz~
 *.txt

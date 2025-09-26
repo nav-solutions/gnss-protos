@@ -57,10 +57,10 @@ pub struct GpsQzssFrame2 {
     /// Mean motion difference from computed value (in semi-circles)
     pub dn: f64,
 
-    /// Latitude (cosine harmonic) in semi-circles.
+    /// Latitude (cosine harmonic) in radians.
     pub cuc: f64,
 
-    /// Latitude (sine harmonic) in semi-circles.
+    /// Latitude (sine harmonic) in radians.
     pub cus: f64,
 
     /// Orbit radius (sine harmonic) in meters.

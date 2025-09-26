@@ -38,13 +38,13 @@ const WORD10_IDOT_SHIFT: u32 = 8;
 /// [GpsQzssFrame3] Ephemeris #3 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct GpsQzssFrame3 {
-    /// Inclination angle cosine harmonic correction term
+    /// Inclination angle cosine harmonic in radians.
     pub cic: f64,
 
-    /// Inclination angle sine harmonic correction term
+    /// Inclination angle sine harmonic in radians.
     pub cis: f64,
 
-    /// Orbit radius cosine harmonic correction term
+    /// Orbit radius cosine harmonic in meters.
     pub crc: f64,
 
     /// Inclination angle at reference time  (in semi circles)
@@ -75,23 +75,13 @@ impl GpsQzssFrame3 {
 
     /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
     pub fn with_cic_radians(mut self, cic_rad: f64) -> Self {
-        self.cic = cic_rad; // TODO
+        self.cic = cic_rad;
         self
     }
 
-    pub fn with_cic_semi_circles(mut self, cic_semi_circles: f64) -> Self {
-        self.cic = cic_semi_circles;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame3] with updated Cis
-    pub fn with_cis_semi_circles(mut self, cis_semi_circles: f64) -> Self {
-        self.cis = cis_semi_circles;
-        self
-    }
-
+    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
     pub fn with_cis_radians(mut self, cis_rad: f64) -> Self {
-        self.cis = cis_rad; // TODO
+        self.cis = cis_rad;
         self
     }
 
@@ -107,26 +97,44 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated orbit radius cosine harmonic term (meters)
-    pub fn with_crc_meters(mut self, crc: f64) -> Self {
-        self.crc = crc;
+    pub fn with_crc_meters(mut self, crc_m: f64) -> Self {
+        self.crc = crc_m;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in semi circles)
+    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in semi-circles)
     pub fn with_omega0_semi_circles(mut self, omega0: f64) -> Self {
         self.omega0 = omega0;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega (in semi circles)
+    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in radians)
+    pub fn with_omega0_rad(mut self, omega0_rad: f64) -> Self {
+        self.omega0 = omega0_rad; // TODO
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated omega (in semi-circles)
     pub fn with_omega_semi_circles(mut self, omega: f64) -> Self {
         self.omega = omega;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in semi circles.s⁻¹)
+    /// Copies and returns [GpsQzssFrame3] with updated omega (in radians)
+    pub fn with_omega_radians(mut self, omega_rad: f64) -> Self {
+        self.omega = omega_rad; // TODO
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in semi-circles.s⁻¹)
     pub fn with_omega_dot_semi_circles_s(mut self, omega_dot: f64) -> Self {
         self.omega_dot = omega_dot;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in radians.s⁻¹)
+    pub fn with_omega_dot_rad_s(mut self, omega_dot_rad: f64) -> Self {
+        self.omega_dot = omega_dot_rad; // TODO
         self
     }
 
