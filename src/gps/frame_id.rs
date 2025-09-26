@@ -57,7 +57,6 @@ mod test {
             (3, GpsQzssFrameId::Ephemeris3),
         ] {
             let frame_id = GpsQzssFrameId::decode(value).unwrap();
-
             assert_eq!(frame_id, expected);
         }
     }

@@ -556,7 +556,7 @@ impl GpsQzssFrame1 {
 }
 
 #[derive(Debug, Copy, Default, Clone, PartialEq)]
-pub(crate) struct Word3 {
+struct Word3 {
     /// 10-bit week counter
     pub week: u16,
 
@@ -610,7 +610,7 @@ impl Word3 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word4 {
+struct Word4 {
     pub l2_p_data_flag: bool,
     pub reserved: u32,
 }
@@ -644,7 +644,7 @@ impl Word4 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word5 {
+struct Word5 {
     /// 24-bit reserved
     pub reserved: u32,
 }
@@ -666,7 +666,7 @@ impl Word5 {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct Word6 {
+struct Word6 {
     /// 24-bit reserved
     pub reserved: u32,
 }
@@ -688,7 +688,7 @@ impl Word6 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word7 {
+struct Word7 {
     /// 16-bit reserved
     pub reserved: u16,
 
@@ -716,7 +716,7 @@ impl Word7 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word8 {
+struct Word8 {
     /// 8-bit IODC LSB to associate with Word # 3
     pub iodc_lsb: u8,
 
@@ -744,7 +744,7 @@ impl Word8 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word9 {
+struct Word9 {
     /// 8 bit af2
     pub af2: i8,
 
@@ -772,7 +772,7 @@ impl Word9 {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word10 {
+struct Word10 {
     /// 22-bit af0
     pub af0: i32,
 }
@@ -794,7 +794,7 @@ impl Word10 {
 }
 
 #[cfg(test)]
-mod test {
+mod frame1 {
     use super::*;
 
     #[test]

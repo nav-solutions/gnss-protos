@@ -45,8 +45,8 @@ impl std::fmt::Display for GpsQzssHow {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "TOW={} - ALERT={} - A/S={} - ID={}",
-            self.tow, self.alert, self.anti_spoofing, self.frame_id
+            "{} TOW={} - ALERT={} - A/S={}",
+            self.frame_id, self.tow, self.alert, self.anti_spoofing,
         )
     }
 }

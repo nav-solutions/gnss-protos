@@ -194,9 +194,6 @@ impl GpsQzssDecoder {
         let gps_word = GpsDataWord::from(dword);
         let parity = gps_word.parity(&Default::default(), false);
 
-        #[cfg(feature = "log")]
-        trace!("(GPS/QZSS)       [how]: {:?}", gps_word);
-
         let how = match GpsQzssHow::from_word(gps_word) {
             Ok(how) => {
                 #[cfg(feature = "log")]

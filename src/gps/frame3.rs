@@ -1,8 +1,5 @@
 use crate::{
-    gps::{
-        bytes::{ByteArray, GpsDataByte},
-        GpsError,
-    },
+    gps::{GpsDataWord, GpsError, GPS_WORDS_PER_FRAME},
     twos_complement,
 };
 
@@ -39,7 +36,7 @@ const WORD10_IDOT_MASK: u32 = 0x003fff00;
 const WORD10_IDOT_SHIFT: u32 = 8;
 
 /// [GpsQzssFrame3] Ephemeris #3 frame interpretation.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct GpsQzssFrame3 {
     /// Inclination angle cosine harmonic correction term
     pub cic: f64,
@@ -70,21 +67,42 @@ pub struct GpsQzssFrame3 {
 }
 
 impl GpsQzssFrame3 {
-    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
-    pub fn with_cic_radians(mut self, cic_rad: f64) -> Self {
-        self.cic = cic_rad;
+    /// Copies and returns [GpsQzssFrame3] with updated IODE
+    pub fn with_iode(mut self, iode: u8) -> Self {
+        self.iode = iode;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated Cis correction term
+    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
+    pub fn with_cic_radians(mut self, cic_rad: f64) -> Self {
+        self.cic = cic_rad; // TODO
+        self
+    }
+
+    pub fn with_cic_semi_circles(mut self, cic_semi_circles: f64) -> Self {
+        self.cic = cic_semi_circles;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame3] with updated Cis
+    pub fn with_cis_semi_circles(mut self, cis_semi_circles: f64) -> Self {
+        self.cis = cis_semi_circles;
+        self
+    }
+
     pub fn with_cis_radians(mut self, cis_rad: f64) -> Self {
-        self.cis = cis_rad;
+        self.cis = cis_rad; // TODO
         self
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated inclination angle at reference time (in semi circles)
     pub fn with_i0_semi_circles(mut self, i0: f64) -> Self {
         self.i0 = i0;
+        self
+    }
+
+    pub fn with_idot_semi_circles_s(mut self, idot_semi_circles_s: f64) -> Self {
+        self.idot = idot_semi_circles_s;
         self
     }
 
@@ -107,32 +125,30 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in semi circles.s⁻¹)
-    pub fn with_omega_dot_semi_circles_sec(mut self, omega_dot: f64) -> Self {
+    pub fn with_omega_dot_semi_circles_s(mut self, omega_dot: f64) -> Self {
         self.omega_dot = omega_dot;
         self
     }
 
-    /// Decodes [Self] from a burst of 8 [GpsDataByte]s
-    pub(crate) fn decode(bytes: &[GpsDataByte]) -> Self {
+    /// Decodes [Self] from a burst of 8 [GpsDataWord]s
+    pub(crate) fn from_words(words: &[GpsDataWord]) -> Self {
         let mut extra = 0u32;
         let mut s = Self::default();
 
-        for i in 0..8 {
-            let array = ByteArray::new(&bytes[i * 4..i * 4 + 4]);
-            let dword = array.value_u32();
-
+        for i in 0..GPS_WORDS_PER_FRAME - 2 {
             match i {
-                0 => s.set_word3(Word3::decode(dword), &mut extra),
-                1 => s.set_word4(Word4::decode(dword), extra),
-                2 => s.set_word5(Word5::decode(dword), &mut extra),
-                3 => s.set_word6(Word6::decode(dword), extra),
-                4 => s.set_word7(Word7::decode(dword), &mut extra),
-                5 => s.set_word8(Word8::decode(dword), extra),
-                6 => s.set_word9(Word9::decode(dword)),
-                7 => s.set_word10(Word10::decode(dword)),
-                _ => unreachable!("compiler issue"),
+                0 => s.set_word3(Word3::from_word(words[i]), &mut extra),
+                1 => s.set_word4(Word4::from_word(words[i]), extra),
+                2 => s.set_word5(Word5::from_word(words[i]), &mut extra),
+                3 => s.set_word6(Word6::from_word(words[i]), extra),
+                4 => s.set_word7(Word7::from_word(words[i]), &mut extra),
+                5 => s.set_word8(Word8::from_word(words[i]), extra),
+                6 => s.set_word9(Word9::from_word(words[i])),
+                7 => s.set_word10(Word10::from_word(words[i])),
+                _ => unreachable!("expecting 8 data words"),
             }
         }
+
         s
     }
 
@@ -236,23 +252,65 @@ impl GpsQzssFrame3 {
         }
     }
 
-    /// Encodes this [GpsQzssFrame3] as burst of 8 32-bit data words
-    pub(crate) fn encode(&self) -> [u32; 8] {
+    /// Encodes this [GpsQzssFrame3] as a burst of 8 [GpsDataWord]s.
+    pub(crate) fn to_words(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME - 2] {
         [
-            self.word3().encode(),
-            self.word4().encode(),
-            self.word5().encode(),
-            self.word6().encode(),
-            self.word7().encode(),
-            self.word8().encode(),
-            self.word9().encode(),
-            self.word10().encode(),
+            self.word3().to_word(),
+            self.word4().to_word(),
+            self.word5().to_word(),
+            self.word6().to_word(),
+            self.word7().to_word(),
+            self.word8().to_word(),
+            self.word9().to_word(),
+            self.word10().to_word(),
         ]
     }
 }
 
+impl PartialEq for GpsQzssFrame3 {
+    fn eq(&self, rhs: &Self) -> bool {
+        if (self.cic - rhs.cic).abs() > 1e-9 {
+            return false;
+        }
+
+        if (self.cis - rhs.cis).abs() > 1e-8 {
+            return false;
+        }
+
+        if (self.crc - rhs.crc).abs() > 1e-2 {
+            return false;
+        }
+
+        if (self.i0 - rhs.i0).abs() > 1e-3 {
+            return false;
+        }
+
+        if self.iode != rhs.iode {
+            return false;
+        }
+
+        if (self.idot - rhs.idot).abs() > 1e-3 {
+            return false;
+        }
+
+        if (self.omega0 - rhs.omega0).abs() > 1e-3 {
+            return false;
+        }
+
+        if (self.omega - rhs.omega).abs() > 1e-3 {
+            return false;
+        }
+
+        if (self.omega_dot - rhs.omega_dot).abs() > 1e-3 {
+            return false;
+        }
+
+        true
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word3 {
+struct Word3 {
     /// 16 bit Ci (cosine) component in radians
     pub cic: i16,
 
@@ -261,39 +319,45 @@ pub(crate) struct Word3 {
 }
 
 impl Word3 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let cic = ((dword & WORD3_CIC_MASK) >> WORD3_CIC_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let cic = ((value & WORD3_CIC_MASK) >> WORD3_CIC_SHIFT) as u32;
         let cic = twos_complement(cic, 0xffff, 0x8000) as i16;
-        let omega0_msb = ((dword & WORD3_OMEGA0_MASK) >> WORD3_OMEGA0_SHIFT) as u8;
+        let omega0_msb = ((value & WORD3_OMEGA0_MASK) >> WORD3_OMEGA0_SHIFT) as u8;
         Self { cic, omega0_msb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
+    pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0;
         value |= (self.cic as u32) << WORD3_CIC_SHIFT;
         value |= (self.omega0_msb as u32) << WORD3_OMEGA0_SHIFT;
-        value
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word4 {
+struct Word4 {
     /// Omega0 (24) LSB, you will have to associate this to Word #3
     pub omega0_lsb: u32,
 }
 
 impl Word4 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let omega0_lsb = ((dword & WORD4_OMEGA0_MASK) >> WORD4_OMEGA0_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let omega0_lsb = ((value & WORD4_OMEGA0_MASK) >> WORD4_OMEGA0_SHIFT) as u32;
         Self { omega0_lsb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
-        (self.omega0_lsb as u32) << WORD4_OMEGA0_SHIFT
+    pub fn to_word(&self) -> GpsDataWord {
+        let mut value = (self.omega0_lsb as u32) << WORD4_OMEGA0_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
+
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word5 {
+struct Word5 {
     pub cis: i32,
 
     /// I0 (8) MSB, you will have to associate this to Word #6
@@ -301,40 +365,45 @@ pub(crate) struct Word5 {
 }
 
 impl Word5 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let cis = ((dword & WORD5_CIS_MASK) >> WORD5_CIS_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let cis = ((value & WORD5_CIS_MASK) >> WORD5_CIS_SHIFT) as u32;
         let cis = twos_complement(cis, 0xffff, 0x8000);
-        let i0_msb = ((dword & WORD5_I0_MASK) >> WORD5_I0_SHIFT) as u8;
+        let i0_msb = ((value & WORD5_I0_MASK) >> WORD5_I0_SHIFT) as u8;
         Self { cis, i0_msb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
+    pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0;
         value |= ((self.cis as u32) & 0xffff) << WORD5_CIS_SHIFT;
         value |= (self.i0_msb as u32) << WORD5_I0_SHIFT;
-        value
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word6 {
+struct Word6 {
     /// I0 (24) LSB, you will have to associate this to Word #5
     pub i0_lsb: u32,
 }
 
 impl Word6 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let i0_lsb = ((dword & WORD6_I0_MASK) >> WORD6_I0_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let i0_lsb = ((value & WORD6_I0_MASK) >> WORD6_I0_SHIFT) as u32;
         Self { i0_lsb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
-        (self.i0_lsb as u32) << WORD6_I0_SHIFT
+    pub fn to_word(&self) -> GpsDataWord {
+        let mut value = (self.i0_lsb as u32) << WORD6_I0_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word7 {
+struct Word7 {
     pub crc: i32,
 
     /// Omega (8) MSB, you will have to associate this to Word #8
@@ -342,58 +411,66 @@ pub(crate) struct Word7 {
 }
 
 impl Word7 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let crc = ((dword & WORD7_CRC_MASK) >> WORD7_CRC_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let crc = ((value & WORD7_CRC_MASK) >> WORD7_CRC_SHIFT) as u32;
         let crc = twos_complement(crc, 0xffff, 0x8000);
-        let omega_msb = ((dword & WORD7_OMEGA_MASK) >> WORD7_OMEGA_SHIFT) as u8;
+        let omega_msb = ((value & WORD7_OMEGA_MASK) >> WORD7_OMEGA_SHIFT) as u8;
         Self { crc, omega_msb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
+    pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0;
         value |= ((self.crc as u32) & 0xffff) << WORD7_CRC_SHIFT;
         value |= (self.omega_msb as u32) << WORD7_OMEGA_SHIFT;
-        value
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word8 {
+struct Word8 {
     /// Omega (24) LSB, you will have to associate this to Word #7
     pub omega_lsb: u32,
 }
 
 impl Word8 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let omega_lsb = ((dword & WORD8_OMEGA_MASK) >> WORD8_OMEGA_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let omega_lsb = ((value & WORD8_OMEGA_MASK) >> WORD8_OMEGA_SHIFT) as u32;
         Self { omega_lsb }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
-        (self.omega_lsb as u32) << WORD8_OMEGA_SHIFT
+    pub fn to_word(&self) -> GpsDataWord {
+        let mut value = (self.omega_lsb as u32) << WORD8_OMEGA_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word9 {
+struct Word9 {
     // 24-bit Omega_dot
     pub omega_dot: i32,
 }
 
 impl Word9 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let omega_dot = ((dword & WORD9_OMEGADOT_MASK) >> WORD9_OMEGADOT_SHIFT) as u32;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let omega_dot = ((value & WORD9_OMEGADOT_MASK) >> WORD9_OMEGADOT_SHIFT) as u32;
         let omega_dot = twos_complement(omega_dot, 0xffffff, 0x800000);
         Self { omega_dot }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
-        ((self.omega_dot & 0xffffff) as u32) << WORD9_OMEGADOT_SHIFT
+    pub fn to_word(&self) -> GpsDataWord {
+        let mut value = ((self.omega_dot & 0xffffff) as u32) << WORD9_OMEGADOT_SHIFT;
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word10 {
+struct Word10 {
     /// 8-bit IODE
     pub iode: u8,
 
@@ -402,21 +479,23 @@ pub(crate) struct Word10 {
 }
 
 impl Word10 {
-    pub(crate) fn decode(dword: u32) -> Self {
-        let iode = ((dword & WORD10_IODE_MASK) >> WORD10_IODE_SHIFT) as u8;
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+        let iode = ((value & WORD10_IODE_MASK) >> WORD10_IODE_SHIFT) as u8;
 
         // 14-bit signed 2's
-        let idot = ((dword & WORD10_IDOT_MASK) >> WORD10_IDOT_SHIFT) as u32;
+        let idot = ((value & WORD10_IDOT_MASK) >> WORD10_IDOT_SHIFT) as u32;
         let idot = twos_complement(idot, 0x3fff, 0x2000);
 
         Self { iode, idot }
     }
 
-    pub(crate) fn encode(&self) -> u32 {
+    pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0;
         value |= (self.iode as u32) << WORD10_IODE_SHIFT;
         value |= ((self.idot as u32) & 0x3fff) << WORD10_IDOT_SHIFT;
-        value
+        value <<= 2;
+        GpsDataWord::from(value)
     }
 }
 
@@ -425,7 +504,7 @@ mod frame3 {
     use super::*;
 
     #[test]
-    fn word3_encoding() {
+    fn word3() {
         for dword3 in [
             Word3 {
                 omega0_msb: 0,
@@ -444,28 +523,28 @@ mod frame3 {
                 cic: 12,
             },
         ] {
-            let encoded = dword3.encode();
-            let decoded = Word3::decode(encoded);
+            let encoded = dword3.to_word();
+            let decoded = Word3::from_word(encoded);
             assert_eq!(decoded, dword3);
         }
     }
 
     #[test]
-    fn word4_encoding() {
+    fn word4() {
         for dword4 in [
             Word4 { omega0_lsb: 0 },
             Word4 { omega0_lsb: 10 },
             Word4 { omega0_lsb: 250 },
             Word4 { omega0_lsb: 255 },
         ] {
-            let encoded = dword4.encode();
-            let decoded = Word4::decode(encoded);
+            let encoded = dword4.to_word();
+            let decoded = Word4::from_word(encoded);
             assert_eq!(decoded, dword4);
         }
     }
 
     #[test]
-    fn word5_encoding() {
+    fn word5() {
         for dword5 in [
             Word5 { cis: 0, i0_msb: 1 },
             Word5 { cis: 1, i0_msb: 0 },
@@ -483,27 +562,27 @@ mod frame3 {
                 i0_msb: 255,
             },
         ] {
-            let encoded = dword5.encode();
-            let decoded = Word5::decode(encoded);
+            let encoded = dword5.to_word();
+            let decoded = Word5::from_word(encoded);
             assert_eq!(decoded, dword5);
         }
     }
 
     #[test]
-    fn word6_encoding() {
+    fn word6() {
         for dword6 in [
             Word6 { i0_lsb: 0 },
             Word6 { i0_lsb: 1 },
             Word6 { i0_lsb: 255 },
         ] {
-            let encoded = dword6.encode();
-            let decoded = Word6::decode(encoded);
+            let encoded = dword6.to_word();
+            let decoded = Word6::from_word(encoded);
             assert_eq!(decoded, dword6);
         }
     }
 
     #[test]
-    fn word7_encoding() {
+    fn word7() {
         for dword7 in [
             Word7 {
                 crc: 0,
@@ -526,27 +605,27 @@ mod frame3 {
                 omega_msb: 254,
             },
         ] {
-            let encoded = dword7.encode();
-            let decoded = Word7::decode(encoded);
+            let encoded = dword7.to_word();
+            let decoded = Word7::from_word(encoded);
             assert_eq!(decoded, dword7);
         }
     }
 
     #[test]
-    fn word8_encoding() {
+    fn word8() {
         for dword8 in [
             Word8 { omega_lsb: 0 },
             Word8 { omega_lsb: 1 },
             Word8 { omega_lsb: 255 },
         ] {
-            let encoded = dword8.encode();
-            let decoded = Word8::decode(encoded);
+            let encoded = dword8.to_word();
+            let decoded = Word8::from_word(encoded);
             assert_eq!(decoded, dword8);
         }
     }
 
     #[test]
-    fn word9_encoding() {
+    fn word9() {
         for dword9 in [
             Word9 { omega_dot: 0 },
             Word9 { omega_dot: 10 },
@@ -555,14 +634,14 @@ mod frame3 {
             Word9 { omega_dot: 1000 },
             Word9 { omega_dot: 250 },
         ] {
-            let encoded = dword9.encode();
-            let decoded = Word9::decode(encoded);
+            let encoded = dword9.to_word();
+            let decoded = Word9::from_word(encoded);
             assert_eq!(decoded, dword9);
         }
     }
 
     #[test]
-    fn word10_encoding() {
+    fn word10() {
         for dword10 in [
             Word10 { iode: 0, idot: 10 },
             Word10 {
@@ -578,17 +657,21 @@ mod frame3 {
                 idot: 1000,
             },
         ] {
-            let encoded = dword10.encode();
-            let decoded = Word10::decode(encoded);
+            let encoded = dword10.to_word();
+            let decoded = Word10::from_word(encoded);
             assert_eq!(decoded, dword10);
         }
     }
 
     #[test]
-    fn frame3_encoding() {
+    fn encoding() {
         for (cic, cis, crc, i0, iode, idot, omega0, omega, omega_dot) in [
-            (10.0, 11.0, 12.0, 13.0, 20, 30.0, 40.0, 50.0, 60.0),
-            (11.0, 12.0, 13.0, 14.0, 25, 36.0, 47.0, 58.0, 69.0),
+            (
+                1.0e-9, 2.0e-9, 3.0e-3, 3.0e-1, 20, 3.0e-10, 6.0e-1, 6.0e-1, 3.0e-9,
+            ),
+            (
+                2.0e-9, 3.0e-9, 3.0e-3, 2.0e-1, 25, 4.0e-10, 7.0e-1, 7.0e-1, 4.0e-9,
+            ),
         ] {
             let frame3 = GpsQzssFrame3 {
                 cic,
@@ -602,28 +685,9 @@ mod frame3 {
                 omega_dot,
             };
 
-            let encoded = frame3.encode();
-
-            let mut extra = 0;
-            let mut decoded = GpsQzssFrame3::default();
-
-            for (i, dword) in encoded.iter().enumerate() {
-                // decoded
-                //     .decode_word(i + 3, *dword, &mut extra)
-                //     .unwrap_or_else(|_| {
-                //         panic!("Failed to decode dword {:3}=0x{:08X}", i, dword);
-                //     });
-            }
-
-            assert_eq!(frame3.cic, cic);
-            assert_eq!(frame3.cis, cis);
-            assert_eq!(frame3.crc, crc);
-            assert_eq!(frame3.i0, i0);
-            assert_eq!(frame3.iode, iode);
-            assert_eq!(frame3.idot, idot);
-            assert_eq!(frame3.omega0, omega0);
-            assert_eq!(frame3.omega, omega);
-            assert_eq!(frame3.omega_dot, omega_dot);
+            let encoded = frame3.to_words();
+            let decoded = GpsQzssFrame3::from_words(&encoded);
+            assert_eq!(decoded, frame3);
         }
     }
 }

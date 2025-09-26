@@ -140,99 +140,99 @@ mod test {
         }
     }
 
-    // #[test]
-    // fn eph2_bytes_decoding_noparity() {
-    //     #[cfg(all(feature = "std", feature = "log"))]
-    //     init_logger();
+    #[test]
+    fn ublox_eph_2() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
 
-    //     let mut found = false;
+        let words = from_ublox_bytes(&[
+            // TLM
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x15, 0x27, 0xEA, 0x1B, // WORD3
+            0x12, 0x7F, 0xF1, 0x65, // WORD4
+            0x8C, 0x68, 0x1F, 0x7C, // WORD5
+            0x02, 0x49, 0x34, 0x15, // WORD6
+            0xBF, 0xF8, 0x81, 0x1E, // WORD7
+            0x99, 0x1B, 0x81, 0x14, // W0RD8
+            0x04, 0x3E, 0x68, 0x6E, // WORD9
+            0x83, 0x34, 0x72, 0x21, // WORD10
+            0x90, 0x42, 0x9F, 0x7B,
+        ]);
 
-    //     let bytes = from_ublox_be_bytes(&[
-    //         // TLM
-    //         0x22, 0xC1, 0x3E, 0x1B, // HOW
-    //         0x15, 0x27, 0xEA, 0x1B, // WORD3
-    //         0x12, 0x7F, 0xF1, 0x65, // WORD4
-    //         0x8C, 0x68, 0x1F, 0x7C, // WORD5
-    //         0x02, 0x49, 0x34, 0x15, // WORD6
-    //         0xBF, 0xF8, 0x81, 0x1E, // WORD7
-    //         0x99, 0x1B, 0x81, 0x14, // W0RD8
-    //         0x04, 0x3E, 0x68, 0x6E, // WORD9
-    //         0x83, 0x34, 0x72, 0x21, // WORD10
-    //         0x90, 0x42, 0x9F, 0x7B,
-    //     ]);
+        for check_parity in [false, true] {
+            let decoded = GpsQzssFrame::decode(&words, check_parity).unwrap_or_else(|| {
+                panic!("Failed to decode valid message");
+            });
 
-    //     let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
-    //         panic!("Failed to decode valid message");
-    //     });
+            assert_eq!(decoded.telemetry.message, 0x13E);
+            assert_eq!(decoded.telemetry.integrity, false);
+            assert_eq!(decoded.telemetry.reserved_bit, false);
 
-    //     assert_eq!(decoded.telemetry.message, 0x13E);
-    //     assert_eq!(decoded.telemetry.integrity, false);
-    //     assert_eq!(decoded.telemetry.reserved_bit, false);
+            assert_eq!(decoded.how.alert, false);
+            assert_eq!(decoded.how.anti_spoofing, true);
+            assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris2);
 
-    //     assert_eq!(decoded.how.alert, false);
-    //     assert_eq!(decoded.how.anti_spoofing, true);
-    //     assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris2);
+            let frame2 = decoded.subframe.as_eph2().unwrap_or_else(|| {
+                panic!("Decoded invalid subframe");
+            });
 
-    //     let frame2 = decoded.subframe.as_eph2().unwrap_or_else(|| {
-    //         panic!("Decoded invalid subframe");
-    //     });
+            assert_eq!(frame2.toe, 266_400);
+            assert_eq!(frame2.crs, -1.843750000000e+000);
+            assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
+            assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
+            assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
+            assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
+            assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
+            assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
+            assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
+            assert_eq!(frame2.fit_int_flag, false);
+        }
+    }
 
-    //     assert_eq!(frame2.toe, 266_400);
-    //     assert_eq!(frame2.crs, -1.843750000000e+000);
-    //     assert!((frame2.sqrt_a - 5.153602432251e+003).abs() < 1e-9);
-    //     assert!((frame2.m0 - 9.768415465951e-001).abs() < 1e-9);
-    //     assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-9);
-    //     assert!((frame2.e - 8.578718174249e-003).abs() < 1e-9);
-    //     assert!((frame2.cus - 8.093193173409e-006).abs() < 1e-9);
-    //     assert!((frame2.cuc - -5.587935447693e-008).abs() < 1e-6);
-    //     assert!((frame2.dn - 1.444277586415e-009).abs() < 1e-9);
-    //     assert_eq!(frame2.fit_int_flag, false);
-    // }
+    #[test]
+    fn ublox_eph_3() {
+        #[cfg(all(feature = "std", feature = "log"))]
+        init_logger();
 
-    // #[test]
-    // fn eph3_bytes_decoding_noparity() {
-    //     #[cfg(all(feature = "std", feature = "log"))]
-    //     init_logger();
+        let words = from_ublox_bytes(&[
+            // TLM
+            0x22, 0xC1, 0x3E, 0x1B, // HOW
+            0x15, 0x28, 0x0B, 0xDB, // WORD3
+            0x00, 0x0A, 0xEA, 0x34, // WORD4
+            0x03, 0x3C, 0xFF, 0xEE, // WORD5
+            0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+            0x13, 0x6F, 0xB6, 0x4E, // WORD7
+            0x86, 0xF4, 0xAB, 0x2C, // WORD8
+            0x06, 0x71, 0xEB, 0x44, // WORD9
+            0x3F, 0xEA, 0xF6, 0x02, // WORD10
+            0x92, 0x45, 0x52, 0x13,
+        ]);
 
-    //     let mut found = false;
+        for check_parity in [false, true] {
+            let decoded = GpsQzssFrame::decode(&words, check_parity).unwrap_or_else(|| {
+                panic!("Failed to decode valid message");
+            });
 
-    //     let bytes = from_ublox_be_bytes(&[
-    //         // TLM
-    //         0x22, 0xC1, 0x3E, 0x1B, // HOW
-    //         0x15, 0x28, 0x0B, 0xDB, // WORD3
-    //         0x00, 0x0A, 0xEA, 0x34, // WORD4
-    //         0x03, 0x3C, 0xFF, 0xEE, // WORD5
-    //         0xBF, 0xE5, 0xC9, 0xEB, // WORD6
-    //         0x13, 0x6F, 0xB6, 0x4E, // WORD7
-    //         0x86, 0xF4, 0xAB, 0x2C, // WORD8
-    //         0x06, 0x71, 0xEB, 0x44, // WORD9
-    //         0x3F, 0xEA, 0xF6, 0x02, // WORD10
-    //         0x92, 0x45, 0x52, 0x13,
-    //     ]);
+            assert_eq!(decoded.telemetry.message, 0x13E);
+            assert_eq!(decoded.telemetry.integrity, false);
+            assert_eq!(decoded.telemetry.reserved_bit, false);
 
-    //     let decoded = GpsQzssFrame::decode(&bytes, 40, false).unwrap_or_else(|| {
-    //         panic!("Failed to decode valid message");
-    //     });
+            assert_eq!(decoded.how.alert, false);
+            assert_eq!(decoded.how.anti_spoofing, true);
+            assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris3);
 
-    //     assert_eq!(decoded.telemetry.message, 0x13E);
-    //     assert_eq!(decoded.telemetry.integrity, false);
-    //     assert_eq!(decoded.telemetry.reserved_bit, false);
+            let frame3 = decoded.subframe.as_eph3().unwrap_or_else(|| {
+                panic!("Decoded invalid subframe");
+            });
 
-    //     assert_eq!(decoded.how.alert, false);
-    //     assert_eq!(decoded.how.anti_spoofing, true);
-    //     assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris3);
-
-    //     let frame3 = decoded.subframe.as_eph3().unwrap_or_else(|| {
-    //         panic!("Decoded invalid subframe");
-    //     });
-
-    //     assert!((frame3.cic - 8.009374141693e-008).abs() < 1e-9);
-    //     assert!((frame3.cis - -1.955777406693e-007).abs() < 1E-9);
-    //     assert!((frame3.crc - 2.225625000000e+002).abs() < 1E-9);
-    //     assert!((frame3.i0 - 3.070601043291e-001).abs() < 1e-9);
-    //     assert!((frame3.idot - 1.548414729768e-010).abs() < 1E-9);
-    //     assert!((frame3.omega0 - -6.871047024615e-001).abs() < 1e-9);
-    //     assert!((frame3.omega_dot - -2.449269231874e-009).abs() < 1e-9);
-    //     assert!((frame3.omega - -6.554632573389e-001).abs() < 1e-9);
-    // }
+            assert!((frame3.cic - 8.009374141693e-008).abs() < 1e-9);
+            assert!((frame3.cis - -1.955777406693e-007).abs() < 1E-9);
+            assert!((frame3.crc - 2.225625000000e+002).abs() < 1E-9);
+            assert!((frame3.i0 - 3.070601043291e-001).abs() < 1e-9);
+            assert!((frame3.idot - 1.548414729768e-010).abs() < 1E-9);
+            assert!((frame3.omega0 - -6.871047024615e-001).abs() < 1e-9);
+            assert!((frame3.omega_dot - -2.449269231874e-009).abs() < 1e-9);
+            assert!((frame3.omega - -6.554632573389e-001).abs() < 1e-9);
+        }
+    }
 }
