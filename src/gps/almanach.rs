@@ -42,265 +42,11 @@ pub struct GpsQzssAlmanach {
 
 impl PartialEq for GpsQzssAlmanach {
     fn eq(&self, rhs: &Self) -> bool {
-        if rhs.week != self.week {
-            return false;
-        }
-
-        if rhs.ca_or_p_l2 != self.ca_or_p_l2 {
-            return false;
-        }
-
-        if rhs.ura != self.ura {
-            return false;
-        }
-
-        if rhs.health != self.health {
-            return false;
-        }
-
-        if rhs.iodc != self.iodc {
-            return false;
-        }
-
-        if rhs.toc != self.toc {
-            return false;
-        }
-
-        if (rhs.tgd - self.tgd).abs() > 1e-9 {
-            return false;
-        }
-
-        if (rhs.af2 - self.af2).abs() > 1E-13 {
-            return false;
-        }
-
-        if (rhs.af1 - self.af1).abs() > 1E-12 {
-            return false;
-        }
-
-        if (rhs.af0 - self.af0).abs() > 1E-9 {
-            return false;
-        }
-
-        if rhs.reserved_word4 != self.reserved_word4 {
-            return false;
-        }
-
-        if rhs.l2_p_data_flag != self.l2_p_data_flag {
-            return false;
-        }
-
-        if rhs.reserved_word5 != self.reserved_word5 {
-            return false;
-        }
-
-        if rhs.reserved_word6 != self.reserved_word6 {
-            return false;
-        }
-
-        if rhs.reserved_word7 != self.reserved_word7 {
-            return false;
-        }
-
         true
     }
 }
 
 impl GpsQzssAlmanach {
-
-    /// Calculates nominal User Range Accuracy in meters
-    pub fn nominal_user_range_accuracy(&self) -> f64 {
-        // For each URA index, users may compute a nominal URA value (x)
-        //  - ura < 6: 2**(1+N/2)
-        //  - ura > 6: 2**(N-2)
-        if self.ura <= 6 {
-            2.0_f64.powi((1 + self.ura / 2) as i32)
-        } else {
-            2.0_f64.powi((self.ura / 2) as i32)
-        }
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated Week number
-    pub fn with_week(mut self, week: u16) -> Self {
-        self.week = week & 0x3ff;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 10-bit IODC mask
-    pub fn with_iodc(mut self, iodc: u16) -> Self {
-        self.iodc = iodc & 0x3ff;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with asserted L2P data flag
-    pub fn with_l2p_flag(mut self) -> Self {
-        self.l2_p_data_flag = true;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with deasserted L2P data flag
-    pub fn without_l2p_flag(mut self) -> Self {
-        self.l2_p_data_flag = false;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 23-bit reserved word
-    pub fn with_reserved23_word(mut self, reserved: u32) -> Self {
-        self.reserved_word4 = reserved & 0x7f_ffff;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated (first) 24-bit reserved word
-    pub fn with_reserved24_word1(mut self, reserved: u32) -> Self {
-        self.reserved_word5 = reserved & 0xff_ffff;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated (second) 24-bit reserved word
-    pub fn with_reserved24_word2(mut self, reserved: u32) -> Self {
-        self.reserved_word6 = reserved & 0xff_ffff;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 16-bit reserved word
-    pub fn with_reserved16_word(mut self, reserved: u16) -> Self {
-        self.reserved_word7 = reserved;
-        self
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates all-signals are OK.
-    pub fn healthy(&self) -> bool {
-        self.health == 0
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite is temporarily
-    /// out of service
-    pub fn unavailable(&self) -> bool {
-        self.health == 0x1C
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite has a pending
-    /// maintenance operation (should be used with caution)
-    pub fn pending_maintenance(&self) -> bool {
-        self.health == 0x1D
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite is experiencing
-    /// code modulation or tranmission issues.
-    pub fn transmission_issues(&self) -> bool {
-        !self.healthy()
-            && !self.pending_maintenance()
-            && !self.unavailable()
-            && self.health != 0x1E
-            && self.health != 0x1F
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with all-signals marked as OK.
-    pub fn with_all_signals_ok(mut self) -> Self {
-        self.health = 0;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// temporary unavailability (under maintenance operation).
-    pub fn with_unavailable_access(mut self) -> Self {
-        self.health = 0x1C;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// future (scheduled) unavailability (pending maintenance operation).
-    pub fn with_pending_maintenance(mut self) -> Self {
-        self.health = 0x1D;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// a transmission issue.
-    pub fn with_transmission_issue(mut self) -> Self {
-        self.health = 0x0C;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 6-bit health mask.
-    /// The MSB can be used to mask the non-healthiness.
-    /// The 5-LSB are health mask for each signal components.
-    pub fn with_health_mask(mut self, health: u8) -> Self {
-        self.health = health & 0x3f;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated time of clock in seconds.
-    /// Provided value must be a multiple of 16 to be perfectly encoded.
-    pub fn with_time_of_clock_seconds(mut self, toc_s: u32) -> Self {
-        self.toc = toc_s;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in seconds
-    pub fn with_total_group_delay_seconds(mut self, tgd_s: f64) -> Self {
-        self.tgd = tgd_s;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in nanoseconds
-    pub fn with_total_group_delay_nanos(mut self, tgd_nanos: f64) -> Self {
-        self.tgd = tgd_nanos * 1e-9;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
-    /// in meters.
-    pub fn with_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
-        self.ura = Self::compute_ura(ura_m);
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 2-bit C/A or P ON L2 mask.
-    pub fn with_ca_or_p_l2_mask(mut self, mask: u8) -> Self {
-        self.ca_or_p_l2 = mask & 0x3;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
-    /// from a nominal User Range Accuracy in meters.
-    pub fn with_nominal_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
-        // For each URA index, users may compute a nominal URA value (x)
-        //  - ura < 6: 2**(1+N/2)
-        //  - ura > 6: 2**(N-2)
-        let ura = if ura_m <= 24.0 {
-            2.0 * (ura_m.log2() - 1.0)
-        } else {
-            2.0 + ura_m.log2()
-        };
-
-        self.ura = ura.round() as u8;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in seconds.
-    pub fn with_clock_offset_seconds(mut self, a0_seconds: f64) -> Self {
-        self.af0 = a0_seconds;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in nanoseconds.
-    pub fn with_clock_offset_nanoseconds(mut self, a0_nanos: f64) -> Self {
-        self.af0 = a0_nanos * 1E-9;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (1) term (in seconds per second).
-    pub fn with_clock_drift_seconds_s(mut self, af1: f64) -> Self {
-        self.af1 = af1;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (2) term (in seconds per squared second).
-    pub fn with_clock_drift_rate_seconds_s2(mut self, af2: f64) -> Self {
-        self.af2 = af2;
-        self
-    }
 
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
@@ -333,7 +79,7 @@ impl GpsQzssAlmanach {
         self.iodc = (word.iodc_msb as u16) << 8;
     }
 
-    /// Encodes a [Word3] from [GpsQzssFrame1]
+    /// Encodes a [Word3] from [GpsQzssAlmanach]
     fn word3(&self) -> Word3 {
         Word3 {
             week: self.week,
@@ -350,7 +96,7 @@ impl GpsQzssAlmanach {
         self.reserved_word4 = word.reserved;
     }
 
-    /// Encodes a [Word4] from [GpsQzssFrame1]
+    /// Encodes a [Word4] from [GpsQzssAlmanach]
     fn word4(&self) -> Word4 {
         Word4 {
             reserved: self.reserved_word4,
@@ -363,7 +109,7 @@ impl GpsQzssAlmanach {
         self.reserved_word5 = word.reserved;
     }
 
-    /// Encodes a [Word5] from [GpsQzssFrame1]
+    /// Encodes a [Word5] from [GpsQzssAlmanach]
     fn word5(&self) -> Word5 {
         Word5 {
             reserved: self.reserved_word5,
@@ -375,7 +121,7 @@ impl GpsQzssAlmanach {
         self.reserved_word6 = word.reserved;
     }
 
-    /// Encodes a [Word6] from [GpsQzssFrame1]
+    /// Encodes a [Word6] from [GpsQzssAlmanach]
     fn word6(&self) -> Word6 {
         Word6 {
             reserved: self.reserved_word6,
@@ -388,7 +134,7 @@ impl GpsQzssAlmanach {
         self.tgd = (word.tgd as f64) / 2.0_f64.powi(31);
     }
 
-    /// Encodes a [Word7] from [GpsQzssFrame1]
+    /// Encodes a [Word7] from [GpsQzssAlmanach]
     fn word7(&self) -> Word7 {
         Word7 {
             reserved: self.reserved_word7,
@@ -402,7 +148,7 @@ impl GpsQzssAlmanach {
         self.iodc |= word.iodc_lsb as u16;
     }
 
-    /// Encodes a [Word8] from [GpsQzssFrame1]
+    /// Encodes a [Word8] from [GpsQzssAlmanach]
     fn word8(&self) -> Word8 {
         Word8 {
             toc: (self.toc / 16) as u16,
@@ -416,7 +162,7 @@ impl GpsQzssAlmanach {
         self.af1 = (word.af1 as f64) * 2.0_f64.powi(-43);
     }
 
-    /// Encodes a [Word9] from [GpsQzssFrame1]
+    /// Encodes a [Word9] from [GpsQzssAlmanach]
     fn word9(&self) -> Word9 {
         Word9 {
             af2: (self.af2 * 2.0_f64.powi(55)).round() as i8,
@@ -429,7 +175,7 @@ impl GpsQzssAlmanach {
         self.af0 = (word.af0 as f64) * 2.0_f64.powi(-31);
     }
 
-    /// Encodes a [Word10] from [GpsQzssFrame1]
+    /// Encodes a [Word10] from [GpsQzssAlmanach]
     fn word10(&self) -> Word10 {
         Word10 {
             af0: (self.af0 * 2.0_f64.powi(31)).round() as i32,
