@@ -17,161 +17,84 @@ pub fn init_logger() {
     });
 }
 
-/// Inserts desired number of zero (bits) at the begginning of a frame
-pub fn insert_zeros(slice: &[u8], shift_bits: usize) -> Vec<u8> {
+/// Simple method to insert the desired number of zero (bitwise)
+/// in a stream, at the begginning of the stream, simply "delaying" the following values.
+pub fn insert_zeros(slice: &[u8], num_zero_bits: usize) -> Vec<u8> {
     let size = slice.len();
-    let mut out = vec![0u8; size];
 
-    let byte_shift = shift_bits / 8;
-    let bit_shift = shift_bits % 8;
+    let extra_bit = num_zero_bits % 8;
 
-    for (i, &byte) in slice.iter().enumerate() {
-        let out_idx = i + byte_shift;
+    let mut extra_bytes = num_zero_bits / 8;
 
-        if out_idx >= size {
-            break;
-        }
-
-        out[out_idx] |= byte >> bit_shift;
-
-        if bit_shift != 0 && out_idx + 1 < size {
-            out[out_idx + 1] |= byte << (8 - bit_shift);
-        }
+    if extra_bit > 0 {
+        extra_bytes += 1;
     }
 
-    out
-}
+    println!("extra bytes: {}", extra_bytes);
 
-/// A custom [FileReader] with possible offset (delay)
-/// in the stream.
-pub struct FileReader<const N: usize> {
-    // FD
-    fd: File,
+    let mut ret = vec![0u8; size + extra_bytes];
 
-    // RD pointer
-    rd_ptr: usize,
+    // first copy as is
+    ret[..size].copy_from_slice(slice);
 
-    // WR pointer
-    wr_ptr: usize,
+    if extra_bit > 0 {
+        let shift = 8 - extra_bit;
+        let mut mask = 0x00;
 
-    // Initial offset in bits
-    initial_offset_bits: usize,
-
-    // internal buufer
-    buffer: [u8; N],
-}
-
-impl<const N: usize> std::io::Read for FileReader<N> {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        let mut capacity = buffer.len();
-
-        let avail_in_buffer = self.rd_ptr;
-
-        if self.rd_ptr > 0 {
-            // provide existing content
-            if capacity > self.rd_ptr {
-                buffer[..avail_in_buffer].copy_from_slice(&self.buffer[self.rd_ptr..]);
-
-                self.rd_ptr = 0;
-                capacity -= self.rd_ptr;
-            } else {
-                // provide capacity and return
-                self.rd_ptr += capacity;
-                return Ok(capacity);
-            }
+        for i in 0..extra_bit {
+            mask |= 1 << (8 - i - 1);
         }
 
-        // read new content
-        let new_size = self.fd.read(&mut self.buffer[self.rd_ptr..])?;
+        println!("MASK=0x{:02X}", mask);
 
-        if new_size == 0 {
-            if avail_in_buffer == 0 {
-                // end of stream
-                return Ok(0);
-            } else {
-                // already copied
-                self.rd_ptr += new_size;
-                return Ok(avail_in_buffer);
-            }
+        for i in 0..size - 1 {
+            ret[size - i - 1] >>= extra_bit;
+            ret[size - i - 1] |= ret[size - i - 2] << (8 - extra_bit)
         }
 
-        if capacity >= new_size {
-            // can absorb new content entirely
-            buffer[avail_in_buffer..].copy_from_slice(&self.buffer[self.rd_ptr..]);
-
-            self.rd_ptr += new_size;
-
-            return Ok(avail_in_buffer + new_size);
-        }
-
-        // can only absorb a part of it
-
-        Ok(0)
+        ret[0] >>= extra_bit;
     }
-}
 
-impl<const N: usize> FileReader<N> {
-    /// Creates new [FileReader] with possible fake offset in bits
-    pub fn new(fp: &str, initial_offset_bits: usize) -> Self {
-        let initial_offset_bytes = initial_offset_bits / 8;
-
-        let mut buffer = [0; N];
-
-        let mut fd = File::open(fp).unwrap_or_else(|e| {
-            panic!("Failed to open file {}: {}", fp, e);
-        });
-
-        Self {
-            fd,
-            buffer,
-            initial_offset_bits,
-            wr_ptr: 0,
-            rd_ptr: 0,
-        }
-    }
+    ret
 }
 
 #[test]
 fn test_zeros_padder() {
-    let mut buffer = [0; 1024];
-    let mut file = FileReader::<1024>::new("data/GPS/eph1.bin", 0);
+    let test_values = [0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA];
 
-    file.read(&mut buffer).unwrap_or_else(|e| {
-        panic!("Failed to read test data: {}", e);
-    });
+    for zeros in 0..=1 {
+        let delayed = insert_zeros(&test_values, zeros);
 
-    let size = buffer.len();
+        let expected = match zeros {
+            0 => vec![0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA],
+            1 => vec![0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00],
+            _ => panic!("untested value"),
+        };
 
-    // test offset by bytes
-    for i in 1..16 {
-        // insert 1 byte
-        let delayed = insert_zeros(&buffer, i * 8);
-
-        assert_eq!(delayed.len(), size); // size should never change
+        assert_eq!(
+            delayed, expected,
+            "wrong results for {} inserted zeros",
+            zeros
+        );
     }
 
-    // test offset by bits
-    for i in 1..7 {
-        let delayed = insert_zeros(&buffer, i);
+    let test_values = [0x55, 0x55, 0x55, 0x55];
 
-        assert_eq!(delayed[0], 0x8B >> i);
-        assert_eq!(delayed.len(), size); // size should never change
+    for zeros in 0..=1 {
+        let delayed = insert_zeros(&test_values, zeros);
+
+        let expected = match zeros {
+            0 => vec![0x55, 0x55, 0x55, 0x55],
+            1 => vec![0x2A, 0xAA, 0xAA, 0xAA, 0x80],
+            _ => panic!("untested value"),
+        };
+
+        assert_eq!(
+            delayed, expected,
+            "wrong results for {} inserted zeros",
+            zeros
+        );
     }
-}
-
-#[test]
-fn test_file_reader() {
-    let mut buffer = [0; 1024];
-    let mut file = FileReader::<1024>::new("data/GPS/eph1.bin", 0);
-
-    file.read(&mut buffer).unwrap_or_else(|e| {
-        panic!("Failed to read test data: {}", e);
-    });
-
-    assert_eq!(buffer[0], 0x8B);
-    assert_eq!(buffer[1], 0x48);
-    assert_eq!(buffer[2], 0xD3);
-    assert_eq!(buffer[3], 0x4C);
 }
 
 #[cfg(feature = "gps")]
