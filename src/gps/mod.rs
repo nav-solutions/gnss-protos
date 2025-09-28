@@ -22,6 +22,10 @@ pub(crate) const GPS_PAYLOAD_MASK: u32 = 0xffff_ffc0;
 /// Number of parity bits for each [GpsDataWord]
 pub(crate) const GPS_PARITY_SIZE: usize = 6;
 
+pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
+    rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
+}
+
 mod bytes;
 pub use bytes::GpsDataByte;
 

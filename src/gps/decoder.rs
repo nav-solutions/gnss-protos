@@ -117,7 +117,7 @@ impl GpsQzssDecoder {
     ///
     /// ## Returns
     /// - offset in bits !
-    pub(crate) fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
+    fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
         for i in 0..size - GPS_FRAME_BYTES + 1 {
             if slice[i] == GPS_PREAMBLE_BYTE {
                 return Some(i * 8);
@@ -171,7 +171,14 @@ impl GpsQzssDecoder {
         let preamble_offset_bit = preamble_offset_bit.unwrap();
 
         #[cfg(feature = "log")]
-        trace!("(GPS/QZSS)  [preamble]: pos={}", preamble_offset_bit);
+        trace!(
+            "(GPS/QZSS)  [preamble]: pos={} [0x{:02X} 0x{:02X} 0x{:02X} 0x{:02X}]",
+            preamble_offset_bit,
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+        );
 
         self.resync_align(buffer, preamble_offset_bit);
 

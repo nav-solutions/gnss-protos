@@ -1,5 +1,5 @@
 use crate::{
-    gps::{GpsDataByte, GpsDataWord, GpsError, GPS_WORDS_PER_FRAME},
+    gps::{rad_to_semicircles, GpsDataByte, GpsDataWord, GpsError, GPS_WORDS_PER_FRAME},
     twos_complement,
 };
 
@@ -51,10 +51,10 @@ pub struct GpsQzssFrame2 {
     /// 8-bit IODE (Issue of Data)
     pub iode: u8,
 
-    /// Mean anomaly at reference time (in semi-circles)
+    /// Mean anomaly at reference time (in semicircles)
     pub m0: f64,
 
-    /// Mean motion difference from computed value (in semi-circles)
+    /// Mean motion difference from computed value (in semicircles)
     pub dn: f64,
 
     /// Latitude (cosine harmonic) in radians.
@@ -135,8 +135,8 @@ impl GpsQzssFrame2 {
         Self::default()
             .with_toe_seconds(54_320)
             .with_iode(0x01)
-            .with_mean_anomaly_semi_circles(1.0e-1)
-            .with_mean_motion_difference_semi_circles(2.0e-1)
+            .with_mean_anomaly_semicircles(1.0e-1)
+            .with_mean_motion_difference_semicircles(2.0e-1)
             .with_square_root_semi_major_axis(5353.0)
             .with_eccentricity(1.0e-1)
             .with_aodo(0x12)
@@ -159,30 +159,26 @@ impl GpsQzssFrame2 {
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time, expressed
-    /// in semi-circles.
-    pub fn with_mean_anomaly_semi_circles(mut self, m0_semi_circles: f64) -> Self {
-        self.m0 = m0_semi_circles;
+    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly (in semicircles) at reference time.
+    pub fn with_mean_anomaly_semicircles(mut self, m0_semicircles: f64) -> Self {
+        self.m0 = m0_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly at reference time, expressed
-    /// in radians.
+    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly (in radians) at reference time.
     pub fn with_mean_anomaly_radians(mut self, m0_rad: f64) -> Self {
-        self.m0 = m0_rad * PI / 2.0f64.powi(31);
-        self
+        self.with_mean_anomaly_semicircles(rad_to_semicircles(m0_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in semi circles)
-    pub fn with_mean_motion_difference_semi_circles(mut self, dn_semi_circles: f64) -> Self {
-        self.dn = dn_semi_circles;
+    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in semicircles)
+    pub fn with_mean_motion_difference_semicircles(mut self, dn_semicircles: f64) -> Self {
+        self.dn = dn_semicircles;
         self
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in radians)
     pub fn with_mean_motion_difference_radians(mut self, dn_rad: f64) -> Self {
-        self.dn = dn_rad * PI / 2.0f64.powi(31);
-        self
+        self.with_mean_motion_difference_semicircles(rad_to_semicircles(dn_rad))
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated semi-major axis (in meters)
