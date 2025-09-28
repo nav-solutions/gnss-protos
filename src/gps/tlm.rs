@@ -32,6 +32,15 @@ impl std::fmt::Display for GpsQzssTelemetry {
 }
 
 impl GpsQzssTelemetry {
+    /// Generates a realistic frame model for testing purposes
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_message(0x1234)
+            .with_integrity()
+            .with_reserved_bit()
+    }
+
     /// Copies and returns new [GpsQzssTelemetry] with updated 14-bit TLM message
     pub fn with_message(mut self, message_14b: u16) -> Self {
         self.message = message_14b & 0x3fff;

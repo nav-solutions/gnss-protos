@@ -175,6 +175,25 @@ impl PartialEq for GpsQzssFrame1 {
 }
 
 impl GpsQzssFrame1 {
+    /// Generates a realistic frame model for testing purposes
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_week(0x123)
+            .with_iodc(0x1)
+            .with_all_signals_ok()
+            .with_l2p_flag()
+            .with_clock_offset_nanoseconds(1.0)
+            .with_clock_drift_seconds_s(1E-12)
+            .with_clock_drift_rate_seconds_s2(1E-15)
+            .with_reserved23_word(0x12_3456)
+            .with_reserved24_word1(0x34_5678)
+            .with_reserved24_word2(0x98_7654)
+            .with_total_group_delay_nanos(5.0)
+            .with_ca_or_p_l2_mask(0x3)
+            .with_user_range_accuracy_m(4.0)
+    }
+
     /// Computes binary URA from value in meters
     fn compute_ura(value_m: f64) -> u8 {
         if value_m <= 2.4 {

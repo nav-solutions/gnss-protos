@@ -4,6 +4,8 @@ use log::LevelFilter;
 
 use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow, GpsQzssTelemetry, GPS_WORDS_PER_FRAME};
 
+mod gps;
+
 static INIT: Once = Once::new();
 
 pub fn init_logger() {

@@ -71,3 +71,15 @@ pub use frame::GpsQzssFrame;
 
 mod subframe;
 pub use subframe::GpsQzssSubframe;
+
+#[cfg(test)]
+mod test {
+    use crate::gps::{GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME};
+
+    #[test]
+    fn gps_properties() {
+        assert_eq!(GPS_FRAME_BYTES, 38);
+        assert_eq!(GPS_FRAME_BITS, 300);
+        assert_eq!(GPS_WORDS_PER_FRAME, 10);
+    }
+}

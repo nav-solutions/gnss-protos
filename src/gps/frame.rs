@@ -15,6 +15,15 @@ pub struct GpsQzssFrame {
 }
 
 impl GpsQzssFrame {
+    /// Generates a realistic frame model for testing purposes.
+    #[cfg(test)]
+    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+        Self::default()
+            .with_telemetry(GpsQzssTelemetry::model())
+            .with_hand_over_word(GpsQzssHow::model(frame_id))
+            .with_subframe(GpsQzssSubframe::model(frame_id))
+    }
+
     /// Copies and returns with updated [GpsQzssHow].
     pub fn with_hand_over_word(mut self, how: GpsQzssHow) -> Self {
         self.how = how;
