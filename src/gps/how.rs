@@ -52,6 +52,16 @@ impl std::fmt::Display for GpsQzssHow {
 }
 
 impl GpsQzssHow {
+    /// Generates a realitic frame model for testing purpose
+    #[cfg(test)]
+    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+        Self::default()
+            .with_frame_id(frame_id)
+            .with_tow_seconds(15_000)
+            .with_alert_bit()
+            .with_anti_spoofing()
+    }
+
     /// Copies and returns [GpsQzssHow] with updated TOW in seconds.
     /// This value should be aligned to midnight and always a multiple of 6 seconds,
     /// the message transmission rate.

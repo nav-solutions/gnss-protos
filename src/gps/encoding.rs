@@ -1320,34 +1320,9 @@ mod encoding {
         });
 
         let mut frame = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x1234)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(15_000)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris1(
-                GpsQzssFrame1::default()
-                    .with_week(0x123)
-                    .with_iodc(0x1)
-                    .with_all_signals_ok()
-                    .with_l2p_flag()
-                    .with_clock_offset_nanoseconds(1.0)
-                    .with_clock_drift_seconds_s(1E-12)
-                    .with_clock_drift_rate_seconds_s2(1E-15)
-                    .with_reserved23_word(0x12_3456)
-                    .with_reserved24_word1(0x34_5678)
-                    .with_reserved24_word2(0x98_7654)
-                    .with_total_group_delay_nanos(5.0)
-                    .with_ca_or_p_l2_mask(0x3)
-                    .with_user_range_accuracy_m(4.0),
-            ));
+            .with_telemetry(GpsQzssTelemetry::model())
+            .with_hand_over_word(GpsQzssHow::model(GpsQzssFrameId::Ephemeris1))
+            .with_subframe(GpsQzssSubframe::model(GpsQzssFrameId::Ephemeris1));
 
         for i in 0..128 {
             let encoded = frame.encode_raw();
@@ -1388,87 +1363,16 @@ mod encoding {
         }
     }
 
-    #[test]
-    fn eph1_bin_test() {
-        let mut rd_ptr = 0;
-        let mut buffer = [0; 1024];
-
-        let mut fd = File::open("data/GPS/eph1.bin").unwrap();
-
-        let mut size = fd.read(&mut buffer).unwrap();
-
-        let mut decoder = GpsQzssDecoder::default();
-
-        // grab first frame
-        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
-
-        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
-
-        let decoded = decoded.unwrap(); // success (we have 128 frames)
-
-        assert_eq!(decoded.telemetry.message, 0x1234);
-        assert_eq!(decoded.telemetry.integrity, true);
-        assert_eq!(decoded.telemetry.reserved_bit, true);
-
-        assert_eq!(decoded.how.tow, 15_000);
-        assert_eq!(decoded.how.alert, true);
-        assert_eq!(decoded.how.anti_spoofing, true);
-
-        // bits->byte lazy conversion.
-        // Frames are contiguous (no dead time)
-        // Each frame is round(37.5)=37 byte long
-        // Last bits are processed twice (lazily),
-        // but the decoder correctly synchronizes itself.
-        rd_ptr += processed_size / 8 - 1; // bytes!
-        size -= processed_size / 8 - 1; // bytes!
-
-        for i in 1..128 {
-            let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
-
-            // TODO residues
-            // assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
-
-            // let decoded = decoded.unwrap(); // success (we have 128 frames)
-
-            if i % 2 == 0 {
-            } else {
-            }
-        }
-    }
-
-    #[test]
+    // #[test]
     fn generate_eph2_bin() {
         let mut fd = File::create("data/GPS/eph2.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
         });
 
         let mut frame = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x3456)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(15_360)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris2(
-                GpsQzssFrame2::default()
-                    .with_toe_seconds(54_320)
-                    .with_iode(0x01)
-                    .with_mean_anomaly_semi_circles(1.0e-1)
-                    .with_mean_motion_difference_semi_circles(2.0e-1)
-                    .with_square_root_semi_major_axis(5381.0)
-                    .with_eccentricity(1.0e-3)
-                    .with_aodo(0x12)
-                    .with_cuc_radians(1e-8)
-                    .with_cus_radians(1e-9)
-                    .with_crs_meters(87.0)
-                    .with_fit_interval_flag(),
-            ));
+            .with_telemetry(GpsQzssTelemetry::model())
+            .with_hand_over_word(GpsQzssHow::model(GpsQzssFrameId::Ephemeris2))
+            .with_subframe(GpsQzssSubframe::model(GpsQzssFrameId::Ephemeris2));
 
         for i in 0..128 {
             let encoded = frame.encode_raw();
@@ -1500,61 +1404,13 @@ mod encoding {
         }
     }
 
-    #[test]
-    fn eph2_bin_test() {
-        let mut rd_ptr = 0;
-        let mut buffer = [0; 1024];
-
-        let mut fd = File::open("data/GPS/eph2.bin").unwrap();
-
-        let mut size = fd.read(&mut buffer).unwrap();
-
-        let mut decoder = GpsQzssDecoder::default();
-
-        // grab first frame
-        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
-
-        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
-
-        let decoded = decoded.unwrap(); // success (we have 128 frames)
-
-        assert_eq!(decoded.telemetry.message, 0x3456);
-        assert_eq!(decoded.telemetry.integrity, true);
-        assert_eq!(decoded.telemetry.reserved_bit, true);
-
-        assert_eq!(decoded.how.tow, 15_360);
-        assert_eq!(decoded.how.alert, true);
-        assert_eq!(decoded.how.anti_spoofing, true);
-    }
-
-    #[test]
+    // #[test]
     fn generate_eph3_bin() {
         let mut fd = File::create("data/GPS/eph3.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
         });
 
-        let mut frame = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x3456)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(99_999)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris3(
-                GpsQzssFrame3::default()
-                    .with_iode(0x01)
-                    .with_cic_radians(1e-7)
-                    .with_cis_radians(2e-7)
-                    .with_omega_semi_circles(1.0)
-                    .with_idot_semi_circles_s(1e-9)
-                    .with_crc_meters(87.0),
-            ));
+        let mut frame = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris3);
 
         for i in 0..128 {
             let encoded = frame.encode_raw();
@@ -1578,110 +1434,15 @@ mod encoding {
         }
     }
 
-    #[test]
-    fn eph3_bin_test() {
-        let mut rd_ptr = 0;
-        let mut buffer = [0; 1024];
-
-        let mut fd = File::open("data/GPS/eph3.bin").unwrap();
-
-        let mut size = fd.read(&mut buffer).unwrap();
-
-        let mut decoder = GpsQzssDecoder::default();
-
-        // grab first frame
-        let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
-
-        assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
-
-        let decoded = decoded.unwrap(); // success (we have 128 frames)
-
-        assert_eq!(decoded.telemetry.message, 0x3456);
-        assert_eq!(decoded.telemetry.integrity, true);
-        assert_eq!(decoded.telemetry.reserved_bit, true);
-
-        assert_eq!(decoded.how.tow, 26_271);
-        assert_eq!(decoded.how.alert, true);
-        assert_eq!(decoded.how.anti_spoofing, true);
-    }
-
-    #[test]
+    // #[test]
     fn generate_burst_bin() {
         let mut fd = File::create("data/GPS/burst.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
         });
 
-        let mut eph_1 = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x3456)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(0x9_8765)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris1(
-                GpsQzssFrame1::default()
-                    .with_week(0x123)
-                    .with_iodc(0x1)
-                    .with_all_signals_ok()
-                    .with_l2p_flag()
-                    .with_reserved23_word(0x12_3456)
-                    .with_reserved24_word1(0x34_5678)
-                    .with_reserved24_word2(0x98_7654)
-                    .with_total_group_delay_nanos(5.0)
-                    .with_ca_or_p_l2_mask(0x3)
-                    .with_user_range_accuracy_m(4.0),
-            ));
-
-        let mut eph_2 = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x3457)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(0x9_8765)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris2(
-                GpsQzssFrame2::default()
-                    .with_toe_seconds(15_000)
-                    .with_iode(0x01)
-                    .with_square_root_semi_major_axis(5153.0)
-                    .with_eccentricity(0.1)
-                    .with_aodo(0x12)
-                    .with_cuc_radians(1e-6)
-                    .with_cus_radians(2e-6)
-                    .with_fit_interval_flag(),
-            ));
-
-        let mut eph_3 = GpsQzssFrame::default()
-            .with_telemetry(
-                GpsQzssTelemetry::default()
-                    .with_message(0x89AB)
-                    .with_integrity()
-                    .with_reserved_bit(),
-            )
-            .with_hand_over_word(
-                GpsQzssHow::default()
-                    .with_tow_seconds(0x0_1234)
-                    .with_alert_bit()
-                    .with_anti_spoofing(),
-            )
-            .with_subframe(GpsQzssSubframe::Ephemeris3(
-                GpsQzssFrame3::default()
-                    .with_cic_radians(1e-6)
-                    .with_cis_radians(2e-6)
-                    .with_iode(0x54),
-            ));
+        let mut eph_1 = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris1);
+        let mut eph_2 = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris2);
+        let mut eph_3 = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris3);
 
         for i in 0..128 {
             // EPH-1

@@ -33,8 +33,9 @@ use log::{debug, error, trace};
 /// ```
 #[derive(Debug, Copy, Clone)]
 pub struct GpsQzssDecoder {
-    /// 300 bits aligned to sync byte
-    buffer: [u8; GPS_FRAME_BYTES],
+    /// Enough bytes to store everything +1
+    /// so we can manipulate and realign everything.
+    buffer: [u8; GPS_FRAME_BYTES + 1],
 
     /// [GpsDataWord]s to avoid allocation
     words: [GpsDataWord; GPS_WORDS_PER_FRAME - 2],
@@ -49,7 +50,7 @@ impl Default for GpsQzssDecoder {
         Self {
             words: Default::default(),
             parity_verification: false,
-            buffer: [0; GPS_FRAME_BYTES],
+            buffer: [0; GPS_FRAME_BYTES + 1],
         }
     }
 }
@@ -76,22 +77,14 @@ impl GpsQzssDecoder {
         // bit index within byte
         let bit_index = preamble_offset_bit % 8;
 
-        if bit_index == 0 {
-            self.buffer
-                .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
-        } else {
-            // TODO not supported yet
+        #[cfg(feature = "log")]
+        trace!("(GPS/QZSS)  [preamble]: off={}", bit_index);
 
-            self.buffer
-                .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
+        // copies to first position
+        self.buffer[0..GPS_FRAME_BYTES]
+            .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
 
-            // slice[byte_index..byte_index + GPS_FRAME_BYTES]
-            //     .into_iter()
-            //     .map(|b| {
-            //         *b
-            //     })
-            //     .collect()
-        }
+        if bit_index > 0 {}
     }
 
     /// Locates the preamble bit marker (sync byte) within a buffer
@@ -160,7 +153,12 @@ impl GpsQzssDecoder {
 
         self.resync_align(buffer, preamble_offset_bit);
 
-        dword = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
+        dword = u32::from_be_bytes([
+            self.buffer[0],
+            self.buffer[1],
+            self.buffer[2],
+            self.buffer[3],
+        ]);
 
         let gps_word = GpsDataWord::from(dword);
         let parity = gps_word.parity(&Default::default(), false);
@@ -179,17 +177,17 @@ impl GpsQzssDecoder {
             },
             #[cfg(feature = "log")]
             Err(e) => {
-                error!("(GPS/QZSS) [telemetry]: {}", e);
+                error!("(GPS/QZSS) [telemetry]: {} ({:?})", e, gps_word);
                 return (preamble_offset_bit + GPS_FRAME_BITS, None);
             },
         };
 
-        dword = buffer[7] as u32;
-        dword |= (buffer[6] as u32) << 8;
-        dword |= (buffer[5] as u32) << 16;
-        dword |= (buffer[4] as u32) << 24;
+        dword = self.buffer[7] as u32;
+        dword |= (self.buffer[6] as u32) << 8;
+        dword |= (self.buffer[5] as u32) << 16;
+        dword |= (self.buffer[4] as u32) << 24;
         dword >>= 2;
-        dword |= ((buffer[3] as u32) & 0x03) << 28;
+        dword |= ((self.buffer[3] as u32) & 0x03) << 28;
 
         let gps_word = GpsDataWord::from(dword);
         let parity = gps_word.parity(&Default::default(), false);
@@ -212,61 +210,68 @@ impl GpsQzssDecoder {
         };
 
         // collect 8 data words
-        dword = ((buffer[11] & 0xC0) as u32) >> 4;
-        dword |= ((buffer[10] & 0x0f) as u32) << 4;
-        dword |= (((buffer[10] & 0xf0) as u32) >> 4) << 8;
-        dword |= ((buffer[9] & 0x0f) as u32) << 12;
-        dword |= (((buffer[9] & 0xf0) as u32) >> 4) << 16;
-        dword |= ((buffer[8] & 0x0f) as u32) << 20;
-        dword |= (((buffer[8] & 0xf0) as u32) >> 4) << 24;
-        dword |= ((buffer[7] & 0x0f) as u32) << 28;
+        dword = ((self.buffer[11] & 0xC0) as u32) >> 4;
+        dword |= ((self.buffer[10] & 0x0f) as u32) << 4;
+        dword |= (((self.buffer[10] & 0xf0) as u32) >> 4) << 8;
+        dword |= ((self.buffer[9] & 0x0f) as u32) << 12;
+        dword |= (((self.buffer[9] & 0xf0) as u32) >> 4) << 16;
+        dword |= ((self.buffer[8] & 0x0f) as u32) << 20;
+        dword |= (((self.buffer[8] & 0xf0) as u32) >> 4) << 24;
+        dword |= ((self.buffer[7] & 0x0f) as u32) << 28;
+
         self.words[0] = GpsDataWord::from(dword);
 
-        dword = (buffer[14] as u32) << (8 - 6);
-        dword |= (buffer[13] as u32) << (16 - 6);
-        dword |= (buffer[12] as u32) << (24 - 6);
-        dword |= (buffer[11] as u32) << (32 - 6);
+        dword = (self.buffer[14] as u32) << (8 - 6);
+        dword |= (self.buffer[13] as u32) << (16 - 6);
+        dword |= (self.buffer[12] as u32) << (24 - 6);
+        dword |= (self.buffer[11] as u32) << (32 - 6);
+
         self.words[1] = GpsDataWord::from(dword);
 
-        dword = (buffer[15] as u32) << 24;
-        dword |= (buffer[16] as u32) << 16;
-        dword |= (buffer[17] as u32) << 8;
-        dword |= buffer[18] as u32;
+        dword = (self.buffer[15] as u32) << 24;
+        dword |= (self.buffer[16] as u32) << 16;
+        dword |= (self.buffer[17] as u32) << 8;
+        dword |= self.buffer[18] as u32;
+
         self.words[2] = GpsDataWord::from(dword);
 
-        dword = (buffer[22] as u32) << 4;
-        dword |= (buffer[21] as u32) << (8 - 2);
-        dword |= (buffer[20] as u32) << (16 - 2);
-        dword |= (buffer[19] as u32) << (24 - 2);
-        dword |= (buffer[18] as u32) << (32 - 2);
+        dword = (self.buffer[22] as u32) << 4;
+        dword |= (self.buffer[21] as u32) << (8 - 2);
+        dword |= (self.buffer[20] as u32) << (16 - 2);
+        dword |= (self.buffer[19] as u32) << (24 - 2);
+        dword |= (self.buffer[18] as u32) << (32 - 2);
+
         self.words[3] = GpsDataWord::from(dword);
 
-        dword = buffer[25] as u32;
-        dword |= (buffer[24] as u32) << 8;
-        dword |= (buffer[23] as u32) << 16;
-        dword |= (buffer[22] as u32) << 24;
+        dword = self.buffer[25] as u32;
+        dword |= (self.buffer[24] as u32) << 8;
+        dword |= (self.buffer[23] as u32) << 16;
+        dword |= (self.buffer[22] as u32) << 24;
         dword <<= 4;
-        dword |= ((buffer[26] & 0xC0) as u32) >> 6;
+        dword |= ((self.buffer[26] & 0xC0) as u32) >> 6;
+
         self.words[4] = GpsDataWord::from(dword);
 
-        dword = buffer[29] as u32;
-        dword |= (buffer[28] as u32) << 8;
-        dword |= (buffer[27] as u32) << 16;
-        dword |= (buffer[26] as u32) << 24;
+        dword = self.buffer[29] as u32;
+        dword |= (self.buffer[28] as u32) << 8;
+        dword |= (self.buffer[27] as u32) << 16;
+        dword |= (self.buffer[26] as u32) << 24;
         dword <<= 2;
+
         self.words[5] = GpsDataWord::from(dword);
 
-        dword = (buffer[30] as u32) << 24;
-        dword |= (buffer[31] as u32) << 16;
-        dword |= (buffer[32] as u32) << 8;
-        dword |= buffer[33] as u32;
+        dword = (self.buffer[30] as u32) << 24;
+        dword |= (self.buffer[31] as u32) << 16;
+        dword |= (self.buffer[32] as u32) << 8;
+        dword |= self.buffer[33] as u32;
         self.words[6] = GpsDataWord::from(dword);
 
-        dword = (buffer[37] as u32) << 4;
-        dword |= (buffer[36] as u32) << (8 - 2);
-        dword |= (buffer[35] as u32) << (16 - 2);
-        dword |= (buffer[34] as u32) << (24 - 2);
-        dword |= (buffer[33] as u32) << (32 - 2);
+        dword = (self.buffer[37] as u32) << 4;
+        dword |= (self.buffer[36] as u32) << (8 - 2);
+        dword |= (self.buffer[35] as u32) << (16 - 2);
+        dword |= (self.buffer[34] as u32) << (24 - 2);
+        dword |= (self.buffer[33] as u32) << (32 - 2);
+
         self.words[7] = GpsDataWord::from(dword);
 
         // interprets
@@ -285,12 +290,17 @@ mod decoder {
     use std::{fs::File, io::Read};
 
     use crate::{
-        gps::{GpsQzssDecoder, GPS_FRAME_BITS, GPS_FRAME_BYTES},
+        gps::{
+            GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3,
+            GpsQzssFrameId, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        },
         tests::insert_zeros,
     };
 
     #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
+
+    use log::info;
 
     #[test]
     fn preamble_bin_files() {
@@ -371,25 +381,160 @@ mod decoder {
         #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
-        assert_eq!(GPS_FRAME_BYTES, 38);
+        let mut ptr = 0;
+        let mut message = 0;
+        let mut buffer = [0; 8192]; // single read
 
-        let mut buffer = [0; 1024];
         let mut file = File::open("data/GPS/eph1.bin").unwrap();
-        file.read(&mut buffer).unwrap();
 
         let mut decoder = GpsQzssDecoder::default();
 
-        let (size, decoded) = decoder.decode(&buffer, 1024);
+        let model = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris1);
 
-        // TODO
-        assert_eq!(size, GPS_FRAME_BITS, "returned invalid size");
+        let mut size = file.read(&mut buffer).unwrap();
 
-        let decoded = decoded.unwrap_or_else(|| {
-            panic!("did not decoded GPS frame!");
-        });
+        assert!(size > 0, "file is empty");
 
-        assert_eq!(decoded.telemetry.message, 0x1234);
-        assert_eq!(decoded.telemetry.integrity, true);
-        assert_eq!(decoded.telemetry.reserved_bit, true);
+        // consume everything
+        loop {
+            if message == 128 {
+                // we're done
+                break;
+            }
+
+            // grab a frame
+            let (processed_size, decoded) = decoder.decode(&buffer[ptr..], size);
+
+            if message == 0 {
+                // first RX
+                assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+            } else {
+                // following RX
+                assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
+            }
+
+            let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+            message += 1;
+
+            let subf = decoded.subframe.as_eph1().unwrap_or_else(|| {
+                panic!("wrong frame type decoded");
+            });
+
+            if message == 1 {
+                // verify initial values
+                assert_eq!(decoded, model, "invalid initial value");
+            } else {
+                // test pattern
+                assert_eq!(
+                    decoded.telemetry.message,
+                    decoded.telemetry.message + message,
+                    "error at message {}",
+                    message
+                );
+
+                if message % 2 == 0 {
+                    assert_eq!(decoded.telemetry.integrity, false);
+                    assert_eq!(decoded.telemetry.reserved_bit, false);
+                    assert_eq!(decoded.how.alert, false);
+                    assert_eq!(decoded.how.anti_spoofing, false);
+                } else {
+                    assert_eq!(decoded.telemetry.integrity, true);
+                    assert_eq!(decoded.telemetry.reserved_bit, true);
+                    assert_eq!(decoded.how.alert, true);
+                    assert_eq!(decoded.how.anti_spoofing, true);
+                }
+            }
+
+            info!("EPH-1.bin MESSAGE {}", message);
+            ptr += processed_size / 8 - 1;
+            size -= processed_size / 8 - 1;
+
+            if size <= GPS_FRAME_BYTES - 2 {
+                assert_eq!(message, 128, "did not parse enough messages");
+            }
+        }
+        assert_eq!(message, 128, "did not parse enough messages");
     }
+
+    // #[test]
+    // fn eph2_bin() {
+    //     let mut rd_ptr = 0;
+    //     let mut buffer = [0; 1024];
+
+    //     let mut fd = File::open("data/GPS/eph2.bin").unwrap();
+
+    //     let mut size = fd.read(&mut buffer).unwrap();
+
+    //     let mut decoder = GpsQzssDecoder::default();
+
+    //     // grab first frame
+    //     let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+    //     assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+    //     let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+    //     assert_eq!(decoded.telemetry.message, 0x3456);
+    //     assert_eq!(decoded.telemetry.integrity, true);
+    //     assert_eq!(decoded.telemetry.reserved_bit, true);
+
+    //     assert_eq!(decoded.how.tow, 15_360);
+    //     assert_eq!(decoded.how.alert, true);
+    //     assert_eq!(decoded.how.anti_spoofing, true);
+    // }
+
+    // #[test]
+    // fn eph3_bin() {
+    //     let mut rd_ptr = 0;
+    //     let mut buffer = [0; 1024];
+
+    //     let mut fd = File::open("data/GPS/eph3.bin").unwrap();
+
+    //     let mut size = fd.read(&mut buffer).unwrap();
+
+    //     let mut decoder = GpsQzssDecoder::default();
+
+    //     // grab first frame
+    //     let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+    //     assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+    //     let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+    //     assert_eq!(decoded.telemetry.message, 0x3456);
+    //     assert_eq!(decoded.telemetry.integrity, true);
+    //     assert_eq!(decoded.telemetry.reserved_bit, true);
+
+    //     assert_eq!(decoded.how.tow, 26_271);
+    //     assert_eq!(decoded.how.alert, true);
+    //     assert_eq!(decoded.how.anti_spoofing, true);
+    // }
+
+    // #[test]
+    // fn burst_bin() {
+    //     let mut rd_ptr = 0;
+    //     let mut buffer = [0; 1024];
+
+    //     let mut fd = File::open("data/GPS/burst.bin").unwrap();
+
+    //     let mut size = fd.read(&mut buffer).unwrap();
+
+    //     let mut decoder = GpsQzssDecoder::default();
+
+    //     // grab first frame
+    //     let (processed_size, decoded) = decoder.decode(&buffer[rd_ptr..], size);
+
+    //     assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+
+    //     let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+    //     assert_eq!(decoded.telemetry.message, 0x3456);
+    //     assert_eq!(decoded.telemetry.integrity, true);
+    //     assert_eq!(decoded.telemetry.reserved_bit, true);
+
+    //     assert_eq!(decoded.how.tow, 26_271);
+    //     assert_eq!(decoded.how.alert, true);
+    //     assert_eq!(decoded.how.anti_spoofing, true);
+    // }
 }

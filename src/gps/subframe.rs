@@ -23,6 +23,16 @@ impl Default for GpsQzssSubframe {
 }
 
 impl GpsQzssSubframe {
+    /// Generates a realistic frame model for testing purposes
+    #[cfg(test)]
+    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+        match frame_id {
+            GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
+            GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
+            GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
+        }
+    }
+
     /// Unwraps self as [GpsQzssFrame1] reference (if feasible)
     pub fn as_eph1(&self) -> Option<GpsQzssFrame1> {
         match self {

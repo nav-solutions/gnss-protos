@@ -67,6 +67,20 @@ pub struct GpsQzssFrame3 {
 }
 
 impl GpsQzssFrame3 {
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_cic_radians(1.0e-6)
+            .with_cis_radians(2.0e-6)
+            .with_crc_meters(122.0)
+            .with_i0_semi_circles(1e-3)
+            .with_iode(0x12)
+            .with_idot_semi_circles_s(1e-9)
+            .with_omega0_semi_circles(3e-1)
+            .with_omega_semi_circles(4e-1)
+            .with_omega_dot_semi_circles_s(1e-3)
+    }
+
     /// Copies and returns [GpsQzssFrame3] with updated IODE
     pub fn with_iode(mut self, iode: u8) -> Self {
         self.iode = iode;
