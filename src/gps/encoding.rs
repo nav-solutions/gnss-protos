@@ -1363,7 +1363,7 @@ mod encoding {
         }
     }
 
-    // #[test]
+    #[test]
     fn generate_eph2_bin() {
         let mut fd = File::create("data/GPS/eph2.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
@@ -1404,7 +1404,7 @@ mod encoding {
         }
     }
 
-    // #[test]
+    #[test]
     fn generate_eph3_bin() {
         let mut fd = File::create("data/GPS/eph3.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
@@ -1434,7 +1434,7 @@ mod encoding {
         }
     }
 
-    // #[test]
+    #[test]
     fn generate_burst_bin() {
         let mut fd = File::create("data/GPS/burst.bin").unwrap_or_else(|e| {
             panic!("Failed to create file: {}", e);
