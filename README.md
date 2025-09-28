@@ -24,6 +24,8 @@ Supported protocols
 ===================
 
 - GPS / QZSS protocol (on `gps` crate feature), note that this feature is activated by default.
+- Galileo protocol (on `galilieo` crate feature): under development, not avalable by default.
+- BeiDou protocol (on `bds` crate feature): under development, not available by default.
 
 GPS / QZSS
 ==========
