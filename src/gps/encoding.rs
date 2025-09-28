@@ -975,8 +975,8 @@ mod encoding {
                     .with_cuc_radians(9e-7)
                     .with_cus_radians(2e-6)
                     .with_eccentricity(0.001)
-                    .with_mean_motion_difference_semi_circles(4e-9)
-                    .with_mean_anomaly_semi_circles(9.768415465951e-001)
+                    .with_mean_motion_difference_semicircles(4e-9)
+                    .with_mean_anomaly_semicircles(9.768415465951e-001)
                     .with_toe_seconds(345_600)
                     .with_square_root_semi_major_axis(5.153602432251e+003)
                     .with_fit_interval_flag()
@@ -1109,7 +1109,7 @@ mod encoding {
             let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
             let mut subframe = GpsQzssFrame2::default()
                 .with_toe_seconds(*toe)
-                .with_mean_motion_difference_semi_circles(*dn)
+                .with_mean_motion_difference_semicircles(*dn)
                 .with_square_root_semi_major_axis(*sqrt_a)
                 .with_iode(*iode)
                 .with_aodo(*aodo)
@@ -1175,11 +1175,11 @@ mod encoding {
                     .with_cic_radians(1.2e-7)
                     .with_cis_radians(1.2e-7)
                     .with_crc_meters(250.0)
-                    .with_i0_semi_circles(0.95)
-                    .with_idot_semi_circles_s(2e-10)
-                    .with_omega0_semi_circles(6.0e-1)
-                    .with_omega_semi_circles(0.5e-1)
-                    .with_omega_dot_semi_circles_s(8e-9),
+                    .with_inclination_semicircles(0.95)
+                    .with_inclination_rate_semicircles_s(2e-10)
+                    .with_longitude_ascending_node_semicircles(6.0e-1)
+                    .with_omega_semicircles(0.5e-1)
+                    .with_omega_dot_semicircles_s(8e-9),
             ));
 
         let encoded = frame.encode_raw();
@@ -1275,9 +1275,9 @@ mod encoding {
                 .with_cic_radians(*cic)
                 .with_crc_meters(*crc)
                 .with_iode(*iode)
-                .with_omega_semi_circles(*omega)
-                .with_omega_dot_semi_circles_s(*omega_dot)
-                .with_i0_semi_circles(*i0)
+                .with_omega_semicircles(*omega)
+                .with_omega_dot_semicircles_s(*omega_dot)
+                .with_inclination_semicircles(*i0)
                 .with_cis_radians(*cis);
 
             if *alert {

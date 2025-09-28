@@ -22,6 +22,13 @@ pub(crate) const GPS_PAYLOAD_MASK: u32 = 0xffff_ffc0;
 /// Number of parity bits for each [GpsDataWord]
 pub(crate) const GPS_PARITY_SIZE: usize = 6;
 
+// /// L1 C/A code length
+// pub const GPS_L1_CA_CODE_LEN: usize = 1023;
+
+pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
+    rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
+}
+
 mod bytes;
 pub use bytes::GpsDataByte;
 
@@ -29,6 +36,7 @@ mod word;
 pub use word::GpsDataWord;
 
 // mod cdma;
+// pub use cdma::GpsQzssModulator;
 
 // mod almanach;
 // pub use almanach::GpsQzssAlmanach;

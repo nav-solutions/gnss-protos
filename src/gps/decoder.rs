@@ -84,7 +84,29 @@ impl GpsQzssDecoder {
         self.buffer[0..GPS_FRAME_BYTES]
             .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
 
-        if bit_index > 0 {}
+        if bit_index > 0 {
+            let (byte1_mask, byte2_mask) = match bit_index {
+                1 => (0x7f, 0xfe),
+                2 => (0x3f, 0xfc),
+                3 => (0x1f, 0xf8),
+                4 => (0x0f, 0xf0),
+                5 => (0x08, 0xf0),
+                6 => (0x0f, 0xf0),
+                7 => (0x0f, 0xf0),
+                _ => unreachable!("compiler issue"),
+            };
+
+            for i in 0..GPS_FRAME_BYTES {
+                let mut mask1 = byte1_mask;
+                let mut mask2 = byte2_mask;
+
+                self.buffer[i] &= mask1;
+                self.buffer[i + 1] &= mask2;
+
+                self.buffer[i] >>= bit_index;
+                self.buffer[i + 1] >>= bit_index;
+            }
+        }
     }
 
     /// Locates the preamble bit marker (sync byte) within a buffer
@@ -95,7 +117,7 @@ impl GpsQzssDecoder {
     ///
     /// ## Returns
     /// - offset in bits !
-    pub(crate) fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
+    fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
         for i in 0..size - GPS_FRAME_BYTES + 1 {
             if slice[i] == GPS_PREAMBLE_BYTE {
                 return Some(i * 8);
@@ -149,7 +171,14 @@ impl GpsQzssDecoder {
         let preamble_offset_bit = preamble_offset_bit.unwrap();
 
         #[cfg(feature = "log")]
-        trace!("(GPS/QZSS)  [preamble]: pos={}", preamble_offset_bit);
+        trace!(
+            "(GPS/QZSS)  [preamble]: pos={} [0x{:02X} 0x{:02X} 0x{:02X} 0x{:02X}]",
+            preamble_offset_bit,
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+            buffer[preamble_offset_bit / 8],
+        );
 
         self.resync_align(buffer, preamble_offset_bit);
 
@@ -297,17 +326,15 @@ mod decoder {
         tests::insert_zeros,
     };
 
-    #[cfg(all(feature = "std", feature = "log"))]
     use crate::tests::init_logger;
 
     use log::info;
 
     #[test]
-    fn preamble_bin_files() {
-        #[cfg(all(feature = "std", feature = "log"))]
+    fn preamble_search() {
         init_logger();
 
-        let mut buffer = [0; 1024];
+        let mut buffer = [0; 8192];
 
         for file in ["eph1.bin", "eph2.bin"] {
             let filename = format!("data/GPS/{}", file);
@@ -318,13 +345,13 @@ mod decoder {
 
             file.read(&mut buffer).unwrap();
 
-            assert_eq!(GpsQzssDecoder::find_preamble(&buffer, 1024), Some(0));
+            assert_eq!(GpsQzssDecoder::find_preamble(&buffer, 8192), Some(0));
 
             // test delay < 1 byte
             for i in 1..7 {
                 let delayed = insert_zeros(&buffer, i);
                 assert_eq!(
-                    GpsQzssDecoder::find_preamble(&delayed, 1024),
+                    GpsQzssDecoder::find_preamble(&delayed, 8192),
                     Some(i),
                     "failed for bit position {}",
                     i
@@ -335,7 +362,7 @@ mod decoder {
             let delayed = insert_zeros(&buffer, 8);
 
             assert_eq!(
-                GpsQzssDecoder::find_preamble(&delayed, 1024),
+                GpsQzssDecoder::find_preamble(&delayed, 8192),
                 Some(8),
                 "failed for bit position 8"
             );
@@ -345,7 +372,7 @@ mod decoder {
                 let delayed = insert_zeros(&buffer, i + 8);
 
                 assert_eq!(
-                    GpsQzssDecoder::find_preamble(&delayed, 1024),
+                    GpsQzssDecoder::find_preamble(&delayed, 8192),
                     Some(8 + i),
                     "failed for bit position {}",
                     8 + i
@@ -357,7 +384,7 @@ mod decoder {
                 let delayed = insert_zeros(&buffer, i * 8);
 
                 assert_eq!(
-                    GpsQzssDecoder::find_preamble(&delayed, 1024),
+                    GpsQzssDecoder::find_preamble(&delayed, 8192),
                     Some(i * 8),
                     "failed for bit position {}",
                     i * 8
@@ -366,7 +393,7 @@ mod decoder {
                 for j in 1..7 {
                     let delayed = insert_zeros(&buffer, i * 8 + j);
                     assert_eq!(
-                        GpsQzssDecoder::find_preamble(&delayed, 1024),
+                        GpsQzssDecoder::find_preamble(&delayed, 8192),
                         Some(i * 8 + j),
                         "failed for bit position {}",
                         i * 8 + j
@@ -378,7 +405,6 @@ mod decoder {
 
     #[test]
     fn eph1_bin() {
-        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
         let mut ptr = 0;
@@ -412,6 +438,7 @@ mod decoder {
                 assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
             } else {
                 // following RX
+                // TODO +8 expected here, not 16
                 assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
             }
 
@@ -459,8 +486,95 @@ mod decoder {
     }
 
     #[test]
+    fn eph1_bin_delayed() {
+        init_logger();
+
+        let mut buffer = [0; 8192];
+
+        // TODO add more cases
+        for zeros in 1..7 {
+            let mut ptr = 0;
+            let mut message = 0;
+            let mut buffer = [0; 8192]; // single read
+
+            let mut file = File::open("data/GPS/eph1.bin").unwrap();
+
+            let mut decoder = GpsQzssDecoder::default();
+
+            let model = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris1);
+
+            let mut size = file.read(&mut buffer).unwrap();
+            assert!(size > 0, "file is empty");
+
+            let delayed = insert_zeros(&buffer, zeros);
+
+            // consume everything
+            loop {
+                if message == 128 {
+                    // we're done
+                    break;
+                }
+
+                // grab a frame
+                let (processed_size, decoded) = decoder.decode(&delayed[ptr..], size);
+
+                message += 1;
+
+                if message == 1 {
+                    // first RX
+                    assert_eq!(processed_size, GPS_FRAME_BITS + zeros); // bits!
+                } else {
+                    // following RX
+                    // TODO +8 expected here, not 16
+                    assert_eq!(processed_size, GPS_FRAME_BITS + 16 + zeros); // bits!
+                }
+
+                let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+                let subf = decoded.subframe.as_eph1().unwrap_or_else(|| {
+                    panic!("wrong frame type decoded");
+                });
+
+                if message == 1 {
+                    // verify initial values
+                    assert_eq!(decoded, model, "invalid initial value");
+                } else {
+                    // test pattern
+                    assert_eq!(
+                        decoded.telemetry.message,
+                        model.telemetry.message + message - 1,
+                        "error at message {}",
+                        message
+                    );
+
+                    if message % 2 == 0 {
+                        assert_eq!(decoded.telemetry.integrity, false);
+                        assert_eq!(decoded.telemetry.reserved_bit, false);
+                        assert_eq!(decoded.how.alert, false);
+                        assert_eq!(decoded.how.anti_spoofing, false);
+                    } else {
+                        assert_eq!(decoded.telemetry.integrity, true);
+                        assert_eq!(decoded.telemetry.reserved_bit, true);
+                        assert_eq!(decoded.how.alert, true);
+                        assert_eq!(decoded.how.anti_spoofing, true);
+                    }
+                }
+
+                info!("EPH-1.bin MESSAGE {}", message + 1);
+
+                ptr += processed_size / 8 - 1;
+                size -= processed_size / 8 - 1;
+
+                if size <= GPS_FRAME_BYTES - 2 {
+                    assert_eq!(message, 128, "did not parse enough messages");
+                }
+            }
+            assert_eq!(message, 128, "did not parse enough messages");
+        }
+    }
+
+    #[test]
     fn eph2_bin() {
-        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
         let mut ptr = 0;
@@ -494,6 +608,7 @@ mod decoder {
                 assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
             } else {
                 // following RX
+                // TODO +8 expected here, not 16
                 assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
             }
 
@@ -542,7 +657,6 @@ mod decoder {
 
     #[test]
     fn eph3_bin() {
-        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
         let mut ptr = 0;
@@ -576,6 +690,7 @@ mod decoder {
                 assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
             } else {
                 // following RX
+                // TODO +8 expected here, not 16
                 assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
             }
 
@@ -624,7 +739,6 @@ mod decoder {
 
     #[test]
     fn burst_bin() {
-        #[cfg(all(feature = "std", feature = "log"))]
         init_logger();
 
         let mut ptr = 0;
@@ -658,6 +772,7 @@ mod decoder {
                 assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
             } else {
                 // following RX
+                // TODO +8 expected here, not 16
                 assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
             }
 
