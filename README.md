@@ -112,6 +112,16 @@ use gnss_protos::GpsQzssDecoder;
 // TODO
 ```
 
+Galileo
+=======
+
+Support of the Galileo protocol is under development.
+
+BDS
+===
+
+Support of the BeiDou protocol is under development.
+
 License
 =======
 

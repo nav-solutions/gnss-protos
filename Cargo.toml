@@ -21,8 +21,21 @@ default = ["gps"]
 # STD support. Currently only used in test mode.
 std = []
 
-# Unlock GPS (+QZSS) protocol
+# Unlock GPS / QZSS protocol
 gps = []
+
+# Unlock Galileo protocol (not available by default)
+galileo = []
+
+# Unlock BDS protocol (not available by default)
+bds = []
+
+# Unlock all protocols at once
+all = [
+    "gps",
+    "bds",
+    "galileo",
+]
 
 [package.metadata.docs.rs]
 all-features = true
