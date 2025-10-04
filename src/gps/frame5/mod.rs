@@ -222,7 +222,7 @@ mod frame5 {
             assert_eq!(
                 page.page_number(),
                 id,
-                "returned invalid page-id for {}",
+                "returned invalid page-id for {:?}",
                 page
             );
             assert_eq!(page.next_page(), next_id, "invalid frame rotation");

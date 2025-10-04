@@ -6,22 +6,22 @@ use crate::gps::{GpsError, GpsQzssFrame, GpsQzssFrameId, GPS_WORDS_PER_FRAME};
 /// ```
 /// use gnss_protos::{GpsQzssFrameRotation, GpsQzssFrameId};
 ///
-/// let mut rot = GpsQzssFrameRotation::default();
+/// let mut finite_helper = GpsQzssFrameRotation::default().into_iter();
 ///
-/// assert_eq!(rot.next(), GpsQzssFrameId::Ephemeris2); // first is EPH-1
-/// assert_eq!(rot.next(), GpsQzssFrameId::Ephemeris3);
-/// // assert_eq!(rot.next(), GpsQzssFrameId::Almanach4);
-/// assert_eq!(rot.next(), GpsQzssFrameId::Almanach5);
-/// assert_eq!(rot.next(), None); // end of sequence
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris3));
+/// // assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Almanach4));
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Almanach5));
+/// assert_eq!(finite_helper.next(), None); // end of sequence
 ///
-/// let mut rot = GpsQzssFrameRotation::default();
+/// let mut periodic_helper = GpsQzssFrameRotation::default().into_iter();
 ///
-/// assert_eq!(rot.next_back(), GpsQzssFrameId::Ephemeris2); // first is EPH-1
-/// assert_eq!(rot.next_back(), GpsQzssFrameId::Ephemeris3);
-/// // assert_eq!(rot.next_back(), GpsQzssFrameId::Almanach4);
-/// assert_eq!(rot.next_back(), GpsQzssFrameId::Almanach5);
-/// assert_eq!(rot.next_back(), GpsQzssFrameId::Ephemeris1); // should repeat every 30s
-/// assert_eq!(rot.next_back(), GpsQzssFrameId::Ephemeris2);
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris3));
+/// // assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach4));
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5));
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris1)); // should repeat every 30s
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2));
 /// ```
 #[derive(Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrameRotation {
@@ -61,15 +61,16 @@ impl DoubleEndedIterator for GpsQzssFrameRotation {
 
 #[cfg(test)]
 mod test {
-    use super::GpsQzssFrameRotation;
+    use crate::gps::{GpsQzssFrameId, GpsQzssFrameRotation};
 
     #[test]
     fn message_rotation() {
-        let mut rot = GpsQzssFrameRotation::default().iter();
-        assert_eq!(rot.next(), GpsQzssFrameId::Ephemeris2);
-        assert_eq!(rot.next(), GpsQzssFrameId::Ephemeris3);
-        assert_eq!(rot.next(), GpsQzssFrameId::Almanach4);
-        assert_eq!(rot.next(), GpsQzssFrameId::Almanach5);
+        let mut rot = GpsQzssFrameRotation::default().into_iter();
+
+        assert_eq!(rot.next(), Some(GpsQzssFrameId::Ephemeris2));
+        assert_eq!(rot.next(), Some(GpsQzssFrameId::Ephemeris3));
+        // assert_eq!(rot.next(), Some(GpsQzssFrameId::Almanach4));
+        assert_eq!(rot.next(), Some(GpsQzssFrameId::Almanach5));
         assert_eq!(rot.next(), None);
     }
 }

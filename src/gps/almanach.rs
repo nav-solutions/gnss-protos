@@ -154,6 +154,7 @@ impl GpsQzssAlmanach {
             eccentricity: 0.01,
             toa_seconds: 16_600,
             di: 1e-6,
+            m0: 1e-5,
             omega_dot: 1e-9,
             sv_health: 1,
             sqrt_a: 5153.3,

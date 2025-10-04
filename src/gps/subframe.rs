@@ -34,7 +34,7 @@ impl GpsQzssSubframe {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
             GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
             GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
-            GpsQzssFrameId::Almanach5 => Self::Ephemeris3(GpsQzssFrame5::model()),
+            GpsQzssFrameId::Almanach5 => Self::Almanach5(GpsQzssFrame5::model()),
         }
     }
 

@@ -396,13 +396,13 @@ mod frame1 {
             (1, 2, 20, 10, 5, 4, 2, 3),
             (1, 2, 20, 10, 5, 4, 3, 5),
         ] {
-            let sat_health: [GpsQzssSatelliteHealth; 24] = Default::default();
+            let mut sat_health: [GpsQzssSatelliteHealth; 24] = Default::default();
 
             for i in 0..24 {
                 if i % 2 == 0 {
-                    sat_health[i] = health_even;
+                    sat_health[i].health = health_even;
                 } else {
-                    sat_health[i] = health_odd;
+                    sat_health[i].health = health_odd;
                 }
             }
 
@@ -416,7 +416,7 @@ mod frame1 {
                 spare,
             };
 
-            let words = frame1.to_words();
+            let words = frame.to_words();
 
             let decoded = GpsQzssAlmanachStatus::from_words(&words);
             assert_eq!(decoded, frame);

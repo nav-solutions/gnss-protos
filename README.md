@@ -24,8 +24,10 @@ Supported protocols
 ===================
 
 - GPS / QZSS protocol (on `gps` crate feature), note that this feature is activated by default.
-- Galileo protocol (on `galilieo` crate feature): under development, not avalable by default.
-- BeiDou protocol (on `bds` crate feature): under development, not available by default.
+- Galileo protocol (on `galilieo` crate feature): being developed, checkout the dedicated branch but it is unstable
+and in early stage. This protocol is not avalable by default.
+- BeiDou protocol (on `bds` crate feature): not available yet.
+This protocol is not avalable by default.
 - Unlock all protocols at once with the `all` compilation option. 
 
 GPS / QZSS
@@ -113,6 +115,27 @@ We used this approach to interface correctly to U-Blox receivers for example
 use gnss_protos::GpsQzssDecoder;
 
 // TODO
+```
+
+`GpsQzssFrameRotation` facilitates the message rotation encoding:
+
+```
+use gnss_protos::{GpsQzssFrameId, GpsQzssFrameRotation};
+
+let mut finite_helper = GpsQzssFrameRotation::defaut();
+
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris3));
+/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Almanach5));
+/// assert_eq!(finite_helper.next(), None); // end of sequence
+
+let mut periodic_helper = GpsQzssFrameRotation::defaut();
+
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris3));
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5));
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris1)); // should repeat every 30s
+/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2));
 ```
 
 Galileo
