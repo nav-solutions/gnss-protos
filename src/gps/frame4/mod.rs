@@ -14,6 +14,7 @@ pub use raw::*;
 pub use health::*;
 
 /// [GpsQzssFrame4] interpretations.
+/// This is the only case i
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum GpsQzssFrame4 {
     /// Reserved [Page1] message

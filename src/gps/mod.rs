@@ -38,8 +38,8 @@ pub use word::GpsDataWord;
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
 
-// mod almanach;
-// pub use almanach::GpsQzssAlmanach;
+mod almanach;
+pub use almanach::GpsQzssAlmanach;
 
 mod decoder;
 pub use decoder::GpsQzssDecoder;
@@ -62,8 +62,11 @@ pub use frame3::GpsQzssFrame3;
 // mod frame4;
 // pub use frame4::GpsQzssFrame4;
 
-// mod frame5;
-// pub use frame5::GpsQzssFrame5;
+mod frame5;
+pub use frame5::{GpsQzssFrame5, GpsQzssAlmanachStatus};
+
+mod rotation;
+pub use rotation::GpsQzssFrameRotation;
 
 mod frame_id;
 pub use frame_id::GpsQzssFrameId;

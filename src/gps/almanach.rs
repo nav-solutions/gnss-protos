@@ -3,50 +3,191 @@ use crate::{
     twos_complement,
 };
 
-/// [GpsQzssAlmanach] frame found in some reconfigured Frame-4 pages (when reconfigured),
-/// or Frame-5 page 1 to 24.
-pub struct GpsQzssAlmanach {
-    /// Eccentricity (16 bit)
-    pub eccentricity: f32,
+const WORD3_DID_MASK    : u32 = 0x3000_0000;
+const WORD3_DID_SHIFT   : usize = 24;
+const WORD3_SVID_MASK   : u32 = 0x0fc0_0000;
+const WORD3_SVID_SHIFT  : usize = 22;
+const WORD3_ECC_MASK    : u32 = 0x003f_ffc0;
+const WORD3_ECC_SHIFT   : usize = 6;
 
-    /// Time of issue of Almanach (in seconds)
-    pub toa_seconds: u8,
+const WORD4_TOA_MASK    : u32 = 0x3fc0_0000;
+const WORD4_TOA_SHIFT   : usize = 22;
+const WORD4_DI_MASK     : u32 = 0x003f_ffc0;
+const WORD4_DI_SHIFT    : usize = 6;
+
+const WORD5_OMEGADOT_MASK  : u32 = 0x3fff_c000;
+const WORD5_OMEGADOT_SHIFT : usize = 14;
+const WORD5_HEALTH_MASK : u32 = 0x0000_3fc0;
+const WORD5_HEALTH_SHIFT: usize = 6;
+
+const WORD6_SQRT_MASK   : u32 = 0x3fff_ffc0;
+const WORD6_SQRT_SHIFT  : usize = 6;
+
+const WORD7_OMEGA0_MASK : u32 = 0x3fff_ffc0;
+const WORD7_OMEGA0_SHIFT: usize = 6;
+
+const WORD8_OMEGA_MASK  : u32 = 0x3fff_ffc0;
+const WORD8_OMEGA_SHIFT : usize = 6;
+
+const WORD9_M0_MASK     : u32 = 0x3fff_ffc0;
+const WORD9_M0_SHIFT    : usize = 6;
+
+const WORD10_AF0_MASK   : u32 = 0x0ffe_0000;
+const WORD10_AF0_SHIFT  : usize = 17;
+const WORD10_AF1_MASK   : u32 = 0x0001_ffc0;
+const WORD10_AF1_SHIFT  : usize = 6;
+
+/// [GpsQzssAlmanach] frames come from Frame-5 page 1 to 24
+/// and Frame-4 pages when reconfigured (not orginally intended).
+#[derive(Debug, Copy, Default, Clone)]
+pub struct GpsQzssAlmanach {
+    /// 6-bit SVID. "0" here means dummy satellite,
+    /// when "0" is set, the data-id should be interprated as SVID.
+    pub sv_id: u8,
+
+    /// 2-bit Data ID
+    pub data_id: u8,
+
+    /// Eccentricity
+    pub eccentricity: f64,
+
+    /// Time of issue of Almanach (in seconds).
+    /// The almanach reference time is nominally the multiple of 2^12
+    /// seconds truncated from 3.5 days after the first valid
+    /// transmission time for this almanach set.
+    pub toa_seconds: u16,
 
     /// Mean motion difference from computed value (in semi-circles)
-    pub di: f32,
+    pub di: f64,
 
     /// Omega_dot (in semi circles.s⁻¹)
-    pub omega_dot: f32,
+    pub omega_dot: f64,
 
     /// SV health (8-bit)
     pub sv_health: u8,
 
     /// Square root of semi-major axis, in square root of meters.
-    pub sqrt_a: f32,
+    pub sqrt_a: f64,
 
     /// Longitude of ascending node of orbit plane at weekly epoch (in semi circles)
-    pub omega0: f32,
+    pub omega0: f64,
 
     /// Omega (in semi circles)
-    pub omega: f32,
+    pub omega: f64,
     
     /// Mean anomaly at reference time (in semi-circles)
-    pub m0: f32,
+    pub m0: f64,
 
+    /// 22-bit af0 (in seconds).
+    /// The almanac time parameters consist of both af0 (constant term) and af1 (first order term)
+    pub af0: f64,
+    
     /// af1 (in seconds per second)
     pub af1: f64,
-
-    /// 22-bit af0 (in seconds)
-    pub af0: f64,
 }
 
 impl PartialEq for GpsQzssAlmanach {
     fn eq(&self, rhs: &Self) -> bool {
+        
+        if self.sv_id != rhs.sv_id {
+            return false;
+        }
+
+        if self.data_id != rhs.data_id {
+            return false;
+        }
+
+        if (self.eccentricity - rhs.eccentricity).abs() < 1E-3 {
+            return false;
+        }
+
+        if self.toa_seconds != rhs.toa_seconds {
+            return false;
+        }
+
+        if (self.di - rhs.di).abs() < 1E-9 {
+            return false;
+        }
+
+        if (self.omega_dot - rhs.omega_dot).abs() < 1E-11 {
+            return false;
+        }
+
+        if self.sv_health != rhs.sv_health {
+            return false;
+        }
+
+        if (self.sqrt_a - rhs.sqrt_a).abs() < 1E-6 {
+            return false;
+        }
+
+        if (self.omega0 - rhs.omega0).abs() < 1E-8 {
+            return false;
+        }
+
+        if (self.omega - rhs.omega).abs() < 1E-8 {
+            return false;
+        }
+
+        if (self.m0 - rhs.m0).abs() < 1E-11 {
+            return false;
+        }
+
+        if (self.af0 - rhs.af0).abs() < 1E-9 {
+            return false;
+        }
+
+        if (self.af1 - rhs.af1).abs() < 1E-12 {
+            return false;
+        }
+
         true
     }
 }
 
 impl GpsQzssAlmanach {
+    
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired 6-bit SV ID
+    pub fn with_sv_id(mut self, id: u8) -> Self {
+        self.sv_id = id & 0x03;
+        self
+    }
+
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired 2-bit data ID
+    pub fn with_data_id(mut self, id: u8) -> Self {
+        self.data_id = id & 0x03;
+        self
+    }
+
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired 6-bit SV health
+    pub fn with_sv_health(mut self, health: u8) -> Self {
+        self.sv_health = health & 0x3f;
+        self
+    }
+
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired clock offset (in seconds).
+    pub fn with_clock_offset_seconds_s(mut self, offset: f64) -> Self {
+        self.af0 = offset;
+        self
+    }
+
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired clock offset (in seconds per second).
+    pub fn with_clock_drift_seconds_s(mut self, drift_sec_s: f64) -> Self {
+        self.af1 = drift_sec_s;
+        self
+    }
+
+    /// Copies and returns updated [GpsQzssAlmanach] with
+    /// desired semi-major axis (in meters)
+    pub fn with_semi_major_axis_meters(mut self, semi_major_m: f64) -> Self {
+        self.sqrt_a = semi_major_m.sqrt();
+        self
+    }
 
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
@@ -72,113 +213,125 @@ impl GpsQzssAlmanach {
 
     /// Updates scaled content from [Word3]
     fn set_word3(&mut self, word: Word3) {
-        self.week = word.week;
-        self.ura = word.ura;
-        self.ca_or_p_l2 = word.ca_or_p_l2;
-        self.health = word.health;
-        self.iodc = (word.iodc_msb as u16) << 8;
+        self.sv_id = word.sv_id;
+        self.data_id = word.data_id;
+        self.eccentricity = word.eccentricity as f64 * 2.0_f64.powi(-21);
     }
 
     /// Encodes a [Word3] from [GpsQzssAlmanach]
     fn word3(&self) -> Word3 {
         Word3 {
-            week: self.week,
-            ura: self.ura,
-            health: self.health,
-            ca_or_p_l2: self.ca_or_p_l2,
-            iodc_msb: ((self.iodc & 0x300) >> 8) as u8,
+            sv_id: self.sv_id,
+            data_id: self.data_id,
+            eccentricity: (self.eccentricity * 2.0_f64.powi(21)).round() as i16,
         }
     }
 
     /// Updates scaled content from [Word4]
     fn set_word4(&mut self, word: Word4) {
-        self.l2_p_data_flag = word.l2_p_data_flag;
-        self.reserved_word4 = word.reserved;
+        self.toa_seconds = word.toa as u16 * 4096;
+        self.di = word.delta_i as f64 * 2.0_f64.powi(-19);
     }
 
     /// Encodes a [Word4] from [GpsQzssAlmanach]
     fn word4(&self) -> Word4 {
         Word4 {
-            reserved: self.reserved_word4,
-            l2_p_data_flag: self.l2_p_data_flag,
+            toa: (self.toa_seconds / 4096) as u8,
+            delta_i: (self.di * 2.0_f64.powi(19)).round() as i16,
         }
     }
 
     /// Updates scaled content from [Word5]
     fn set_word5(&mut self, word: Word5) {
-        self.reserved_word5 = word.reserved;
+        self.omega_dot = word.omega_dot as f64 * 2.0_f64.powi(-38);
+        self.sv_health = word.health;
     }
 
     /// Encodes a [Word5] from [GpsQzssAlmanach]
     fn word5(&self) -> Word5 {
         Word5 {
-            reserved: self.reserved_word5,
+            health: self.sv_health,
+            omega_dot: (self.omega_dot * 2.0_f64.powi(38)).round() as i16,
         }
     }
 
     /// Updates scaled content from [Word6]
     fn set_word6(&mut self, word: Word6) {
-        self.reserved_word6 = word.reserved;
+        self.sqrt_a = word.sqrt_a as f64 * 2.0_f64.powi(-11);
     }
 
     /// Encodes a [Word6] from [GpsQzssAlmanach]
     fn word6(&self) -> Word6 {
         Word6 {
-            reserved: self.reserved_word6,
+            sqrt_a: {
+                let value = (self.sqrt_a * 2.0_f64.powi(11)).round() as i32;
+                (value & 0xff_ffff) as i32
+            }
         }
     }
 
     /// Updates scaled content from [Word7]
     fn set_word7(&mut self, word: Word7) {
-        self.reserved_word7 = word.reserved;
-        self.tgd = (word.tgd as f64) / 2.0_f64.powi(31);
+        self.omega0 = word.omega0 as f64 * 2.0_f64.powi(-23);
     }
 
     /// Encodes a [Word7] from [GpsQzssAlmanach]
     fn word7(&self) -> Word7 {
         Word7 {
-            reserved: self.reserved_word7,
-            tgd: (self.tgd * 2.0_f64.powi(31)).round() as i8,
+            omega0: {
+                let value = (self.omega0 * 2.0_f64.powi(23)).round() as u32;
+                (value & 0xff_ffff) as i32
+            },
         }
     }
 
     /// Updates scaled content from [Word8]
     fn set_word8(&mut self, word: Word8) {
-        self.toc = (word.toc as u32) * 16;
-        self.iodc |= word.iodc_lsb as u16;
+        self.omega = word.omega as f64 * 2.0_f64.powi(-23);
     }
 
     /// Encodes a [Word8] from [GpsQzssAlmanach]
     fn word8(&self) -> Word8 {
         Word8 {
-            toc: (self.toc / 16) as u16,
-            iodc_lsb: (self.iodc & 0xff) as u8,
+            omega: {
+                let value = (self.omega * 2.0_f64.powi(23)).round() as u32;
+                (value & 0xff_ffff) as i32
+            }
         }
     }
 
     /// Updates scaled content from [Word9]
     fn set_word9(&mut self, word: Word9) {
-        self.af2 = (word.af2 as f64) * 2.0_f64.powi(-55);
-        self.af1 = (word.af1 as f64) * 2.0_f64.powi(-43);
+        self.m0 = word.m0 as f64 * 2.0_f64.powi(-23);
     }
 
     /// Encodes a [Word9] from [GpsQzssAlmanach]
     fn word9(&self) -> Word9 {
         Word9 {
-            af2: (self.af2 * 2.0_f64.powi(55)).round() as i8,
-            af1: (self.af1 * 2.0_f64.powi(43)).round() as i16,
+            m0: {
+                let value = (self.m0 * 2.0_f64.powi(23)).round() as u32;
+                (value & 0xff_ffff) as i32
+            },
         }
     }
 
     /// Updates scaled content from [Word10]
     fn set_word10(&mut self, word: Word10) {
-        self.af0 = (word.af0 as f64) * 2.0_f64.powi(-31);
+        self.af0 = word.af0 as f64 * 2.0_f64.powi(-20);
+        self.af1 = word.af1 as f64 * 2.0_f64.powi(-38);
     }
 
     /// Encodes a [Word10] from [GpsQzssAlmanach]
     fn word10(&self) -> Word10 {
         Word10 {
-            af0: (self.af0 * 2.0_f64.powi(31)).round() as i32,
+            af0: {
+                let value = (self.af0 * 2.0_f64.powi(20)).round() as u32;
+                (value & 0x7ff) as i16
+            },
+            af1: {
+                let value = (self.af0 * 2.0_f64.powi(38)).round() as u32;
+                (value & 0x7ff) as i16
+            },
         }
     }
 
@@ -198,238 +351,219 @@ impl GpsQzssAlmanach {
 }
 
 #[derive(Debug, Copy, Default, Clone, PartialEq)]
-pub(crate) struct Word3 {
-    /// 10-bit week counter
-    pub week: u16,
+struct Word3 {
+    /// 2-bit DATID
+    pub data_id: u8,
 
-    /// 2 bits C/A or P ON L2
-    pub ca_or_p_l2: u8,
+    /// 6-bit SVID
+    pub sv_id: u8,
 
-    /// 4-bit URA index
-    pub ura: u8,
-
-    /// 6-bit SV Health
-    pub health: u8,
-
-    /// 2-bit (MSB) IODC, you will have to associate this to Word # 8
-    pub iodc_msb: u8,
+    /// 16 bit eccentricity
+    pub eccentricity: i16,
 }
 
 impl Word3 {
     /// Interprets this [GpsDataWord] as [Word3].
     pub fn from_word(word: GpsDataWord) -> Self {
         let value = word.value();
-
-        let week = ((value & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
-        let ca_or_p_l2 = ((value & WORD3_CA_P_L2_MASK) >> WORD3_CA_P_L2_SHIFT) as u8;
-        let ura = ((value & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
-        let health = ((value & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
-        let iodc_msb = ((value & WORD3_IODC_MASK) >> WORD3_IODC_SHIFT) as u8;
-
+        let data_id = ((value & WORD3_DID_MASK) >> WORD3_DID_SHIFT) as u8;
+        let sv_id = ((value & WORD3_SVID_MASK) >> WORD3_SVID_SHIFT) as u8;
+        let eccentricity = ((value & WORD3_ECC_MASK) >> WORD3_ECC_SHIFT) as i16;
         Self {
-            week,
-            ca_or_p_l2,
-            ura,
-            health,
-            iodc_msb,
+            data_id,
+            sv_id,
+            eccentricity,
         }
     }
 
     /// Encodes this [Word3] as [GpsDataWord].
     pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0u32;
-
-        value |= ((self.week & 0x3ff) as u32) << WORD3_WEEK_SHIFT;
-        value |= ((self.ca_or_p_l2 & 0x3) as u32) << WORD3_CA_P_L2_SHIFT;
-        value |= ((self.ura & 0x07) as u32) << WORD3_URA_SHIFT;
-        value |= ((self.health & 0x3f) as u32) << WORD3_HEALTH_SHIFT;
-        value |= ((self.iodc_msb & 0x03) as u32) << WORD3_IODC_SHIFT;
-
+        value |= ((self.data_id & 0x03) as u32) << WORD3_DID_SHIFT;
+        value |= ((self.sv_id & 0x3f) as u32) << WORD3_SVID_SHIFT;
+        value |= (self.eccentricity as u32) << WORD3_ECC_SHIFT;
         value <<= 2;
-
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word4 {
-    pub l2_p_data_flag: bool,
-    pub reserved: u32,
+struct Word4 {
+    /// 8-bit TOA 
+    pub toa: u8,
+
+    /// 16-bit delta_i
+    pub delta_i: i16,
 }
 
 impl Word4 {
     /// Interprets this [GpsDataWord] as [Word4].
     pub fn from_word(word: GpsDataWord) -> Self {
         let value = word.value();
-        let l2_p_data_flag = (value & WORD4_L2P_DATA_MASK) > 0;
-        let reserved = (value & WORD4_RESERVED_MASK) >> WORD4_RESERVED_SHIFT;
-
+        let toa = ((value & WORD4_TOA_MASK) >> WORD4_TOA_SHIFT) as u8;
+        let delta_i = ((value & WORD4_DI_MASK) >> WORD4_DI_SHIFT) as i16;
         Self {
-            l2_p_data_flag,
-            reserved,
+            toa,
+            delta_i,
         }
     }
 
     /// Encodes this [Word4] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0u32;
-
-        if self.l2_p_data_flag {
-            value |= WORD4_L2P_DATA_MASK;
-        }
-
-        value |= (self.reserved & 0x7fffff) << WORD4_RESERVED_SHIFT;
+        value |= (self.toa as u32) << WORD4_TOA_SHIFT;
+        value |= ((self.delta_i as u32) & 0xffff) << WORD4_DI_SHIFT;
         value <<= 2;
-
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word5 {
-    /// 24-bit reserved
-    pub reserved: u32,
+struct Word5 {
+    /// 16-bit omgea dot
+    pub omega_dot: i16,
+
+    /// 8-bit health
+    pub health: u8,
 }
 
 impl Word5 {
     /// Interprets this [GpsDataWord] as [Word5].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let reserved = (word.value() & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
-        Self { reserved }
+        let value = word.value();
+        let omega_dot = ((value & WORD5_OMEGADOT_MASK) >> WORD5_OMEGADOT_SHIFT) as i16;
+        let health = ((value & WORD5_HEALTH_MASK) >> WORD5_HEALTH_SHIFT) as u8;
+        Self { omega_dot, health }
     }
 
     /// Encodes this [Word5] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = 0;
-        value |= (self.reserved & 0x0ffffff) << WORD5_RESERVED_SHIFT;
+        let mut value = 0u32;
+        value |= (self.omega_dot as u32) << WORD5_OMEGADOT_SHIFT;
+        value |= (self.health as u32) << WORD5_HEALTH_SHIFT;
         value <<= 2;
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct Word6 {
-    /// 24-bit reserved
-    pub reserved: u32,
+struct Word6 {
+    /// 24-bit sqrt(a)
+    pub sqrt_a: i32,
 }
 
 impl Word6 {
     /// Interprets this [GpsDataWord] as [Word6].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let reserved = (word.value() & WORD6_RESERVED_MASK) >> WORD6_RESERVED_SHIFT;
-        Self { reserved }
+        let sqrt_a = (word.value() & WORD6_SQRT_MASK) >> WORD6_SQRT_SHIFT;
+        let sqrt_a = twos_complement(sqrt_a, 0xffffff, 0x800000);
+        Self { sqrt_a }
     }
 
     /// Encodes this [Word6] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = 0;
-        value |= (self.reserved & 0x0ffffff) << WORD6_RESERVED_SHIFT;
+        let mut value = 0u32;
         value <<= 2;
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word7 {
-    /// 16-bit reserved
-    pub reserved: u16,
-
-    /// TGD
-    pub tgd: i8,
+struct Word7 {
+    /// 24-bit omega0
+    pub omega0: i32,
 }
 
 impl Word7 {
     /// Interprets this [GpsDataWord] as [Word7].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let value = word.value();
-        let reserved = ((value & WORD7_RESERVED_MASK) >> WORD7_RESERVED_SHIFT) as u16;
-        let tgd = ((value & WORD7_TGD_MASK) >> WORD7_TGD_SHIFT) as i8;
-        Self { reserved, tgd }
+        let omega0 = (word.value() & WORD7_OMEGA0_MASK) >> WORD7_OMEGA0_SHIFT;
+        let omega0 = twos_complement(omega0, 0xffffff, 0x800000);
+        Self { omega0 }
     }
 
     /// Encodes this [Word7] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = 0;
-        value |= ((self.reserved as u32) & 0x0ffff) << WORD7_RESERVED_SHIFT;
-        value |= ((self.tgd as u32) & 0xff) << WORD7_TGD_SHIFT;
+        let mut value = 0u32;
         value <<= 2;
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word8 {
-    /// 8-bit IODC LSB to associate with Word # 3
-    pub iodc_lsb: u8,
-
-    /// 16 bit ToC
-    pub toc: u16,
+struct Word8 {
+    /// 24-bit omega
+    pub omega: i32,
 }
 
 impl Word8 {
     /// Interprets this [GpsDataWord] as [Word8].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let value = word.value();
-        let iodc_lsb = ((value & WORD8_IODC_MASK) >> WORD8_IODC_SHIFT) as u8;
-        let toc = ((value & WORD8_TOC_MASK) >> WORD8_TOC_SHIFT) as u16;
-        Self { iodc_lsb, toc }
+        let omega = (word.value() & WORD8_OMEGA_MASK) >> WORD8_OMEGA_SHIFT;
+        let omega = twos_complement(omega, 0xffffff, 0x800000);
+        Self { omega }
     }
 
     /// Encodes this [Word8] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = 0;
-        value |= ((self.iodc_lsb as u32) & 0xff) << WORD8_IODC_SHIFT;
-        value |= ((self.toc as u32) & 0x0ffff) << WORD8_TOC_SHIFT;
+        let mut value = 0u32;
         value <<= 2;
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word9 {
-    /// 8 bit af2
-    pub af2: i8,
-
-    /// 16 bit af1
-    pub af1: i16,
+struct Word9 {
+    /// 24-bit M0
+    pub m0: i32,
 }
 
 impl Word9 {
     /// Interprets this [GpsDataWord] as [Word9].
     pub fn from_word(word: GpsDataWord) -> Self {
         let value = word.value();
-        let af2 = ((value & WORD9_AF2_MASK) >> WORD9_AF2_SHIFT) as i8;
-        let af1 = ((value & WORD9_AF1_MASK) >> WORD9_AF1_SHIFT) as i16;
-        Self { af2, af1 }
+        let m0 = (value & WORD9_M0_MASK) >> WORD9_M0_SHIFT;
+        let m0 = twos_complement(m0, 0xffffff, 0x800000);
+        Self { m0 }
     }
 
     /// Encodes this [Word9] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = 0;
-        value |= ((self.af2 as u32) & 0x0ff) << WORD9_AF2_SHIFT;
-        value |= ((self.af1 as u32) & 0x0ffff) << WORD9_AF1_SHIFT;
+        let mut value = 0u32;
         value <<= 2;
         GpsDataWord::from(value)
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub(crate) struct Word10 {
-    /// 22-bit af0
-    pub af0: i32,
+struct Word10 {
+    /// 11-bit AF0
+    pub af0: i16,
+
+    /// 11-bit AF1
+    pub af1: i16,
 }
 
 impl Word10 {
     /// Interprets this [GpsDataWord] as [Word10].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let af0 = (word.value() & WORD10_AF0_MASK) >> WORD10_AF0_SHIFT;
-        let af0 = twos_complement(af0, 0x3fffff, 0x200000);
-        Self { af0 }
+        let value = word.value();
+
+        let mut af0 = (value & 0x0000_00c0) >> 6;
+
+        let af1 = (value & 0x0007_ff00) >> 8;
+        af0 |= (value & 0x07f8_0000) >> 17;
+
+        let af0 = twos_complement(af0, 0x0000_07ff, 0x0000_0080) as i16;
+        let af1 = twos_complement(af1, 0x0000_07ff, 0x0000_0080) as i16;
+
+        Self { af0, af1, }
     }
 
     /// Encodes this [Word10] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
-        let mut value = ((self.af0 & 0x3fffff) as u32) << WORD10_AF0_SHIFT;
+        let mut value = ((self.af0 & 0x7ff) as u32) << WORD10_AF0_SHIFT;
+        value |= ((self.af1 & 0x7ff) as u32) << WORD10_AF1_SHIFT;
         value <<= 2;
         GpsDataWord::from(value)
     }
@@ -443,46 +577,19 @@ mod frame1 {
     fn dword3() {
         for dword3 in [
             Word3 {
-                week: 1,
-                ca_or_p_l2: 0,
-                ura: 0,
-                health: 0,
-                iodc_msb: 0,
+                data_id: 0,
+                sv_id: 0,
+                eccentricity: 0,
             },
             Word3 {
-                week: 0,
-                ca_or_p_l2: 1,
-                ura: 0,
-                health: 0,
-                iodc_msb: 0,
+                data_id: 1,
+                sv_id: 2,
+                eccentricity: 3,
             },
             Word3 {
-                week: 0,
-                ca_or_p_l2: 0,
-                ura: 1,
-                health: 0,
-                iodc_msb: 0,
-            },
-            Word3 {
-                week: 0,
-                ca_or_p_l2: 0,
-                ura: 0,
-                health: 1,
-                iodc_msb: 0,
-            },
-            Word3 {
-                week: 0,
-                ca_or_p_l2: 0,
-                ura: 0,
-                health: 0,
-                iodc_msb: 1,
-            },
-            Word3 {
-                week: 1,
-                ca_or_p_l2: 2,
-                ura: 5,
-                health: 1,
-                iodc_msb: 0,
+                data_id: 2,
+                sv_id: 28,
+                eccentricity: -3,
             },
         ] {
             let gps_word = dword3.to_word();
@@ -501,16 +608,16 @@ mod frame1 {
     fn dword4() {
         for dword4 in [
             Word4 {
-                l2_p_data_flag: true,
-                reserved: 0,
+                toa: 0,
+                delta_i: 0,
             },
             Word4 {
-                l2_p_data_flag: false,
-                reserved: 1,
+                toa: 10,
+                delta_i: 20,
             },
             Word4 {
-                l2_p_data_flag: true,
-                reserved: 123,
+                toa: 100,
+                delta_i: -20,
             },
         ] {
             let gps_word = dword4.to_word();
@@ -527,7 +634,16 @@ mod frame1 {
 
     #[test]
     fn dword5() {
-        for dword5 in [Word5 { reserved: 0 }, Word5 { reserved: 120 }] {
+        for dword5 in [
+            Word5 { 
+                omega_dot: 0,
+                health: 0,
+            }, 
+            Word5 { 
+                omega_dot: 10,
+                health: 10,
+            }, 
+        ] {
             let gps_word = dword5.to_word();
             let decoded = Word5::from_word(gps_word);
             assert_eq!(decoded, dword5);
@@ -537,7 +653,11 @@ mod frame1 {
 
     #[test]
     fn dword6() {
-        for dword6 in [Word6 { reserved: 0 }, Word6 { reserved: 120 }] {
+        for dword6 in [
+            Word6 { sqrt_a: 0 }, 
+            Word6 { sqrt_a: 10 },
+            Word6 { sqrt_a: -10 },
+        ] {
             let gps_word = dword6.to_word();
             let decoded = Word6::from_word(gps_word);
             assert_eq!(decoded, dword6);
@@ -549,36 +669,10 @@ mod frame1 {
     fn dword7() {
         for dword7 in [
             Word7 {
-                reserved: 0,
-                tgd: 1,
+                omega0: 10,
             },
             Word7 {
-                reserved: 120,
-                tgd: 0,
-            },
-            Word7 {
-                reserved: 120,
-                tgd: 23,
-            },
-            Word7 {
-                reserved: 120,
-                tgd: -1,
-            },
-            Word7 {
-                reserved: 127,
-                tgd: -10,
-            },
-            Word7 {
-                reserved: 127,
-                tgd: -100,
-            },
-            Word7 {
-                reserved: 127,
-                tgd: -128,
-            },
-            Word7 {
-                reserved: 127,
-                tgd: 127,
+                omega0: -10,
             },
         ] {
             let gps_word = dword7.to_word();
@@ -592,12 +686,13 @@ mod frame1 {
     fn dword8() {
         for dword8 in [
             Word8 {
-                iodc_lsb: 10,
-                toc: 30,
+                omega: 0,
             },
             Word8 {
-                iodc_lsb: 30,
-                toc: 10,
+                omega: 10,
+            },
+            Word8 {
+                omega: -10,
             },
         ] {
             let gps_word = dword8.to_word();
@@ -609,7 +704,11 @@ mod frame1 {
 
     #[test]
     fn dword9() {
-        for dword9 in [Word9 { af2: 10, af1: 9 }, Word9 { af2: 9, af1: 100 }] {
+        for dword9 in [
+            Word9 { m0: 0, },
+            Word9 { m0: 12, },
+            Word9 { m0: -10, },
+        ] {
             let gps_word = dword9.to_word();
             let decoded = Word9::from_word(gps_word);
             assert_eq!(decoded, dword9);
@@ -620,10 +719,9 @@ mod frame1 {
     #[test]
     fn dword10() {
         for dword10 in [
-            Word10 { af0: 0 },
-            Word10 { af0: 100 },
-            Word10 { af0: -1230 },
-            Word10 { af0: -3140 },
+            Word10 { af0: 0, af1: 0, },
+            Word10 { af0: 100, af1: 200, },
+            Word10 { af0: -1230, af1: -200, },
         ] {
             let gps_word = dword10.to_word();
             let decoded = Word10::from_word(gps_word);
@@ -635,100 +733,63 @@ mod frame1 {
     #[test]
     fn encoding() {
         for (
-            week,
-            ca_or_p_l2,
-            ura,
-            health,
-            iodc,
-            toc,
-            tgd,
+            sv_id,
+            data_id,
+            eccentricity,
+            toa_seconds,
+            di,
+            omega_dot,
+            omega,
+            sv_health,
+            m0,
             af0,
             af1,
-            af2,
-            l2_p_data_flag,
-            reserved_word4,
-            reserved_word5,
-            reserved_word6,
-            reserved_word7,
+            sqrt_a,
+            omega0,
         ) in [
             (
-                350, 1, 2, 3, 10, 50_000, 6.0E-9, 7.0E-9, 8.0E-13, 9.0E-15, true, 10, 11, 12, 13,
+                1, 2, 0.01, 10, 0.1E-6, 0.1E-6, 1E-9, 0x0, 0.03, 1e-3, 1e-9, 5151.0, 1E-4,
             ),
             (
-                900, 1, 2, 3, 10, 24_992, -1.0E-9, -7.0E-9, 8.0E-13, 9.0E-15, true, 10, 11, 12, 13,
+                2, 4, 0.02, 20, 0.2E-6, 0.2E-6, 2e-9, 0x1, 0.04, 2e-3, 1e-10, 5153.1, 1E-5,
+            ),
+            (
+                1, 2, 0.01, 10, 0.3E-6, 0.1E-6, 1E-9, 0xfe, 0.03, 1e-3, 1e-9, 5152.4, 2e-5,
+            ),
+            (
+                1, 2, 0.01, 10, 0.4E-6, 0.1E-6, 1E-9, 0xff, 0.03, 1e-3, 1e-9, 5153.6, 3e-5,
             ),
         ] {
-            let frame1 = GpsQzssFrame1 {
-                week,
-                ca_or_p_l2,
-                ura,
-                health,
-                iodc,
-                toc,
-                tgd: tgd,
-                af0: af0,
-                af1: af1,
-                af2: af2,
-                l2_p_data_flag,
-                reserved_word4,
-                reserved_word5,
-                reserved_word6,
-                reserved_word7,
+            let frame1 = GpsQzssAlmanach {
+                sv_id,
+                data_id,
+                eccentricity,
+                toa_seconds,
+                di,
+                omega_dot,
+                omega,
+                sv_health,
+                sqrt_a,
+                m0,
+                af0,
+                af1,
+                omega0,
             };
 
             let words = frame1.to_words();
 
-            let decoded = GpsQzssFrame1::from_words(&words);
+            let decoded = GpsQzssAlmanach::from_words(&words);
 
-            assert_eq!(decoded.ura, frame1.ura);
-            assert_eq!(decoded.week, frame1.week);
-            assert_eq!(decoded.toc, frame1.toc);
-            assert_eq!(decoded.ca_or_p_l2, frame1.ca_or_p_l2);
-            assert_eq!(decoded.l2_p_data_flag, frame1.l2_p_data_flag);
-            assert_eq!(decoded.reserved_word4, frame1.reserved_word4);
-            assert_eq!(decoded.reserved_word5, frame1.reserved_word5);
-            assert_eq!(decoded.reserved_word6, frame1.reserved_word6);
-            assert_eq!(decoded.reserved_word7, frame1.reserved_word7);
+            assert_eq!(decoded.sv_id, frame1.sv_id);
+            assert_eq!(decoded.data_id, frame1.data_id);
+            assert_eq!(decoded.toa_seconds, frame1.toa_seconds);
 
+            assert!((decoded.m0 - frame1.m0).abs() < 1E-7);
+            assert!((decoded.omega_dot - frame1.omega_dot).abs() < 1E-11);
+            assert!((decoded.omega - frame1.omega).abs() < 1E-6);
+            assert!((decoded.eccentricity - frame1.eccentricity).abs() < 1E-6);
             assert!((decoded.af0 - frame1.af0).abs() < 1E-10);
             assert!((decoded.af1 - frame1.af1).abs() < 1E-14);
-            assert!((decoded.af2 - frame1.af2).abs() < 1E-14);
-        }
-    }
-
-    #[test]
-    fn user_range_accuracy() {
-        for (value_m, encoded_ura) in [
-            (0.1, 0),
-            (1.0, 0),
-            (2.4, 0),
-            (2.5, 1),
-            (2.6, 1),
-            (3.4, 1),
-            (3.5, 2),
-            (95.0, 8),
-            (96.0, 8),
-            (96.1, 9),
-            (3071.0, 13),
-            (3072.0, 13),
-            (3072.1, 14),
-            (4000.1, 14),
-        ] {
-            let ura = GpsQzssFrame1::compute_ura(value_m);
-            assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
-
-            let mut frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
-
-            assert_eq!(frame1.ura, encoded_ura);
-
-            let mut expected = GpsQzssFrame1::default();
-            expected.ura = encoded_ura;
-
-            // assert_eq!(
-            //     frame1.with_nominal_user_range_accuracy_m(value_m).ura,
-            //     encoded_ura,
-            //     "failed for value={}m, encoded={}", value_m, encoded_ura,
-            // );
         }
     }
 }
