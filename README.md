@@ -124,18 +124,20 @@ use gnss_protos::{GpsQzssFrameId, GpsQzssFrameRotation};
 
 let mut finite_helper = GpsQzssFrameRotation::defaut();
 
-/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
-/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris3));
-/// assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Almanach5));
-/// assert_eq!(finite_helper.next(), None); // end of sequence
+assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Ephemeris3));
+// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5)); // Frame #4 not supported yet
+assert_eq!(finite_helper.next(), Some(GpsQzssFrameId::Almanach5));
+assert_eq!(finite_helper.next(), None); // end of sequence
 
 let mut periodic_helper = GpsQzssFrameRotation::defaut();
 
-/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
-/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris3));
-/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5));
-/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris1)); // should repeat every 30s
-/// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2));
+assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2)); // first is EPH-1
+assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris3));
+// assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5)); // Frame #4 not supported yet
+assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Almanach5));
+assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris1)); // should repeat every 30s
+assert_eq!(periodic_helper.next_back(), Some(GpsQzssFrameId::Ephemeris2));
 ```
 
 Galileo
