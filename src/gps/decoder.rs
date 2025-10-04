@@ -303,14 +303,23 @@ impl GpsQzssDecoder {
 
         self.words[7] = GpsDataWord::from(dword);
 
-        // interprets
-        let frame = GpsQzssFrame {
-            how,
-            telemetry,
-            subframe: GpsQzssSubframe::decode(how.frame_id, &self.words),
+        // subframe decoding may fail on invalid page 4 or 5 subpages.
+        let frame = match GpsQzssSubframe::decode(how.frame_id, &self.words) {
+            Ok(subframe) => Some(GpsQzssFrame {
+                telemetry,
+                how,
+                subframe,
+            }),
+            #[cfg(not(feature = "log"))]
+            Err(_) => None,
+            #[cfg(feature = "log")]
+            Err(e) => {
+                error!("frame #4 or #5 pagination issue: {}", e);
+                None
+            },
         };
 
-        (preamble_offset_bit + GPS_FRAME_BITS, Some(frame))
+        (preamble_offset_bit + GPS_FRAME_BITS, frame)
     }
 }
 

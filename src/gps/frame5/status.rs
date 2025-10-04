@@ -3,6 +3,20 @@ use crate::{
     twos_complement,
 };
 
+const WORD3_DID_MASK: u32 = 0x0000_0003;
+const WORD3_DID_SHIFT: usize = 0;
+const WORD3_SVID_MASK: u32 = 0x0000_00fc;
+const WORD3_SVID_SHIFT: usize = 2;
+const WORD3_TOA_MASK: u32 = 0x0000_ff00;
+const WORD3_TOA_SHIFT: usize = 8;
+const WORD3_WEEK_MASK: u32 = 0x00ff_0000;
+const WORD3_WEEK_SHIFT: usize = 16;
+
+const WORD10_SPARE_MASK: u32 = 0x0007_ffff;
+const WORD10_SPARE_SHIFT: usize = 0;
+const WORD10_RES_MASK: u32 = 0x0038_0000;
+const WORD10_RES_SHIFT: usize = 19;
+
 /// [GpsQzssSatelliteHealth] reported for a specific satellite.
 /// This information was upload by ground-stations to this emitter.
 /// It allows receivers to obtain a global status report, by tracking only
@@ -252,10 +266,10 @@ impl Word3 {
     pub fn from_word(word: GpsDataWord) -> Self {
         let value = word.value();
 
-        let data_id = ((value & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u16;
-        let sv_id = ((value & WORD3_URA_MASK) >> WORD3_URA_SHIFT) as u8;
-        let toa_seconds = ((value & WORD3_HEALTH_MASK) >> WORD3_HEALTH_SHIFT) as u8;
-        let week = ((value & WORD3_IODC_MASK) >> WORD3_IODC_SHIFT) as u8;
+        let data_id = ((value & WORD3_DID_MASK) >> WORD3_DID_SHIFT) as u8;
+        let sv_id = ((value & WORD3_SVID_MASK) >> WORD3_SVID_SHIFT) as u8;
+        let toa_seconds = ((value & WORD3_TOA_MASK) >> WORD3_TOA_SHIFT) as u8;
+        let week = ((value & WORD3_WEEK_MASK) >> WORD3_WEEK_SHIFT) as u8;
 
         Self {
             data_id,
@@ -268,10 +282,10 @@ impl Word3 {
     /// Encodes this [Word3] as [GpsDataWord].
     pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0u32;
-        value |= ((self.week & 0x3ff) as u32) << WORD3_WEEK_SHIFT;
-        value |= ((self.toa_seconds & 0x3) as u32) << WORD3_CA_P_L2_SHIFT;
-        value |= ((self.sv_id & 0x07) as u32) << WORD3_URA_SHIFT;
-        value |= ((self.data_id & 0x03) as u32) << WORD3_IODC_SHIFT;
+        value |= (self.week as u32) << WORD3_WEEK_SHIFT;
+        value |= ((self.toa_seconds & 0x3) as u32) << WORD3_TOA_SHIFT;
+        value |= ((self.sv_id & 0x07) as u32) << WORD3_SVID_SHIFT;
+        value |= ((self.data_id & 0x03) as u32) << WORD3_DID_SHIFT;
         value <<= 2;
         GpsDataWord::from(value)
     }
@@ -304,14 +318,17 @@ impl HealthWord {
 impl Word10 {
     /// Interprets this [GpsDataWord] as [Word10].
     pub fn from_word(word: GpsDataWord) -> Self {
-        let reserved = (word.value() & WORD5_RESERVED_MASK) >> WORD5_RESERVED_SHIFT;
-        Self { reserved }
+        let value = word.value();
+        let spare = (value & WORD10_SPARE_MASK) >> WORD10_SPARE_SHIFT;
+        let reserved = ((value & WORD10_RES_MASK) >> WORD10_RES_SHIFT) as u8;
+        Self { reserved, spare }
     }
 
     /// Encodes this [Word10] as [GpsDataWord]
     pub fn to_word(&self) -> GpsDataWord {
         let mut value = 0;
-        value |= (self.reserved & 0x0ffffff) << WORD5_RESERVED_SHIFT;
+        value |= (self.spare & 0x0007_ffff) << WORD10_SPARE_SHIFT;
+        value |= ((self.reserved & 0x7) as u32) << WORD10_RES_SHIFT;
         value <<= 2;
         GpsDataWord::from(value)
     }

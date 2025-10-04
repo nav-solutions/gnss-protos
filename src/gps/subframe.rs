@@ -1,5 +1,6 @@
 use crate::gps::{
-    GpsDataWord, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GPS_WORDS_PER_FRAME,
+    GpsDataWord, GpsError, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame5,
+    GpsQzssFrameId, GPS_WORDS_PER_FRAME,
 };
 
 /// GPS / QZSS Interpreted subframes
@@ -13,6 +14,9 @@ pub enum GpsQzssSubframe {
 
     /// GPS Ephemeris Frame #3
     Ephemeris3(GpsQzssFrame3),
+
+    /// GPS Almanach Frame #5
+    Almanach5(GpsQzssFrame5),
 }
 
 impl Default for GpsQzssSubframe {
@@ -30,6 +34,7 @@ impl GpsQzssSubframe {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
             GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
             GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
+            GpsQzssFrameId::Almanach5 => Self::Ephemeris3(GpsQzssFrame5::model()),
         }
     }
 
@@ -81,13 +86,35 @@ impl GpsQzssSubframe {
         }
     }
 
+    /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
+    pub fn as_alm5(&self) -> Option<GpsQzssFrame5> {
+        match self {
+            Self::Almanach5(frame) => Some(*frame),
+            _ => None,
+        }
+    }
+
+    /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
+    pub fn as_mut_alm5(&mut self) -> Option<&mut GpsQzssFrame5> {
+        match self {
+            Self::Almanach5(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
-    pub(crate) fn decode(frame_id: GpsQzssFrameId, words: &[GpsDataWord]) -> Self {
+    /// This method is infaillible for the ephemeris subframes.
+    /// It may fail if the paginated almanach subframes come with an invalid page number.
+    pub(crate) fn decode(
+        frame_id: GpsQzssFrameId,
+        words: &[GpsDataWord],
+    ) -> Result<Self, GpsError> {
         match frame_id {
-            GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::from_words(words)),
-            GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::from_words(words)),
-            GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::from_words(words)),
+            GpsQzssFrameId::Ephemeris1 => Ok(Self::Ephemeris1(GpsQzssFrame1::from_words(words))),
+            GpsQzssFrameId::Ephemeris2 => Ok(Self::Ephemeris2(GpsQzssFrame2::from_words(words))),
+            GpsQzssFrameId::Ephemeris3 => Ok(Self::Ephemeris3(GpsQzssFrame3::from_words(words))),
+            GpsQzssFrameId::Almanach5 => Ok(Self::Almanach5(GpsQzssFrame5::from_words(words)?)),
         }
     }
 
@@ -97,6 +124,7 @@ impl GpsQzssSubframe {
             Self::Ephemeris1(subframe) => subframe.to_words(),
             Self::Ephemeris2(subframe) => subframe.to_words(),
             Self::Ephemeris3(subframe) => subframe.to_words(),
+            Self::Almanach5(subframe) => subframe.to_words(),
         }
     }
 }

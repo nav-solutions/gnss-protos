@@ -13,6 +13,9 @@ impl GpsQzssFrame {
     /// the very first byte. When working with raw stream of bits,
     /// you will prefer working with the [GpsQzssDecoder].
     ///
+    /// For subframes 4 and 5, the pagination must be correct and supported
+    /// for this method to return.
+    ///
     /// ## Input
     /// - array of [GPS_WORDS_PER_FRAME] [GpsDataWord]s.
     /// - check_parity: true if parity verification is required.
@@ -74,11 +77,21 @@ impl GpsQzssFrame {
         //  }
         // }
 
-        Some(GpsQzssFrame {
-            subframe: GpsQzssSubframe::decode(how.frame_id, &words[2..]),
-            telemetry,
-            how,
-        })
+        // subframe decoding
+        match GpsQzssSubframe::decode(how.frame_id, &words[2..]) {
+            Ok(subframe) => Some(GpsQzssFrame {
+                telemetry,
+                how,
+                subframe,
+            }),
+            #[cfg(not(feature = "log"))]
+            Err(_) => None,
+            #[cfg(feature = "log")]
+            Err(e) => {
+                error!("frame 4 or 5 pagination issue: {}", e);
+                None
+            },
+        }
     }
 }
 

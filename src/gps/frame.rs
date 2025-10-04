@@ -44,6 +44,7 @@ impl GpsQzssFrame {
             GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
             GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
             GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
+            GpsQzssSubframe::Almanach5(_) => self.how.frame_id = GpsQzssFrameId::Almanach5,
         }
 
         self

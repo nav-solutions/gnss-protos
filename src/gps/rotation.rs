@@ -37,7 +37,7 @@ impl Iterator for GpsQzssFrameRotation {
     /// To generate the entire period, prefer the [DoubleEndedIterator]
     fn next(&mut self) -> Option<Self::Item> {
         let ret = match self.current {
-            GpsQzssFrameId::Alamach5 => None,
+            GpsQzssFrameId::Almanach5 => None,
             current => Some(current.next()),
         };
 

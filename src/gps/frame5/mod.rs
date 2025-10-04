@@ -1,4 +1,4 @@
-use crate::gps::{GpsDataWord, GpsError, GpsQzssAlmanach};
+use crate::gps::{GpsDataWord, GpsError, GpsQzssAlmanach, GPS_WORDS_PER_FRAME};
 
 mod status;
 pub use status::*;
@@ -91,6 +91,54 @@ impl Default for GpsQzssFrame5 {
 }
 
 impl GpsQzssFrame5 {
+    #[cfg(test)]
+    /// Creates a [GpsQzssFrame5] for testing purposes
+    pub fn model() -> Self {
+        Self::Page1(GpsQzssAlmanach::model())
+    }
+
+    /// Decodes a burst of 8 [GpsDataWord]s as [GpsQzssFrame5].
+    /// Page must be correctly supported.
+    pub fn from_words(words: &[GpsDataWord]) -> Result<Self, GpsError> {
+        // grab page number
+        let value = words[0].value();
+        let page_id = ((value & 0x00c0_0000) >> 22) as u8;
+
+        match page_id {
+            1 => Ok(Self::Page1(GpsQzssAlmanach::from_words(words))),
+            2 => Ok(Self::Page2(GpsQzssAlmanach::from_words(words))),
+            3 => Ok(Self::Page3(GpsQzssAlmanach::from_words(words))),
+            4 => Ok(Self::Page4(GpsQzssAlmanach::from_words(words))),
+            5 => Ok(Self::Page5(GpsQzssAlmanach::from_words(words))),
+            6 => Ok(Self::Page6(GpsQzssAlmanach::from_words(words))),
+            7 => Ok(Self::Page7(GpsQzssAlmanach::from_words(words))),
+            8 => Ok(Self::Page8(GpsQzssAlmanach::from_words(words))),
+            9 => Ok(Self::Page9(GpsQzssAlmanach::from_words(words))),
+            10 => Ok(Self::Page10(GpsQzssAlmanach::from_words(words))),
+            11 => Ok(Self::Page11(GpsQzssAlmanach::from_words(words))),
+            12 => Ok(Self::Page12(GpsQzssAlmanach::from_words(words))),
+            13 => Ok(Self::Page13(GpsQzssAlmanach::from_words(words))),
+            14 => Ok(Self::Page14(GpsQzssAlmanach::from_words(words))),
+            15 => Ok(Self::Page15(GpsQzssAlmanach::from_words(words))),
+            16 => Ok(Self::Page16(GpsQzssAlmanach::from_words(words))),
+            17 => Ok(Self::Page17(GpsQzssAlmanach::from_words(words))),
+            18 => Ok(Self::Page18(GpsQzssAlmanach::from_words(words))),
+            19 => Ok(Self::Page19(GpsQzssAlmanach::from_words(words))),
+            20 => Ok(Self::Page20(GpsQzssAlmanach::from_words(words))),
+            21 => Ok(Self::Page21(GpsQzssAlmanach::from_words(words))),
+            22 => Ok(Self::Page22(GpsQzssAlmanach::from_words(words))),
+            23 => Ok(Self::Page23(GpsQzssAlmanach::from_words(words))),
+            24 => Ok(Self::Page24(GpsQzssAlmanach::from_words(words))),
+            25 => Ok(Self::Page25(GpsQzssAlmanachStatus::from_words(words))),
+            _ => Err(GpsError::UnknownFrame5Page),
+        }
+    }
+
+    /// Encodes this [GpsQzssFrame5] as a burst of 8 [GpsDataWord]s
+    pub fn to_words(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME - 2] {
+        Default::default()
+    }
+
     /// Returns the page identification number of this [GpsQzssFrame5] interpretation
     pub fn page_number(&self) -> u8 {
         match self {

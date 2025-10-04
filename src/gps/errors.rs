@@ -23,4 +23,8 @@ pub enum GpsError {
     /// Invalid Word Parity
     #[error("invalid word parity")]
     Parity,
+
+    /// Invalid frame #5 page number
+    #[error("unknown frame 5 subpage")]
+    UnknownFrame5Page,
 }

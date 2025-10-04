@@ -353,6 +353,9 @@ impl GpsQzssFrame {
                 encoded[36] = (idot & 0xf) as u8;
                 encoded[36] <<= 4; // TODO
             },
+            GpsQzssFrameId::Almanach5 => {
+                // TODO
+            },
         }
 
         encoded

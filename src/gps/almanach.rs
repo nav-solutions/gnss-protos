@@ -145,6 +145,25 @@ impl PartialEq for GpsQzssAlmanach {
 }
 
 impl GpsQzssAlmanach {
+    /// Creates a [GpsQzssAlmanach] for testing purposes
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self {
+            sv_id: 1,
+            data_id: 0,
+            eccentricity: 0.01,
+            toa_seconds: 16_600,
+            di: 1e-6,
+            omega_dot: 1e-9,
+            sv_health: 1,
+            sqrt_a: 5153.3,
+            omega0: 1e-7,
+            omega: 2e-7,
+            af0: 1e-9,
+            af1: 1e-11,
+        }
+    }
+
     /// Copies and returns updated [GpsQzssAlmanach] with
     /// desired 6-bit SV ID
     pub fn with_sv_id(mut self, id: u8) -> Self {

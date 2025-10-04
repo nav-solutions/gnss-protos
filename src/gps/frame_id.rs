@@ -23,6 +23,7 @@ impl std::fmt::Display for GpsQzssFrameId {
             Self::Ephemeris1 => write!(f, "EPH-1"),
             Self::Ephemeris2 => write!(f, "EPH-2"),
             Self::Ephemeris3 => write!(f, "EPH-3"),
+            Self::Almanach5 => write!(f, "ALM-5"),
         }
     }
 }
@@ -34,6 +35,7 @@ impl GpsQzssFrameId {
             1 => Ok(Self::Ephemeris1),
             2 => Ok(Self::Ephemeris2),
             3 => Ok(Self::Ephemeris3),
+            5 => Ok(Self::Almanach5),
             _ => Err(GpsError::UnknownFrameType),
         }
     }
@@ -44,6 +46,7 @@ impl GpsQzssFrameId {
             Self::Ephemeris1 => 1,
             Self::Ephemeris2 => 2,
             Self::Ephemeris3 => 3,
+            Self::Almanach5 => 5,
         }
     }
 
