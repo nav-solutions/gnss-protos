@@ -277,6 +277,30 @@ impl Word3 {
     }
 }
 
+impl HealthWord {
+    /// Interprets this [GpsDataWord] as [HealthWord]
+    pub fn from_word(word: GpsDataWord) -> Self {
+        let value = word.value();
+
+        Self {
+            health1: (value & 0x0000_003f) as u8,
+            health2: ((value & 0x0000_0fc0) >> 6) as u8,
+            health3: ((value & 0x0003_f000) >> 12) as u8,
+            health4: ((value & 0x00fc_0000) >> 18) as u8,
+        }
+    }
+
+    /// Encodes this [HealthWord] to [GpsDataWord]
+    pub fn to_word(&self) -> GpsDataWord {
+        let mut value = (self.health1 as u32);
+        value |= (self.health2 as u32) << 6;
+        value |= (self.health3 as u32) << 12;
+        value |= (self.health4 as u32) << 18;
+        value <<= 2;
+        GpsDataWord::from(value)
+    }
+}
+
 impl Word10 {
     /// Interprets this [GpsDataWord] as [Word10].
     pub fn from_word(word: GpsDataWord) -> Self {
