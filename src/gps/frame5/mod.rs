@@ -1,24 +1,20 @@
-use crate::gps::{
-    GpsDataWord,
-    GpsError,
-    GpsQzssAlmanach,
-};
+use crate::gps::{GpsDataWord, GpsError, GpsQzssAlmanach};
 
 mod status;
 pub use status::*;
 
 /// [GpsQzssFrame5] message interpretation
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum GpsQzssFrame5 {
     /// [GpsQzssAlmanach] for satellite #1
     Page1(GpsQzssAlmanach),
-    
+
     /// [GpsQzssAlmanach] for satellite #2
     Page2(GpsQzssAlmanach),
-    
+
     /// [GpsQzssAlmanach] for satellite #3
     Page3(GpsQzssAlmanach),
-    
+
     /// [GpsQzssAlmanach] for satellite #4
     Page4(GpsQzssAlmanach),
 
@@ -85,6 +81,13 @@ pub enum GpsQzssFrame5 {
     /// [GpsQzssAlmanachStatus] gives satellite #1 (included) through #24 (included)
     /// health status and other general Almanach infos.
     Page25(GpsQzssAlmanachStatus),
+}
+
+impl Default for GpsQzssFrame5 {
+    /// Builds a default null [GpsQzssFrame5::Page1].
+    fn default() -> Self {
+        Self::Page1(Default::default())
+    }
 }
 
 impl GpsQzssFrame5 {
@@ -154,6 +157,7 @@ impl GpsQzssFrame5 {
 
 #[cfg(test)]
 mod frame5 {
+    use super::GpsQzssFrame5;
 
     #[test]
     fn pagination() {
@@ -167,7 +171,12 @@ mod frame5 {
             (GpsQzssFrame5::Page24(Default::default()), 24, 25),
             (GpsQzssFrame5::Page25(Default::default()), 25, 1),
         ] {
-            assert_eq!(page.page_number(), id, "returned invalid page-id for {}", page);
+            assert_eq!(
+                page.page_number(),
+                id,
+                "returned invalid page-id for {}",
+                page
+            );
             assert_eq!(page.next_page(), next_id, "invalid frame rotation");
         }
     }

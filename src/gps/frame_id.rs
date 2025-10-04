@@ -11,6 +11,9 @@ pub enum GpsQzssFrameId {
 
     /// GPS / QZSS Ephemeris subframe #3
     Ephemeris3,
+
+    /// GPS / QZSS Almanach subframe #5
+    Almanach5,
 }
 
 #[cfg(feature = "std")]
@@ -41,6 +44,17 @@ impl GpsQzssFrameId {
             Self::Ephemeris1 => 1,
             Self::Ephemeris2 => 2,
             Self::Ephemeris3 => 3,
+        }
+    }
+
+    /// Returns the message that should follow, according
+    /// to the [GpsQzssMessage] rotation definition.
+    pub fn next(&self) -> GpsQzssFrameId {
+        match self {
+            Self::Ephemeris1 => Self::Ephemeris2,
+            Self::Ephemeris2 => Self::Ephemeris3,
+            Self::Ephemeris3 => Self::Almanach5,
+            Self::Almanach5 => Self::Ephemeris1,
         }
     }
 }

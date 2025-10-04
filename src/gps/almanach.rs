@@ -3,39 +3,39 @@ use crate::{
     twos_complement,
 };
 
-const WORD3_DID_MASK    : u32 = 0x3000_0000;
-const WORD3_DID_SHIFT   : usize = 24;
-const WORD3_SVID_MASK   : u32 = 0x0fc0_0000;
-const WORD3_SVID_SHIFT  : usize = 22;
-const WORD3_ECC_MASK    : u32 = 0x003f_ffc0;
-const WORD3_ECC_SHIFT   : usize = 6;
+const WORD3_DID_MASK: u32 = 0x3000_0000;
+const WORD3_DID_SHIFT: usize = 24;
+const WORD3_SVID_MASK: u32 = 0x0fc0_0000;
+const WORD3_SVID_SHIFT: usize = 22;
+const WORD3_ECC_MASK: u32 = 0x003f_ffc0;
+const WORD3_ECC_SHIFT: usize = 6;
 
-const WORD4_TOA_MASK    : u32 = 0x3fc0_0000;
-const WORD4_TOA_SHIFT   : usize = 22;
-const WORD4_DI_MASK     : u32 = 0x003f_ffc0;
-const WORD4_DI_SHIFT    : usize = 6;
+const WORD4_TOA_MASK: u32 = 0x3fc0_0000;
+const WORD4_TOA_SHIFT: usize = 22;
+const WORD4_DI_MASK: u32 = 0x003f_ffc0;
+const WORD4_DI_SHIFT: usize = 6;
 
-const WORD5_OMEGADOT_MASK  : u32 = 0x3fff_c000;
-const WORD5_OMEGADOT_SHIFT : usize = 14;
-const WORD5_HEALTH_MASK : u32 = 0x0000_3fc0;
+const WORD5_OMEGADOT_MASK: u32 = 0x3fff_c000;
+const WORD5_OMEGADOT_SHIFT: usize = 14;
+const WORD5_HEALTH_MASK: u32 = 0x0000_3fc0;
 const WORD5_HEALTH_SHIFT: usize = 6;
 
-const WORD6_SQRT_MASK   : u32 = 0x3fff_ffc0;
-const WORD6_SQRT_SHIFT  : usize = 6;
+const WORD6_SQRT_MASK: u32 = 0x3fff_ffc0;
+const WORD6_SQRT_SHIFT: usize = 6;
 
-const WORD7_OMEGA0_MASK : u32 = 0x3fff_ffc0;
+const WORD7_OMEGA0_MASK: u32 = 0x3fff_ffc0;
 const WORD7_OMEGA0_SHIFT: usize = 6;
 
-const WORD8_OMEGA_MASK  : u32 = 0x3fff_ffc0;
-const WORD8_OMEGA_SHIFT : usize = 6;
+const WORD8_OMEGA_MASK: u32 = 0x3fff_ffc0;
+const WORD8_OMEGA_SHIFT: usize = 6;
 
-const WORD9_M0_MASK     : u32 = 0x3fff_ffc0;
-const WORD9_M0_SHIFT    : usize = 6;
+const WORD9_M0_MASK: u32 = 0x3fff_ffc0;
+const WORD9_M0_SHIFT: usize = 6;
 
-const WORD10_AF0_MASK   : u32 = 0x0ffe_0000;
-const WORD10_AF0_SHIFT  : usize = 17;
-const WORD10_AF1_MASK   : u32 = 0x0001_ffc0;
-const WORD10_AF1_SHIFT  : usize = 6;
+const WORD10_AF0_MASK: u32 = 0x0ffe_0000;
+const WORD10_AF0_SHIFT: usize = 17;
+const WORD10_AF1_MASK: u32 = 0x0001_ffc0;
+const WORD10_AF1_SHIFT: usize = 6;
 
 /// [GpsQzssAlmanach] frames come from Frame-5 page 1 to 24
 /// and Frame-4 pages when reconfigured (not orginally intended).
@@ -74,21 +74,20 @@ pub struct GpsQzssAlmanach {
 
     /// Omega (in semi circles)
     pub omega: f64,
-    
+
     /// Mean anomaly at reference time (in semi-circles)
     pub m0: f64,
 
     /// 22-bit af0 (in seconds).
     /// The almanac time parameters consist of both af0 (constant term) and af1 (first order term)
     pub af0: f64,
-    
+
     /// af1 (in seconds per second)
     pub af1: f64,
 }
 
 impl PartialEq for GpsQzssAlmanach {
     fn eq(&self, rhs: &Self) -> bool {
-        
         if self.sv_id != rhs.sv_id {
             return false;
         }
@@ -146,7 +145,6 @@ impl PartialEq for GpsQzssAlmanach {
 }
 
 impl GpsQzssAlmanach {
-    
     /// Copies and returns updated [GpsQzssAlmanach] with
     /// desired 6-bit SV ID
     pub fn with_sv_id(mut self, id: u8) -> Self {
@@ -266,7 +264,7 @@ impl GpsQzssAlmanach {
             sqrt_a: {
                 let value = (self.sqrt_a * 2.0_f64.powi(11)).round() as i32;
                 (value & 0xff_ffff) as i32
-            }
+            },
         }
     }
 
@@ -296,7 +294,7 @@ impl GpsQzssAlmanach {
             omega: {
                 let value = (self.omega * 2.0_f64.powi(23)).round() as u32;
                 (value & 0xff_ffff) as i32
-            }
+            },
         }
     }
 
@@ -389,7 +387,7 @@ impl Word3 {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 struct Word4 {
-    /// 8-bit TOA 
+    /// 8-bit TOA
     pub toa: u8,
 
     /// 16-bit delta_i
@@ -402,10 +400,7 @@ impl Word4 {
         let value = word.value();
         let toa = ((value & WORD4_TOA_MASK) >> WORD4_TOA_SHIFT) as u8;
         let delta_i = ((value & WORD4_DI_MASK) >> WORD4_DI_SHIFT) as i16;
-        Self {
-            toa,
-            delta_i,
-        }
+        Self { toa, delta_i }
     }
 
     /// Encodes this [Word4] as [GpsDataWord]
@@ -557,7 +552,7 @@ impl Word10 {
         let af0 = twos_complement(af0, 0x0000_07ff, 0x0000_0080) as i16;
         let af1 = twos_complement(af1, 0x0000_07ff, 0x0000_0080) as i16;
 
-        Self { af0, af1, }
+        Self { af0, af1 }
     }
 
     /// Encodes this [Word10] as [GpsDataWord]
@@ -607,10 +602,7 @@ mod frame1 {
     #[test]
     fn dword4() {
         for dword4 in [
-            Word4 {
-                toa: 0,
-                delta_i: 0,
-            },
+            Word4 { toa: 0, delta_i: 0 },
             Word4 {
                 toa: 10,
                 delta_i: 20,
@@ -635,14 +627,14 @@ mod frame1 {
     #[test]
     fn dword5() {
         for dword5 in [
-            Word5 { 
+            Word5 {
                 omega_dot: 0,
                 health: 0,
-            }, 
-            Word5 { 
+            },
+            Word5 {
                 omega_dot: 10,
                 health: 10,
-            }, 
+            },
         ] {
             let gps_word = dword5.to_word();
             let decoded = Word5::from_word(gps_word);
@@ -654,7 +646,7 @@ mod frame1 {
     #[test]
     fn dword6() {
         for dword6 in [
-            Word6 { sqrt_a: 0 }, 
+            Word6 { sqrt_a: 0 },
             Word6 { sqrt_a: 10 },
             Word6 { sqrt_a: -10 },
         ] {
@@ -667,14 +659,7 @@ mod frame1 {
 
     #[test]
     fn dword7() {
-        for dword7 in [
-            Word7 {
-                omega0: 10,
-            },
-            Word7 {
-                omega0: -10,
-            },
-        ] {
+        for dword7 in [Word7 { omega0: 10 }, Word7 { omega0: -10 }] {
             let gps_word = dword7.to_word();
             let decoded = Word7::from_word(gps_word);
             assert_eq!(decoded, dword7);
@@ -685,15 +670,9 @@ mod frame1 {
     #[test]
     fn dword8() {
         for dword8 in [
-            Word8 {
-                omega: 0,
-            },
-            Word8 {
-                omega: 10,
-            },
-            Word8 {
-                omega: -10,
-            },
+            Word8 { omega: 0 },
+            Word8 { omega: 10 },
+            Word8 { omega: -10 },
         ] {
             let gps_word = dword8.to_word();
             let decoded = Word8::from_word(gps_word);
@@ -704,11 +683,7 @@ mod frame1 {
 
     #[test]
     fn dword9() {
-        for dword9 in [
-            Word9 { m0: 0, },
-            Word9 { m0: 12, },
-            Word9 { m0: -10, },
-        ] {
+        for dword9 in [Word9 { m0: 0 }, Word9 { m0: 12 }, Word9 { m0: -10 }] {
             let gps_word = dword9.to_word();
             let decoded = Word9::from_word(gps_word);
             assert_eq!(decoded, dword9);
@@ -719,9 +694,12 @@ mod frame1 {
     #[test]
     fn dword10() {
         for dword10 in [
-            Word10 { af0: 0, af1: 0, },
-            Word10 { af0: 100, af1: 200, },
-            Word10 { af0: -1230, af1: -200, },
+            Word10 { af0: 0, af1: 0 },
+            Word10 { af0: 100, af1: 200 },
+            Word10 {
+                af0: -1230,
+                af1: -200,
+            },
         ] {
             let gps_word = dword10.to_word();
             let decoded = Word10::from_word(gps_word);

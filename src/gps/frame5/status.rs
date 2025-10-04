@@ -17,6 +17,7 @@ pub struct GpsQzssSatelliteHealth {
 }
 
 /// [GpsQzssAlmanachStatus] is obtained page 25 of Frame-5.
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssAlmanachStatus {
     /// 2-bit DATA ID
     pub data_id: u8,
@@ -35,11 +36,11 @@ pub struct GpsQzssAlmanachStatus {
     /// this will report the status of 24 satellites at once.
     /// Which gives a high level status report for the entire constellation,
     /// by tracking only one satellite.
-    pub sat_health: [GpsQzssSatelliteHealth; 24]
-    
+    pub sat_health: [GpsQzssSatelliteHealth; 24],
+
     /// 3 reserved bits
     pub reserved: u8,
-    
+
     /// 19 spare bits
     pub spare: u32,
 }
@@ -64,13 +65,13 @@ struct Word3 {
 struct HealthWord {
     /// Sat #1
     pub health1: u8,
-    
+
     /// Sat #2
     pub health2: u8,
-    
+
     /// Sat #3
     pub health3: u8,
-    
+
     /// Sat #4
     pub health4: u8,
 }
@@ -79,13 +80,12 @@ struct HealthWord {
 struct Word10 {
     /// 3 reserved bits
     pub reserved: u8,
-    
+
     /// 19 spare bits
     pub spare: u32,
 }
 
 impl GpsQzssAlmanachStatus {
-
     /// Decodes [Self] from 8 [GpsDataWord]s.
     /// This method does not care for frames parity.
     pub(crate) fn from_words(words: &[GpsDataWord]) -> Self {
@@ -94,12 +94,12 @@ impl GpsQzssAlmanachStatus {
         for i in 0..GPS_WORDS_PER_FRAME - 2 {
             match i {
                 0 => s.set_word3(Word3::from_word(words[i])),
-                1 => s.set_word4(Word4::from_word(words[i])),
-                2 => s.set_word5(Word5::from_word(words[i])),
-                3 => s.set_word6(Word6::from_word(words[i])),
-                4 => s.set_word7(Word7::from_word(words[i])),
-                5 => s.set_word8(Word8::from_word(words[i])),
-                6 => s.set_word9(Word9::from_word(words[i])),
+                1 => s.set_word4(HealthWord::from_word(words[i])),
+                2 => s.set_word5(HealthWord::from_word(words[i])),
+                3 => s.set_word6(HealthWord::from_word(words[i])),
+                4 => s.set_word7(HealthWord::from_word(words[i])),
+                5 => s.set_word8(HealthWord::from_word(words[i])),
+                6 => s.set_word9(HealthWord::from_word(words[i])),
                 7 => s.set_word10(Word10::from_word(words[i])),
                 _ => unreachable!("expecting 8 data words"),
             }
@@ -117,13 +117,107 @@ impl GpsQzssAlmanachStatus {
         }
     }
 
-    fn word4(&self) ->
-
     fn set_word3(&mut self, word: Word3) {
         self.week = word.week;
         self.sv_id = word.sv_id;
         self.data_id = word.data_id;
         self.toa_seconds = word.toa_seconds;
+    }
+
+    fn word4(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[0].health,
+            health2: self.sat_health[1].health,
+            health3: self.sat_health[2].health,
+            health4: self.sat_health[3].health,
+        }
+    }
+
+    fn set_word4(&mut self, word: HealthWord) {
+        self.sat_health[0].health = word.health1;
+        self.sat_health[1].health = word.health2;
+        self.sat_health[2].health = word.health3;
+        self.sat_health[3].health = word.health4;
+    }
+
+    fn word5(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[4].health,
+            health2: self.sat_health[5].health,
+            health3: self.sat_health[6].health,
+            health4: self.sat_health[7].health,
+        }
+    }
+
+    fn set_word5(&mut self, word: HealthWord) {
+        self.sat_health[4].health = word.health1;
+        self.sat_health[5].health = word.health2;
+        self.sat_health[6].health = word.health3;
+        self.sat_health[7].health = word.health4;
+    }
+
+    fn word6(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[8].health,
+            health2: self.sat_health[9].health,
+            health3: self.sat_health[10].health,
+            health4: self.sat_health[11].health,
+        }
+    }
+
+    fn set_word6(&mut self, word: HealthWord) {
+        self.sat_health[8].health = word.health1;
+        self.sat_health[9].health = word.health2;
+        self.sat_health[10].health = word.health3;
+        self.sat_health[11].health = word.health4;
+    }
+
+    fn word7(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[12].health,
+            health2: self.sat_health[13].health,
+            health3: self.sat_health[14].health,
+            health4: self.sat_health[15].health,
+        }
+    }
+
+    fn set_word7(&mut self, word: HealthWord) {
+        self.sat_health[12].health = word.health1;
+        self.sat_health[13].health = word.health2;
+        self.sat_health[14].health = word.health3;
+        self.sat_health[15].health = word.health4;
+    }
+
+    fn word8(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[16].health,
+            health2: self.sat_health[17].health,
+            health3: self.sat_health[18].health,
+            health4: self.sat_health[19].health,
+        }
+    }
+
+    fn set_word8(&mut self, word: HealthWord) {
+        self.sat_health[16].health = word.health1;
+        self.sat_health[17].health = word.health2;
+        self.sat_health[18].health = word.health3;
+        self.sat_health[19].health = word.health4;
+    }
+
+    fn word9(&self) -> HealthWord {
+        HealthWord {
+            health1: self.sat_health[20].health,
+            health2: self.sat_health[21].health,
+            health3: self.sat_health[22].health,
+            health4: self.sat_health[23].health,
+        }
+    }
+
+    fn set_word9(&mut self, word: HealthWord) {
+        self.sat_health[20].health = word.health1;
+        self.sat_health[21].health = word.health2;
+        self.sat_health[22].health = word.health3;
+        self.sat_health[23].health = word.health4;
     }
 
     fn word10(&self) -> Word10 {
@@ -234,9 +328,18 @@ mod frame1 {
     #[test]
     fn dword10() {
         for dword10 in [
-            Word10 { reserved: 0, spare: 0, },
-            Word10 { reserved: 1, spare: 10, },
-            Word10 { reserved: 2, spare: 10, },
+            Word10 {
+                reserved: 0,
+                spare: 0,
+            },
+            Word10 {
+                reserved: 1,
+                spare: 10,
+            },
+            Word10 {
+                reserved: 2,
+                spare: 10,
+            },
         ] {
             let gps_word = dword10.to_word();
             let decoded = Word10::from_word(gps_word);
@@ -247,28 +350,12 @@ mod frame1 {
 
     #[test]
     fn encoding() {
-        for (
-            data_id,
-            sv_id,
-            toa_seconds,
-            week,
-            health_even,
-            health_odd,
-            reserved,
-            spare,
-        ) in [
-            (
-                0, 1, 10, 20, 4, 5, 1, 2,
-            ),
-            (
-                1, 2, 20, 10, 5, 4, 2, 3,
-            ),
-            (
-                1, 2, 20, 10, 5, 4, 3, 5,
-            ),
+        for (data_id, sv_id, toa_seconds, week, health_even, health_odd, reserved, spare) in [
+            (0, 1, 10, 20, 4, 5, 1, 2),
+            (1, 2, 20, 10, 5, 4, 2, 3),
+            (1, 2, 20, 10, 5, 4, 3, 5),
         ] {
-            let sat_health : [GpsQzssSatelliteHealth; 24]
-                = Default::default();
+            let sat_health: [GpsQzssSatelliteHealth; 24] = Default::default();
 
             for i in 0..24 {
                 if i % 2 == 0 {
@@ -290,7 +377,7 @@ mod frame1 {
 
             let words = frame1.to_words();
 
-            let decoded = GpsQzssFrame1::from_words(&words);
+            let decoded = GpsQzssAlmanachStatus::from_words(&words);
             assert_eq!(decoded, frame);
         }
     }
