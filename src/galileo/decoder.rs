@@ -59,6 +59,7 @@ impl GalileoDecoder {
     /// ```
     pub fn e1(mut self) -> Self {
         self.signal = Signal::E1;
+        self.state = Default::default();
         self
     }
 
@@ -70,6 +71,7 @@ impl GalileoDecoder {
     /// ```
     pub fn e5(mut self) -> Self {
         self.signal = Signal::E5;
+        self.state = Default::default();
         self
     }
 
