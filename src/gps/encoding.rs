@@ -378,7 +378,7 @@ impl GpsQzssFrame {
     pub fn encode_to_buffer(&self, buffer: &mut [u8]) -> std::io::Result<usize> {
         if buffer.len() < GPS_FRAME_BYTES {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::StorageFull,
+                std::io::ErrorKind::Other,
                 "would not fit",
             ));
         }
