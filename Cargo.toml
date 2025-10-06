@@ -24,6 +24,9 @@ std = []
 # Unlock GPS (+QZSS) protocol
 gps = []
 
+# Unlock Galileo protocol
+galileo = []
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]

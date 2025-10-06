@@ -20,6 +20,12 @@ mod gps;
 #[cfg(feature = "gps")]
 pub use gps::*;
 
+#[cfg(feature = "galileo")]
+mod galileo;
+
+#[cfg(feature = "gps")]
+pub use galileo::*;
+
 #[cfg(test)]
 mod tests;
 

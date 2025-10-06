@@ -40,7 +40,12 @@ jobs:
       name: Build (default)
       with:
         command: build
-        args: -r
+    
+    - uses: actions-rs/cargo@v1
+      name: Build (galileo)
+      with:
+        command: build
+        args: --features galileo
     
     - uses: actions-rs/cargo@v1
       name: Build (all features)
