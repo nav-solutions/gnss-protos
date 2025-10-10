@@ -14,6 +14,9 @@
 mod errors;
 pub use errors::Error;
 
+mod buffer;
+pub use buffer::*;
+
 #[cfg(feature = "gps")]
 mod gps;
 
