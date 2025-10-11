@@ -1,15 +1,58 @@
 use crate::{
+    buffer::{Buffer, BufferingError},
     gps::{
         GpsDataWord, GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
         GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
     },
-    buffer::Buffer,
+    Decoder,
 };
+
+#[cfg(feature = "std")]
+mod std;
 
 #[cfg(feature = "log")]
 use log::{debug, error, trace};
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+enum State {
+    /// [State::Preamble] first/initial state,
+    /// decoding the preamble bits
+    #[default]
+    Preamble,
+
+    /// Decoding [GpsQzssTelemetry] word
+    TLM,
+
+    /// Decoding [GpsQzssHow] word
+    HOW,
+    // /// Decoding [GpsQzssSubframe] words (x8)
+    // Subframe,
+}
+
+impl State {
+    /// Returns the size to read for this [State]
+    pub fn read_size(&self) -> usize {
+        match self {
+            Self::Preamble => 8,
+            Self::TLM => GPS_FRAME_BYTES,
+            Self::HOW => GPS_FRAME_BYTES,
+            // Self::Subframe => GPS_FRAME_BYTES * 8,
+        }
+    }
+
+    /// Returns the consumed number of bits for this [State]
+    pub fn consumed_bits(&self) -> usize {
+        match self {
+            Self::Preamble => 1,
+            Self::TLM => 30,
+            Self::HOW => 30,
+            // Self::Subframe => 30 * 8,
+        }
+    }
+}
+
 /// [GpsQzssDecoder] can decode GPS (or QZSS) messages.
+///
 /// By [Default], our [GpsQzssDecoder] does not verify parity,
 /// so does not invalid any message.
 ///
@@ -33,9 +76,16 @@ use log::{debug, error, trace};
 ///
 /// // TODO example
 /// ```
-pub struct GpsQzssDecoder<R: Read> {
-    /// [Read]er
-    reader: <R>,
+#[derive(Clone)]
+pub struct GpsQzssDecoder {
+    /// Current state
+    state: State,
+
+    /// Latest [GpsQzssTelemetry] decoded
+    telemetry: GpsQzssTelemetry,
+
+    /// Latest [GpsQzssHow] decoded
+    how: GpsQzssHow,
 
     /// Buffer for more than one entire message.
     /// All we truly need is more than one entire message.
@@ -51,264 +101,195 @@ pub struct GpsQzssDecoder<R: Read> {
     parity_verification: bool,
 }
 
-impl<R: Read> GpsQzssDecoder<R> {
-    /// Creates (allocates) a new [GpsQzssDecoder] to work from [Read]able interface.
-    /// 
-    /// ## Input
-    /// - read: [Read]able interface.
-    /// - parity_check: when deasserted, the [GpsQzssDecoder] will not verify the parity bits,
-    /// therefore, never invalidating potential frames.
-    pub fn new(read: R, parity_check: bool) -> Self {
+impl Default for GpsQzssDecoder {
+    /// Creates a [Default] [GpsQzssDecoder] without parity verification.
+    fn default() -> Self {
         Self {
-            reader: read,
-            buffer: Buffer<1024>::default(),
+            state: State::default(),
+            how: Default::default(),
+            telemetry: Default::default(),
             words: Default::default(),
-            parity_verification: parity_check,
+            parity_verification: false,
+            buffer: Buffer::<1024>::default(),
         }
     }
+}
 
-    /// Packs 38 bytes (10x 30-bit + 4bit padding) correcty aligned to [u8], ready to process.
-    ///
-    /// ## Input
-    /// - slice: &[u8], will panic if not [GPS_FRAME_BYTES] byte long!
-    /// - preamble_offset in bits!
-    fn resync_align(&mut self, slice: &[u8], preamble_offset_bit: usize) {
-        // byte index
-        let byte_index = preamble_offset_bit / 8;
+impl Decoder for GpsQzssDecoder {
+    type M = GpsQzssFrame;
 
-        // bit index within byte
-        let bit_index = preamble_offset_bit % 8;
+    fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
+        self.buffer.fill(src)
+    }
 
-        #[cfg(feature = "log")]
-        trace!("(GPS/QZSS)  [preamble]: off={}", bit_index);
+    fn decode(&mut self) -> Option<Self::M> {
+        loop {
+            let available = self.buffer.read_available();
+            let needed = self.state.read_size();
 
-        // copies to first position
-        self.buffer[0..GPS_FRAME_BYTES]
-            .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
+            let mut consumed_bits = 0;
 
-        if bit_index > 0 {
-            let (byte1_mask, byte2_mask) = match bit_index {
-                1 => (0x7f, 0xfe),
-                2 => (0x3f, 0xfc),
-                3 => (0x1f, 0xf8),
-                4 => (0x0f, 0xf0),
-                5 => (0x08, 0xf0),
-                6 => (0x0f, 0xf0),
-                7 => (0x0f, 0xf0),
-                _ => unreachable!("compiler issue"),
+            if available < needed {
+                // can't attempt decoding current state
+                return None;
+            }
+
+            // decode state
+            let next_state = match self.state {
+                State::Preamble => {
+                    // grabs one byte
+                    let byte = self.buffer.view().next()?;
+
+                    if byte == GPS_PREAMBLE_BYTE {
+                        #[cfg(feature = "log")]
+                        trace!("(GPS/QZSS)  [preamble]");
+                        State::TLM
+                    } else {
+                        State::Preamble
+                    }
+                },
+                State::TLM => {
+                    // grabs one word
+                    match self.buffer.view().gps_data_word() {
+                        Some(word) => match GpsQzssTelemetry::from_word(word) {
+                            Ok(telemetry) => {
+                                #[cfg(feature = "log")]
+                                debug!("(GPS/QZSS) [telemetry]: {}", telemetry);
+
+                                self.telemetry = telemetry;
+                                State::HOW
+                            },
+                            #[cfg(not(feature = "log"))]
+                            Err(_) => State::Preamble, // reset
+                            Err(e) => {
+                                error!("(GPS/QZSS) [telemetry]: {} ({:?})", e, word);
+                                State::Preamble // reset
+                            },
+                        },
+                        None => State::Preamble, // reset
+                    }
+                },
+                State::HOW => {
+                    // grabs one word
+                    match self.buffer.view().gps_data_word() {
+                        Some(word) => match GpsQzssHow::from_word(word) {
+                            Ok(how) => {
+                                #[cfg(feature = "log")]
+                                debug!("(GPS/QZSS)       [how]: {}", how);
+
+                                self.how = how;
+                                State::Preamble // TODO
+                            },
+                            #[cfg(not(feature = "log"))]
+                            Err(_) => State::Preamble, // reset
+                            Err(e) => {
+                                error!("(GPS/QZSS) [how]: {}", e);
+                                State::Preamble // reset
+                            },
+                        },
+                        None => State::Preamble, // reset
+                    }
+                },
+                // State::Subframe => {
+                //     // only interpretation at this point or parity failures
+                //     let frame = GpsQzssFrame {
+                //         how,
+                //         telemetry,
+                //         subframe: GpsQzssSubframe::decode(how.frame_id, &self.words),
+                //     };
+                // },
             };
 
-            for i in 0..GPS_FRAME_BYTES {
-                let mut mask1 = byte1_mask;
-                let mut mask2 = byte2_mask;
-
-                self.buffer[i] &= mask1;
-                self.buffer[i + 1] &= mask2;
-
-                self.buffer[i] >>= bit_index;
-                self.buffer[i + 1] >>= bit_index;
-            }
+            // consume
+            self.buffer.discard_bits_mut(self.state.consumed_bits());
+            self.state = next_state;
         }
     }
+}
 
-    /// Locates the preamble bit marker (sync byte) within a buffer
-    ///
-    /// ## Input
-    /// - slice: slice of bytes, must be [GPS_FRAME_BYTES] byte long
-    /// - size: total number of bytes
-    ///
-    /// ## Returns
-    /// - offset in bits !
-    fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
-        for i in 0..size - GPS_FRAME_BYTES + 1 {
-            if slice[i] == GPS_PREAMBLE_BYTE {
-                return Some(i * 8);
-            }
-
-            // intra byte test
-            let mut byte1_mask = 0x7F;
-            let mut byte2_mask = 0x80;
-
-            for j in 1..8 {
-                let mut value = slice[i + 1];
-                value >>= 8 - j;
-                value |= (slice[i] & byte1_mask) << j;
-
-                byte1_mask >>= 1;
-                byte2_mask |= 0x1 << (8 - j);
-
-                if value == GPS_PREAMBLE_BYTE {
-                    return Some(i * 8 + j);
-                }
-            }
-        }
-
-        None
+impl GpsQzssDecoder {
+    /// Creates a [GpsQzssDecoder] with parity verification (not supported yet).
+    pub fn with_parity_verification(&self) -> Self {
+        let mut s = self.clone();
+        s.parity_verification = true;
+        s
     }
 
-    /// Tries to decode a valid [GpsQzssFrame] using actually buffered content.
-    /// Use [std::io::Write] to feed data to the [GpsQzssDecoder].
-    ///
-    /// ## Ouput
-    /// - Total number of _bits_ that were consumed (not bytes!).
-    /// You are expected to discard all processed _bits_ not to decode the same frame twice.
-    /// - Optional [GpsQzssFrame] correctly decoded. First in order of appearance in the buffer.
-    pub fn decode(&mut self) -> std::io::Result<GpsQzssFrame> {
-        let mut dword;
+    // /// Packs 38 bytes (10x 30-bit + 4bit padding) correcty aligned to [u8], ready to process.
+    // ///
+    // /// ## Input
+    // /// - slice: &[u8], will panic if not [GPS_FRAME_BYTES] byte long!
+    // /// - preamble_offset in bits!
+    // fn resync_align(&mut self, slice: &[u8], preamble_offset_bit: usize) {
+    //     // byte index
+    //     let byte_index = preamble_offset_bit / 8;
 
-        // locate preamble
-        let preamble_offset_bit = Self::find_preamble(buffer, size);
+    //     // bit index within byte
+    //     let bit_index = preamble_offset_bit % 8;
 
-        if preamble_offset_bit.is_none() {
-            // marks all bits as consumed
-            return (size * 8 - GPS_FRAME_BITS, None);
-        }
+    //     // copies to first position
+    //     self.buffer[0..GPS_FRAME_BYTES]
+    //         .copy_from_slice(&slice[byte_index..byte_index + GPS_FRAME_BYTES]);
 
-        // align to sync byte
-        let preamble_offset_bit = preamble_offset_bit.unwrap();
+    //     if bit_index > 0 {
+    //         let (byte1_mask, byte2_mask) = match bit_index {
+    //             1 => (0x7f, 0xfe),
+    //             2 => (0x3f, 0xfc),
+    //             3 => (0x1f, 0xf8),
+    //             4 => (0x0f, 0xf0),
+    //             5 => (0x08, 0xf0),
+    //             6 => (0x0f, 0xf0),
+    //             7 => (0x0f, 0xf0),
+    //             _ => unreachable!("compiler issue"),
+    //         };
 
-        #[cfg(feature = "log")]
-        trace!(
-            "(GPS/QZSS)  [preamble]: pos={} [0x{:02X} 0x{:02X} 0x{:02X} 0x{:02X}]",
-            preamble_offset_bit,
-            buffer[preamble_offset_bit / 8],
-            buffer[preamble_offset_bit / 8],
-            buffer[preamble_offset_bit / 8],
-            buffer[preamble_offset_bit / 8],
-        );
+    //         for i in 0..GPS_FRAME_BYTES {
+    //             let mut mask1 = byte1_mask;
+    //             let mut mask2 = byte2_mask;
 
-        self.resync_align(buffer, preamble_offset_bit);
+    //             self.buffer[i] &= mask1;
+    //             self.buffer[i + 1] &= mask2;
 
-        dword = u32::from_be_bytes([
-            self.buffer[0],
-            self.buffer[1],
-            self.buffer[2],
-            self.buffer[3],
-        ]);
+    //             self.buffer[i] >>= bit_index;
+    //             self.buffer[i + 1] >>= bit_index;
+    //         }
+    //     }
+    // }
 
-        let gps_word = GpsDataWord::from(dword);
-        let parity = gps_word.parity(&Default::default(), false);
+    // /// Locates the preamble bit marker (sync byte) within a buffer
+    // ///
+    // /// ## Input
+    // /// - slice: slice of bytes, must be [GPS_FRAME_BYTES] byte long
+    // /// - size: total number of bytes
+    // ///
+    // /// ## Returns
+    // /// - offset in bits !
+    // fn find_preamble(slice: &[u8], size: usize) -> Option<usize> {
+    //     for i in 0..size - GPS_FRAME_BYTES + 1 {
+    //         if slice[i] == GPS_PREAMBLE_BYTE {
+    //             return Some(i * 8);
+    //         }
 
-        // panic!("LSB=0x{:02}X PAR=0x{:02X}", (gps_word.value() & 0x3f) as u8, parity);
+    //         // intra byte test
+    //         let mut byte1_mask = 0x7F;
+    //         let mut byte2_mask = 0x80;
 
-        let telemetry = match GpsQzssTelemetry::from_word(gps_word) {
-            Ok(telemetry) => {
-                #[cfg(feature = "log")]
-                debug!("(GPS/QZSS) [telemetry]: {}", telemetry);
-                telemetry
-            },
-            #[cfg(not(feature = "log"))]
-            Err(_) => {
-                return (preamble_offset_bit + GPS_FRAME_BITS, None);
-            },
-            #[cfg(feature = "log")]
-            Err(e) => {
-                error!("(GPS/QZSS) [telemetry]: {} ({:?})", e, gps_word);
-                return (preamble_offset_bit + GPS_FRAME_BITS, None);
-            },
-        };
+    //         for j in 1..8 {
+    //             let mut value = slice[i + 1];
+    //             value >>= 8 - j;
+    //             value |= (slice[i] & byte1_mask) << j;
 
-        dword = self.buffer[7] as u32;
-        dword |= (self.buffer[6] as u32) << 8;
-        dword |= (self.buffer[5] as u32) << 16;
-        dword |= (self.buffer[4] as u32) << 24;
-        dword >>= 2;
-        dword |= ((self.buffer[3] as u32) & 0x03) << 28;
+    //             byte1_mask >>= 1;
+    //             byte2_mask |= 0x1 << (8 - j);
 
-        let gps_word = GpsDataWord::from(dword);
-        let parity = gps_word.parity(&Default::default(), false);
+    //             if value == GPS_PREAMBLE_BYTE {
+    //                 return Some(i * 8 + j);
+    //             }
+    //         }
+    //     }
 
-        let how = match GpsQzssHow::from_word(gps_word) {
-            Ok(how) => {
-                #[cfg(feature = "log")]
-                debug!("(GPS/QZSS)       [how]: {}", how);
-                how
-            },
-            #[cfg(not(feature = "log"))]
-            Err(_) => {
-                return (preamble_offset_bit + GPS_FRAME_BITS, None);
-            },
-            #[cfg(feature = "log")]
-            Err(e) => {
-                error!("(GPS/QZSS) [how]: {}", e);
-                return (preamble_offset_bit + GPS_FRAME_BITS, None);
-            },
-        };
-
-        // collect 8 data words
-        dword = ((self.buffer[11] & 0xC0) as u32) >> 4;
-        dword |= ((self.buffer[10] & 0x0f) as u32) << 4;
-        dword |= (((self.buffer[10] & 0xf0) as u32) >> 4) << 8;
-        dword |= ((self.buffer[9] & 0x0f) as u32) << 12;
-        dword |= (((self.buffer[9] & 0xf0) as u32) >> 4) << 16;
-        dword |= ((self.buffer[8] & 0x0f) as u32) << 20;
-        dword |= (((self.buffer[8] & 0xf0) as u32) >> 4) << 24;
-        dword |= ((self.buffer[7] & 0x0f) as u32) << 28;
-
-        self.words[0] = GpsDataWord::from(dword);
-
-        dword = (self.buffer[14] as u32) << (8 - 6);
-        dword |= (self.buffer[13] as u32) << (16 - 6);
-        dword |= (self.buffer[12] as u32) << (24 - 6);
-        dword |= (self.buffer[11] as u32) << (32 - 6);
-
-        self.words[1] = GpsDataWord::from(dword);
-
-        dword = (self.buffer[15] as u32) << 24;
-        dword |= (self.buffer[16] as u32) << 16;
-        dword |= (self.buffer[17] as u32) << 8;
-        dword |= self.buffer[18] as u32;
-
-        self.words[2] = GpsDataWord::from(dword);
-
-        dword = (self.buffer[22] as u32) << 4;
-        dword |= (self.buffer[21] as u32) << (8 - 2);
-        dword |= (self.buffer[20] as u32) << (16 - 2);
-        dword |= (self.buffer[19] as u32) << (24 - 2);
-        dword |= (self.buffer[18] as u32) << (32 - 2);
-
-        self.words[3] = GpsDataWord::from(dword);
-
-        dword = self.buffer[25] as u32;
-        dword |= (self.buffer[24] as u32) << 8;
-        dword |= (self.buffer[23] as u32) << 16;
-        dword |= (self.buffer[22] as u32) << 24;
-        dword <<= 4;
-        dword |= ((self.buffer[26] & 0xC0) as u32) >> 6;
-
-        self.words[4] = GpsDataWord::from(dword);
-
-        dword = self.buffer[29] as u32;
-        dword |= (self.buffer[28] as u32) << 8;
-        dword |= (self.buffer[27] as u32) << 16;
-        dword |= (self.buffer[26] as u32) << 24;
-        dword <<= 2;
-
-        self.words[5] = GpsDataWord::from(dword);
-
-        dword = (self.buffer[30] as u32) << 24;
-        dword |= (self.buffer[31] as u32) << 16;
-        dword |= (self.buffer[32] as u32) << 8;
-        dword |= self.buffer[33] as u32;
-        self.words[6] = GpsDataWord::from(dword);
-
-        dword = (self.buffer[37] as u32) << 4;
-        dword |= (self.buffer[36] as u32) << (8 - 2);
-        dword |= (self.buffer[35] as u32) << (16 - 2);
-        dword |= (self.buffer[34] as u32) << (24 - 2);
-        dword |= (self.buffer[33] as u32) << (32 - 2);
-
-        self.words[7] = GpsDataWord::from(dword);
-
-        // interprets
-        let frame = GpsQzssFrame {
-            how,
-            telemetry,
-            subframe: GpsQzssSubframe::decode(how.frame_id, &self.words),
-        };
-
-        (preamble_offset_bit + GPS_FRAME_BITS, Some(frame))
-    }
+    //     None
+    // }
 }
 
 #[cfg(test)]

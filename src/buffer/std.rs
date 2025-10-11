@@ -5,6 +5,7 @@ impl Into<std::io::Error> for BufferingError {
     fn into(self) -> std::io::Error {
         match self {
             Self::WouldBlock => std::io::ErrorKind::WouldBlock.into(),
+            Self::StorageFull => std::io::ErrorKind::StorageFull.into(),
         }
     }
 }

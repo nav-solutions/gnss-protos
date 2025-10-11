@@ -4,47 +4,6 @@ use crate::gps::{
 };
 
 impl GpsQzssFrame {
-    /// Returns total number of bytes needed to encode this [GpsQzssFrame] to binary
-    /// aligned to [u8]
-    pub const fn encoding_size() -> usize {
-        GPS_FRAME_BYTES
-    }
-
-    /// Returns exact number of bits needed to encode this [GpsQzssFrame]
-    pub const fn encoding_bits() -> usize {
-        GPS_FRAME_BITS
-    }
-
-    /// Encodes this [GpsQzssFrame] as serie of 10 [GpsDataWord]s, aligned to 32 bits
-    /// and parity bits correctly encoded.  
-    /// When working with a real-time transmitter, you should prefer
-    /// [Self::encode_raw] which is not aligned.
-    pub fn encode(&self) -> [GpsDataWord; GPS_WORDS_PER_FRAME] {
-        let subwords = self.subframe.to_words();
-
-        let mut words = [
-            self.telemetry.to_word(),
-            self.how.to_word(),
-            subwords[0],
-            subwords[1],
-            subwords[2],
-            subwords[3],
-            subwords[4],
-            subwords[5],
-            subwords[6],
-            subwords[7],
-        ];
-
-        // calculate parity for each word
-        for (ith, word) in words.iter_mut().enumerate() {
-            // TODO
-            // let parity = word.parity(&Default::default(), false);
-            // *word |= 0x00u8;
-        }
-
-        words
-    }
-
     /// Encodes this [GpsQzssFrame] as a 300 bit burst (38 bytes).
     /// Because [GpsQzssFrame] is not aligned to [u8], the very last byte contains 4 MSB padding bits, set to zeros
     /// (unsigned). If you leave it to that, any streaming/transmitter looses a little bit of efficiency

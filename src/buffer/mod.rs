@@ -8,6 +8,9 @@ mod std;
 pub enum BufferingError {
     /// std-io WouldBlock equivalent
     WouldBlock,
+
+    /// Storage is full, target will not fit entirely (std-io equivalent).
+    StorageFull,
 }
 
 /// [Buffer] storage that helps capture and decode
@@ -25,7 +28,7 @@ pub enum BufferingError {
 /// But [Buffer] proposes methods like [Self::read_available_bits] which, when correctly implement,
 /// allows you to drop padding bits, making the decoding process fully efficient.
 #[derive(Clone, Copy, PartialEq)]
-pub struct Buffer<const M: usize> {
+pub(crate) struct Buffer<const M: usize> {
     /// Bytes storage
     inner: [u8; M],
 
@@ -55,7 +58,7 @@ impl<const M: usize> Default for Buffer<M> {
 }
 
 impl<const M: usize> Buffer<M> {
-    /// Returns the total storage capacity of this [Buffer]
+    /// Returns the total storage capacity of this [Decoder].
     pub const fn capacity(&self) -> usize {
         M
     }
@@ -69,7 +72,6 @@ impl<const M: usize> Buffer<M> {
 
     pub fn read_available_bits(&self) -> usize {
         let avail_bytes = self.read_available();
-
         avail_bytes
     }
 
@@ -78,13 +80,6 @@ impl<const M: usize> Buffer<M> {
         M - self.wr_ptr
     }
 
-    /// Returns a slice view of the internal bytes.
-    /// Prefer the [BufferView] which supports bitwise rotation without further allocation.
-    pub fn slice(&self) -> &[u8; M] {
-        &self.inner
-    }
-
-    /// Read bytes from this mutable [Buffer].
     pub fn read(&mut self, dest: &mut [u8]) -> Result<usize, BufferingError> {
         let dest_size = dest.len();
         let avail = self.read_available();
@@ -117,9 +112,8 @@ impl<const M: usize> Buffer<M> {
         ret
     }
 
-    /// Write (push) bytes into this mutable [Buffer], allowing
-    /// future decoding.
-    pub fn write(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
+    /// Provide new data to this [Buffer].
+    pub fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
         let src_size = src.len();
         let avail = self.write_available();
 
@@ -140,6 +134,12 @@ impl<const M: usize> Buffer<M> {
             self.wr_ptr += src_size;
             Ok(src_size)
         }
+    }
+
+    /// Returns a slice view of the internal bytes.
+    /// Prefer the [BufferView] which supports bitwise rotation without further allocation.
+    pub fn slice(&self) -> &[u8; M] {
+        &self.inner
     }
 
     /// Obtain a [BufferView] (buffer snapshot) at the current state.

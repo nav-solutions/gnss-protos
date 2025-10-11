@@ -1,6 +1,9 @@
 #[cfg(doc)]
 use crate::buffer::Buffer;
 
+#[cfg(feature = "gps")]
+use crate::gps::GpsDataWord;
+
 /// [BufferView] is obtained from a pre-allocated [Buffer]
 /// and supports bitwise and bytewise iteration methods,
 /// which is particularly helpful to decode unaligned protocols.
@@ -27,6 +30,16 @@ impl<'a, const M: usize> BufferView<'a, M> {
     /// Returns the total size (bytewise) of this snapshot view
     pub const fn len(&self) -> usize {
         M
+    }
+
+    /// Tries to gather a [GpsDataWord] from this [BufferView]
+    #[cfg(feature = "gps")]
+    pub(crate) fn gps_data_word(&mut self) -> Option<GpsDataWord> {
+        let (byte3, byte2, byte1, byte0) = (self.next()?, self.next()?, self.next()?, self.next()?);
+
+        let word = u32::from_be_bytes([byte0, byte1, byte2, byte3]); // TODO check
+
+        Some(GpsDataWord::from(word))
     }
 }
 

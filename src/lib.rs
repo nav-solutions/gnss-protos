@@ -12,18 +12,59 @@
  */
 
 mod errors;
-pub use errors::Error;
 
-pub(crate) mod buffer;
+mod buffer;
 
 #[cfg(feature = "gps")]
 mod gps;
 
+#[cfg(test)]
+mod tests;
+
+pub use crate::{buffer::BufferingError, errors::Error};
+
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-#[cfg(test)]
-mod tests;
+/// All GNSS messages implement the [Message] trait
+pub trait Message: Default {
+    /// Returns the total number of bytes required to encode this [Message].
+    /// Most [Message]s are not aligned to [u8], so the returned value here
+    /// is more than needed.
+    fn encoding_size(&self) -> usize;
+
+    /// Returns the total number of bits required to encode this [Message].
+    /// For aligned protocol, this value is strictly equals to [Self::encoding_size].
+    fn encoding_bits(&self) -> usize;
+
+    /// Encode this [Message] which must completely fit into the buffer,
+    /// otherwise returns [BufferingError::StorageFull].
+    /// Only a decided encoder (not yet provided) may support streamed/partial encoding.
+    fn encode(&self, dest: &mut [u8]) -> Result<usize, BufferingError>;
+
+    /// Generates a realistic frame model for testing purposes.
+    #[cfg(test)]
+    fn model(&self) -> Self;
+}
+
+/// All our GNSS decoders implement the [Decoder] trait.
+pub trait Decoder {
+    /// [Message] type returned by [Self::decode].
+    type M: Message;
+
+    /// Provide new data to this [Decoder].
+    fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
+
+    /// Tries to decode a valid [Self::Message] using actual buffered content.
+    ///
+    /// You need to provide more content in between this call, either using
+    /// - [Self::fill] which is always available
+    /// - [std::io::Write] when feasible
+    ///
+    /// ## Ouput
+    /// - [Self::Message] on decoding sucess.
+    fn decode(&mut self) -> Option<Self::M>;
+}
 
 /// Two's complement parsing & interpretation.
 /// ## Input
