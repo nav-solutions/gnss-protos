@@ -64,20 +64,40 @@ impl<const M: usize> Buffer<M> {
     }
 
     /// Returns total number of bytes that can be returned by a read operation.
-    /// Those are not necessarily significant (zero terminated), you should check [Self::read_available_bits]
-    /// to know the exact significant bits.
+    /// Not all bits will be significant (we use zero termination), you need to check [Self::read_available_bits].
     pub fn read_available(&self) -> usize {
-        self.wr_ptr - self.rd_ptr
+        let mut size = self.wr_ptr;
+
+        size -= self.read_available_bits() / 8; // bytes
+
+        if self.rd_offset > 0 {
+            size += 1;
+        }
+
+        size
     }
 
+    /// Returns total number of effective bits in this [Buffer].
     pub fn read_available_bits(&self) -> usize {
-        let avail_bytes = self.read_available();
-        avail_bytes
+        self.rd_ptr * 8 + self.rd_offset
     }
 
     /// Returns total number of bytes that can be written.
     pub fn write_available(&self) -> usize {
-        M - self.wr_ptr
+        let mut size = M - self.wr_ptr;
+
+        if self.wr_offset > 0 {
+            size -= 1;
+        }
+
+        size
+    }
+    
+    /// Returns total number of bits that can be written to this [Buffer].
+    pub fn write_available_bits(&self) -> usize {
+        let mut size = (M - self.wr_ptr) * 8;
+        size -= self.wr_offset;
+        size
     }
 
     pub fn read(&mut self, dest: &mut [u8]) -> Result<usize, BufferingError> {
@@ -112,9 +132,10 @@ impl<const M: usize> Buffer<M> {
         ret
     }
 
-    /// Provide new data to this [Buffer].
+    /// Fill this mutable [Buffer] with new data.
     pub fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
         let src_size = src.len();
+
         let avail = self.write_available();
 
         if src_size == 0 {
@@ -125,14 +146,18 @@ impl<const M: usize> Buffer<M> {
             return Err(BufferingError::WouldBlock);
         }
 
-        if src_size > avail {
-            self.inner[self.wr_ptr..].copy_from_slice(&src[..avail]);
-            self.wr_ptr = M;
-            Ok(avail)
+        if self.wr_offset == 0 {
+            if src_size > avail {
+                self.inner[self.wr_ptr..].copy_from_slice(&src[..avail]);
+                self.wr_ptr = M;
+                Ok(avail)
+            } else {
+                self.inner[self.wr_ptr..self.wr_ptr + src_size].copy_from_slice(&src);
+                self.wr_ptr += src_size;
+                Ok(src_size)
+            }
         } else {
-            self.inner[self.wr_ptr..self.wr_ptr + src_size].copy_from_slice(&src);
-            self.wr_ptr += src_size;
-            Ok(src_size)
+            panic!("not yet");
         }
     }
 
@@ -187,8 +212,21 @@ impl<const M: usize> Buffer<M> {
         // internal bytewise swap:
         // shift internal buffer, preserving remaining data while accepting new writes.
         self.inner.copy_within(self.rd_ptr + bytes..self.wr_ptr, 0);
-
+        
         self.wr_ptr -= bytes;
+
+        if bits > 0 {
+            let mask = 2u8.pow(bits as u32) - 1;
+
+            // shift & rotate all effective bytes
+            for i in 0..self.read_available() {
+                self.inner[i] <<= bits;
+                
+                if i < M -1 {
+                    self.inner[i] |= (self.inner[i +1] >> (8 - bits)) & mask;
+                }
+            }
+        }
 
         if bytes > bytes_avail {
             self.rd_ptr -= bytes;
@@ -196,22 +234,6 @@ impl<const M: usize> Buffer<M> {
             self.rd_ptr = 0;
         }
 
-        if bits > 0 {
-            let mask = 2u8.pow(bits as u32) - 1;
-            for i in 0..self.wr_ptr {
-                self.inner[i] <<= bits;
-                if i < self.wr_ptr - 1 {
-                    self.inner[i] |= (self.inner[i + 1] >> 8 - bits) & mask;
-                }
-            }
-
-            // consumed 1 more byte
-            self.wr_ptr -= 1;
-
-            if self.rd_ptr > 0 {
-                self.rd_ptr -= 1;
-            }
-        }
     }
 
     /// Shfits internal buffer to the right.
@@ -531,7 +553,7 @@ mod test {
     }
 
     #[test]
-    fn buffer_8_16_discard_bits() {
+    fn buffer_8_16_discard_8bits() {
         let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
         let mut dest = source.clone();
 
@@ -630,7 +652,7 @@ mod test {
     }
 
     #[test]
-    fn buffer_8_16_discard_bits2() {
+    fn buffer_8_16_discard_bits() {
         let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
         let mut dest = source.clone();
 
@@ -667,14 +689,23 @@ mod test {
         assert_eq!(buffer.read_available(), 16);
 
         // discard
-        buffer.discard_bits_mut(3);
-        assert_eq!(buffer.write_available(), 1);
+        buffer.discard_bits_mut(1);
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.write_available_bits(), 1);
         assert_eq!(buffer.read_available(), 15);
-        // TODO CHECK content
 
-        buffer.discard_bits_mut(3);
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0e, 0x10, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10]
+        );
+        
+        buffer.discard_bits_mut(2);
         assert_eq!(buffer.write_available(), 2);
         assert_eq!(buffer.read_available(), 14);
-        // TODO CHECK content
+        
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![0x02<<2, 0x04<<2, 0x06<<2, 0x08<<2, 0x0A<<2, 0x0C<<2, 0x0E<<2, 0x10<<2, 0x02<<2, 0x04<<2, 0x06<<2, 0x08<<2, 0x0A<<2, 0x0C<<2, 0x0E<<2, 0x10<<2],
+        );
     }
 }

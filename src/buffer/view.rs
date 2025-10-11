@@ -12,11 +12,11 @@ use crate::gps::GpsDataWord;
 /// but it is stepped bytes per bytes ([u8] size) at the moment.
 #[derive(Copy, Clone)]
 pub struct BufferView<'a, const M: usize> {
-    /// Snapshot view
-    inner: &'a [u8; M],
-
     /// Pointer
     ptr: usize,
+    
+    /// Snapshot view
+    inner: &'a [u8; M],
 }
 
 impl<'a, const M: usize> BufferView<'a, M> {
@@ -37,9 +37,9 @@ impl<'a, const M: usize> BufferView<'a, M> {
     pub(crate) fn gps_data_word(&mut self) -> Option<GpsDataWord> {
         let (byte3, byte2, byte1, byte0) = (self.next()?, self.next()?, self.next()?, self.next()?);
 
-        let word = u32::from_be_bytes([byte0, byte1, byte2, byte3]); // TODO check
+        let word = u32::from_be_bytes([byte3, byte2, byte1, byte0]); // TODO check
 
-        Some(GpsDataWord::from(word))
+        Some(GpsDataWord::from(word << 2))
     }
 }
 

@@ -49,6 +49,25 @@ pub trait Decoder {
     type M: Message;
 
     /// Provide new data to this [Decoder].
+    ///
+    /// Most of these protocols are not aligned to [u8], for example
+    /// a GPS burst is 300 bit long. You may insert padding bits (blanking)
+    /// in between frames but not inside frames. Otherwise, the binary content
+    /// would be corrupt and impossible to decode.
+    /// 
+    /// If you don't need 100% efficiency and can afford to loose one frame 
+    /// from time to time (say one per receiver capture), then you are fine and may
+    /// use padding whenever that suites you.
+    ///
+    /// Note that, even real-time navigation does not require 100% efficiency,
+    /// because information is regurlarly updated, but that is closely related to the
+    /// velocity of your receiver, and will not work well in the case of fast moving rovers.
+    ///
+    /// In between frame padding is tolerated and our [Decoder]s will adapt obviously,
+    /// because all these protocols have synchronization bytes that mark
+    /// the beginning of a new frame. This library exposes all the synchronization
+    /// bytes, that you may use to create an efficient padding process,
+    /// but we do not provide helpers for that topic.
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
 
     /// Tries to decode a valid [Self::Message] using actual buffered content.

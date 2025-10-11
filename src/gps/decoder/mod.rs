@@ -142,7 +142,7 @@ impl Decoder for GpsQzssDecoder {
 
                     if byte == GPS_PREAMBLE_BYTE {
                         #[cfg(feature = "log")]
-                        trace!("(GPS/QZSS)  [preamble]");
+                        debug!("(GPS/QZSS)  [preamble]: OK");
                         State::TLM
                     } else {
                         State::Preamble
