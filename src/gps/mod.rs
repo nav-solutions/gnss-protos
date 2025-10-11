@@ -45,7 +45,6 @@ mod decoder;
 pub use decoder::GpsQzssDecoder;
 
 mod decoding;
-mod encoding;
 
 mod errors;
 pub use errors::GpsError;

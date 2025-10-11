@@ -1,4 +1,7 @@
-use crate::gps::{GpsDataWord, GpsError};
+use crate::{
+    gps::{GpsDataWord, GpsError, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE},
+    BufferingError, Message,
+};
 
 const PREAMBLE_MASK: u32 = 0x22C0_0000;
 const MESSAGE_SHIFT: u32 = 8;
@@ -32,15 +35,6 @@ impl std::fmt::Display for GpsQzssTelemetry {
 }
 
 impl GpsQzssTelemetry {
-    /// Generates a realistic frame model for testing purposes
-    #[cfg(test)]
-    pub fn model() -> Self {
-        Self::default()
-            .with_message(0x1234)
-            .with_integrity()
-            .with_reserved_bit()
-    }
-
     /// Copies and returns new [GpsQzssTelemetry] with updated 14-bit TLM message
     pub fn with_message(mut self, message_14b: u16) -> Self {
         self.message = message_14b & 0x3fff;
