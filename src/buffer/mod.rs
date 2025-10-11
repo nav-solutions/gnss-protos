@@ -1,6 +1,15 @@
 mod view;
 pub use view::*;
 
+#[cfg(feature = "std")]
+mod std;
+
+#[derive(Debug, Copy, Clone)]
+pub enum BufferingError {
+    /// std-io WouldBlock equivalent
+    WouldBlock,
+}
+
 /// [Buffer] storage that helps capture and decode
 /// a real-time binary stream. You should adapt the total pre-allocated
 /// size to the protocol being received.
@@ -45,12 +54,38 @@ impl<const M: usize> Default for Buffer<M> {
     }
 }
 
-impl<const M: usize> std::io::Read for Buffer<M> {
-    /// Grabs bytes from this [Read]able [Buffer], this is most useful when
-    /// interfacing and receiving a real-time stream.
-    /// Not all returned bytes will be significant (last byte is zero terminated):
-    /// you need to check [Self::read_available_bits] ahead of time.
-    fn read(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
+impl<const M: usize> Buffer<M> {
+    /// Returns the total storage capacity of this [Buffer]
+    pub const fn capacity(&self) -> usize {
+        M
+    }
+
+    /// Returns total number of bytes that can be returned by a read operation.
+    /// Those are not necessarily significant (zero terminated), you should check [Self::read_available_bits]
+    /// to know the exact significant bits.
+    pub fn read_available(&self) -> usize {
+        self.wr_ptr - self.rd_ptr
+    }
+
+    pub fn read_available_bits(&self) -> usize {
+        let avail_bytes = self.read_available();
+
+        avail_bytes
+    }
+
+    /// Returns total number of bytes that can be written.
+    pub fn write_available(&self) -> usize {
+        M - self.wr_ptr
+    }
+
+    /// Returns a slice view of the internal bytes.
+    /// Prefer the [BufferView] which supports bitwise rotation without further allocation.
+    pub fn slice(&self) -> &[u8; M] {
+        &self.inner
+    }
+
+    /// Read bytes from this mutable [Buffer].
+    pub fn read(&mut self, dest: &mut [u8]) -> Result<usize, BufferingError> {
         let dest_size = dest.len();
         let avail = self.read_available();
 
@@ -81,14 +116,10 @@ impl<const M: usize> std::io::Read for Buffer<M> {
         self.rd_ptr = 0;
         ret
     }
-}
 
-impl<const M: usize> std::io::Write for Buffer<M> {
-    /// [Buffer] implements the standard bytewise [std::io::Write] operation,
-    /// for convenient system interfacing, usually needed when receiving a real-time stream.
-    ///
-    /// [Buffer] then proposes other methods to operate at the bit level.
-    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+    /// Write (push) bytes into this mutable [Buffer], allowing
+    /// future decoding.
+    pub fn write(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
         let src_size = src.len();
         let avail = self.write_available();
 
@@ -97,7 +128,7 @@ impl<const M: usize> std::io::Write for Buffer<M> {
         }
 
         if avail == 0 {
-            return Err(std::io::ErrorKind::WouldBlock.into());
+            return Err(BufferingError::WouldBlock);
         }
 
         if src_size > avail {
@@ -109,41 +140,6 @@ impl<const M: usize> std::io::Write for Buffer<M> {
             self.wr_ptr += src_size;
             Ok(src_size)
         }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<const M: usize> Buffer<M> {
-    /// Returns the total storage capacity of this [Buffer]
-    pub const fn capacity(&self) -> usize {
-        M
-    }
-
-    /// Returns total number of bytes that can be returned by a read operation.
-    /// Those are not necessarily significant (zero terminated), you should check [Self::read_available_bits]
-    /// to know the exact significant bits.
-    pub fn read_available(&self) -> usize {
-        self.wr_ptr - self.rd_ptr
-    }
-
-    pub fn read_available_bits(&self) -> usize {
-        let avail_bytes = self.read_available();
-
-        avail_bytes
-    }
-
-    /// Returns total number of bytes that can be written.
-    pub fn write_available(&self) -> usize {
-        M - self.wr_ptr
-    }
-
-    /// Returns a slice view of the internal bytes.
-    /// Prefer the [BufferView] which supports bitwise rotation without further allocation.
-    pub fn slice(&self) -> &[u8; M] {
-        &self.inner
     }
 
     /// Obtain a [BufferView] (buffer snapshot) at the current state.

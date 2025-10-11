@@ -41,8 +41,8 @@ pub use word::GpsDataWord;
 // mod almanach;
 // pub use almanach::GpsQzssAlmanach;
 
-mod decoder;
-pub use decoder::GpsQzssDecoder;
+// mod decoder;
+// pub use decoder::GpsQzssDecoder;
 
 mod decoding;
 mod encoding;

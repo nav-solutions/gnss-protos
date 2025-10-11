@@ -1,6 +1,9 @@
-use crate::gps::{
-    GpsDataWord, GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
-    GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+use crate::{
+    gps::{
+        GpsDataWord, GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
+        GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+    },
+    buffer::Buffer,
 };
 
 #[cfg(feature = "log")]
@@ -19,11 +22,10 @@ use log::{debug, error, trace};
 /// // Feeds some of our GPS messages example,
 /// // which is equivalent to real-time acquisition
 ///
-/// let mut buffer = [0u8; 1024];
-///
 /// let mut fd = File::open("data/GPS/eph1.bin")
 ///     .unwrap();
 ///
+/// // feed this data to the decoder using .write()
 /// let size = fd.read(&mut buffer).unwrap();
 ///
 /// // The decoder does not verify parity at the moment
@@ -31,11 +33,16 @@ use log::{debug, error, trace};
 ///
 /// // TODO example
 /// ```
-#[derive(Debug, Copy, Clone)]
-pub struct GpsQzssDecoder {
-    /// Enough bytes to store everything +1
-    /// so we can manipulate and realign everything.
-    buffer: [u8; GPS_FRAME_BYTES + 1],
+pub struct GpsQzssDecoder<R: Read> {
+    /// [Read]er
+    reader: <R>,
+
+    /// Buffer for more than one entire message.
+    /// All we truly need is more than one entire message.
+    /// But aliging this value makes deployment more efficient.
+    /// And providing bigger storage makes the Read/Write buffering interactions
+    /// more efficient too.
+    buffer: Buffer<1024>,
 
     /// [GpsDataWord]s to avoid allocation
     words: [GpsDataWord; GPS_WORDS_PER_FRAME - 2],
@@ -44,25 +51,20 @@ pub struct GpsQzssDecoder {
     parity_verification: bool,
 }
 
-impl Default for GpsQzssDecoder {
-    /// Creates a default [GpsQzssDecoder] that does not verify parity.
-    fn default() -> Self {
+impl<R: Read> GpsQzssDecoder<R> {
+    /// Creates (allocates) a new [GpsQzssDecoder] to work from [Read]able interface.
+    /// 
+    /// ## Input
+    /// - read: [Read]able interface.
+    /// - parity_check: when deasserted, the [GpsQzssDecoder] will not verify the parity bits,
+    /// therefore, never invalidating potential frames.
+    pub fn new(read: R, parity_check: bool) -> Self {
         Self {
+            reader: read,
+            buffer: Buffer<1024>::default(),
             words: Default::default(),
-            parity_verification: false,
-            buffer: [0; GPS_FRAME_BYTES + 1],
+            parity_verification: parity_check,
         }
-    }
-}
-
-impl GpsQzssDecoder {
-    /// Creates a new [GpsQzssDecoder] with parity verification.
-    /// Our [Default] [GpsQzssDecoder] does not verify the parity bits at the moment,
-    /// you have to specifically turn it on.
-    /// When this is switched on, any frame or subframe that comes with invalid parity is rejected by the parser.
-    pub fn with_parity_verification(mut self) -> Self {
-        self.parity_verification = true;
-        self
     }
 
     /// Packs 38 bytes (10x 30-bit + 4bit padding) correcty aligned to [u8], ready to process.
@@ -144,19 +146,14 @@ impl GpsQzssDecoder {
         None
     }
 
-    /// Decodes the first valid [GpsQzssFrame] found in this read-only [u8] buffer.
-    /// [GpsQzssDecoder] will align itself to the Sync byte, which is not aligned to [u8],
-    /// because GPS/QZSS is made of 30 bit data words.
-    ///
-    /// ## Input
-    /// - buffer: read-only [u8] buffer
-    /// - size: buffer size (in bytes)
+    /// Tries to decode a valid [GpsQzssFrame] using actually buffered content.
+    /// Use [std::io::Write] to feed data to the [GpsQzssDecoder].
     ///
     /// ## Ouput
     /// - Total number of _bits_ that were consumed (not bytes!).
     /// You are expected to discard all processed _bits_ not to decode the same frame twice.
     /// - Optional [GpsQzssFrame] correctly decoded. First in order of appearance in the buffer.
-    pub fn decode(&mut self, buffer: &[u8], size: usize) -> (usize, Option<GpsQzssFrame>) {
+    pub fn decode(&mut self) -> std::io::Result<GpsQzssFrame> {
         let mut dword;
 
         // locate preamble
