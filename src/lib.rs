@@ -41,10 +41,6 @@ pub trait Message: Default {
     /// otherwise returns [BufferingError::StorageFull].
     /// Only a decided encoder (not yet provided) may support streamed/partial encoding.
     fn encode(&self, dest: &mut [u8]) -> Result<usize, BufferingError>;
-
-    /// Generates a realistic frame model for testing purposes.
-    #[cfg(test)]
-    fn model(&self) -> Self;
 }
 
 /// All our GNSS decoders implement the [Decoder] trait.

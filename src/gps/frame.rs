@@ -21,14 +21,6 @@ pub struct GpsQzssFrame {
 }
 
 impl Message for GpsQzssFrame {
-    #[cfg(test)]
-    fn model(frame_id: GpsQzssFrameId) -> Self {
-        Self::default()
-            .with_telemetry(GpsQzssTelemetry::model())
-            .with_hand_over_word(GpsQzssHow::model(frame_id))
-            .with_subframe(GpsQzssSubframe::model(frame_id))
-    }
-
     fn encoding_size(&self) -> usize {
         GPS_FRAME_BYTES
     }
@@ -366,5 +358,13 @@ impl GpsQzssFrame {
         }
 
         self
+    }
+
+    #[cfg(test)]
+    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+        Self::default()
+            .with_telemetry(GpsQzssTelemetry::model())
+            .with_hand_over_word(GpsQzssHow::model(frame_id))
+            .with_subframe(GpsQzssSubframe::model(frame_id))
     }
 }

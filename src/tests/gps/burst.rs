@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[test]
-fn generate_burst_bin() {
+fn generate_bin_file() {
     let mut fd = File::create("data/GPS/burst.bin").unwrap_or_else(|e| {
         panic!("Failed to create file: {}", e);
     });
@@ -94,4 +94,60 @@ fn generate_burst_bin() {
         subf3.i0 += 0.001;
         subf3.idot += 1e-9;
     }
+}
+
+#[test]
+fn parse_bin_file() {
+    init_logger();
+
+    let mut ptr = 0;
+    let mut message = 0;
+    let mut buffer = [0; 8192]; // single read
+
+    let mut file = File::open("data/GPS/burst.bin").unwrap();
+
+    let mut decoder = GpsQzssDecoder::default();
+
+    let model = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris3);
+
+    let mut size = file.read(&mut buffer).unwrap();
+
+    assert!(size > 0, "file is empty");
+
+    // consume everything
+    loop {
+        if message == 128 {
+            // we're done
+            break;
+        }
+
+        // grab a frame
+        let (processed_size, decoded) = decoder.decode(&buffer[ptr..], size);
+
+        message += 1;
+
+        if message == 1 {
+            // first RX
+            assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+        } else {
+            // following RX
+            // TODO +8 expected here, not 16
+            assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
+        }
+
+        let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+        // TODO
+        info!("BURST.bin MESSAGE {}", message + 1);
+
+        ptr += processed_size / 8 - 1;
+        size -= processed_size / 8 - 1;
+
+        if size <= GPS_FRAME_BYTES - 2 {
+            assert_eq!(message, 128, "did not parse enough messages");
+        }
+    }
+
+    assert_eq!(message, 128, "did not parse enough messages");
+}
 }

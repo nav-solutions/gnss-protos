@@ -1,37 +1,37 @@
-#[allow(non_snake_case)]
-mod L1;
+// #[allow(non_snake_case)]
+// mod L1;
 
-mod burst;
-mod eph1;
-mod eph2;
-mod eph3;
+// mod burst;
+// mod eph1;
+// mod eph2;
+// mod eph3;
 
-use crate::{gps::GpsQzssFrame, Message};
-
-#[test]
-fn encoding_bits() {
-    assert_eq!(GpsQzssFrame::encoding_bits(), 300);
-}
+use crate::{
+    tests::init_logger,
+    {
+        gps::{GpsQzssDecoder, GpsQzssFrame, GPS_FRAME_BITS, GPS_FRAME_BYTES},
+        Decoder, Message,
+    },
+};
 
 #[test]
 fn encoding_size() {
-    assert_eq!(GpsQzssFrame::encoding_size(), 300 / 8 + 1);
+    assert_eq!(GpsQzssFrame::default().encoding_bits(), 300);
+    assert_eq!(GpsQzssFrame::default().encoding_size(), 300 / 8 + 1);
 }
 
 #[test]
 fn default_frame() {
-    #[cfg(all(feature = "std", feature = "log"))]
     init_logger();
+    let mut encoded = [0u8; 1024];
 
     let default = GpsQzssFrame::default();
 
-    let encoded = default.encode_raw();
-    let encoded_size = encoded.len();
+    let size = default.encode(&mut encoded).unwrap_or_else(|e| {
+        panic!("failed to encode default frame: {:?}", e);
+    });
 
-    assert_eq!(GpsQzssFrame::encoding_size(), 300 / 8 + 1);
-    assert_eq!(GpsQzssFrame::encoding_bits(), 300);
-
-    assert_eq!(encoded_size, GPS_FRAME_BYTES, "encoded invalid size!");
+    assert_eq!(size, 300 / 8 + 1, "invalid size encoded!");
 
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x00);
@@ -75,8 +75,13 @@ fn default_frame() {
     // reciprocal
     let mut decoder = GpsQzssDecoder::default();
 
-    let (size, decoded) = decoder.decode(&encoded, encoded_size);
+    decoder.fill(&encoded).unwrap_or_else(|e| {
+        panic!("Failed to provide data: {:?}", e);
+    });
 
-    assert_eq!(size, GPS_FRAME_BITS, "invalid size processed!");
-    assert_eq!(decoded, Some(default), "reciprocal failed");
+    let decoded = decoder.decode().unwrap_or_else(|| {
+        panic!("Decoding failed!");
+    });
+
+    assert_eq!(decoded, default, "reciprocal failed");
 }

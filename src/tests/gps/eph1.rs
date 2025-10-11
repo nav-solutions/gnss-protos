@@ -526,3 +526,174 @@ fn generate_bin_file() {
         subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
     }
 }
+
+#[test]
+fn parse_bin_file() {
+    init_logger();
+
+    let mut ptr = 0;
+    let mut message = 0;
+    let mut buffer = [0; 8192]; // single read
+
+    let mut file = File::open("data/GPS/eph1.bin").unwrap();
+
+    let mut decoder = GpsQzssDecoder::default();
+
+    let model = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris1);
+
+    let mut size = file.read(&mut buffer).unwrap();
+
+    assert!(size > 0, "file is empty");
+
+    // consume everything
+    loop {
+        if message == 128 {
+            // we're done
+            break;
+        }
+
+        // grab a frame
+        let (processed_size, decoded) = decoder.decode(&buffer[ptr..], size);
+
+        message += 1;
+
+        if message == 1 {
+            // first RX
+            assert_eq!(processed_size, GPS_FRAME_BITS); // bits!
+        } else {
+            // following RX
+            // TODO +8 expected here, not 16
+            assert_eq!(processed_size, GPS_FRAME_BITS + 16); // bits!
+        }
+
+        let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+        let subf = decoded.subframe.as_eph1().unwrap_or_else(|| {
+            panic!("wrong frame type decoded");
+        });
+
+        if message == 1 {
+            // verify initial values
+            assert_eq!(decoded, model, "invalid initial value");
+        } else {
+            // test pattern
+            assert_eq!(
+                decoded.telemetry.message,
+                model.telemetry.message + message - 1,
+                "error at message {}",
+                message
+            );
+
+            if message % 2 == 0 {
+                assert_eq!(decoded.telemetry.integrity, false);
+                assert_eq!(decoded.telemetry.reserved_bit, false);
+                assert_eq!(decoded.how.alert, false);
+                assert_eq!(decoded.how.anti_spoofing, false);
+            } else {
+                assert_eq!(decoded.telemetry.integrity, true);
+                assert_eq!(decoded.telemetry.reserved_bit, true);
+                assert_eq!(decoded.how.alert, true);
+                assert_eq!(decoded.how.anti_spoofing, true);
+            }
+        }
+
+        info!("EPH-1.bin MESSAGE {}", message + 1);
+
+        ptr += processed_size / 8 - 1;
+        size -= processed_size / 8 - 1;
+
+        if size <= GPS_FRAME_BYTES - 2 {
+            assert_eq!(message, 128, "did not parse enough messages");
+        }
+    }
+    assert_eq!(message, 128, "did not parse enough messages");
+}
+
+#[test]
+fn parse_bin_delayed() {
+    init_logger();
+
+    let mut buffer = [0; 8192];
+
+    // TODO add more cases
+    for zeros in 1..7 {
+        let mut ptr = 0;
+        let mut message = 0;
+        let mut buffer = [0; 8192]; // single read
+
+        let mut file = File::open("data/GPS/eph1.bin").unwrap();
+
+        let mut decoder = GpsQzssDecoder::default();
+
+        let model = GpsQzssFrame::model(GpsQzssFrameId::Ephemeris1);
+
+        let mut size = file.read(&mut buffer).unwrap();
+        assert!(size > 0, "file is empty");
+
+        let delayed = insert_zeros(&buffer, zeros);
+
+        // consume everything
+        loop {
+            if message == 128 {
+                // we're done
+                break;
+            }
+
+            // grab a frame
+            let (processed_size, decoded) = decoder.decode(&delayed[ptr..], size);
+
+            message += 1;
+
+            if message == 1 {
+                // first RX
+                assert_eq!(processed_size, GPS_FRAME_BITS + zeros); // bits!
+            } else {
+                // following RX
+                // TODO +8 expected here, not 16
+                assert_eq!(processed_size, GPS_FRAME_BITS + 16 + zeros); // bits!
+            }
+
+            let decoded = decoded.unwrap(); // success (we have 128 frames)
+
+            let subf = decoded.subframe.as_eph1().unwrap_or_else(|| {
+                panic!("wrong frame type decoded");
+            });
+
+            if message == 1 {
+                // verify initial values
+                assert_eq!(decoded, model, "invalid initial value");
+            } else {
+                // test pattern
+                assert_eq!(
+                    decoded.telemetry.message,
+                    model.telemetry.message + message - 1,
+                    "error at message {}",
+                    message
+                );
+
+                if message % 2 == 0 {
+                    assert_eq!(decoded.telemetry.integrity, false);
+                    assert_eq!(decoded.telemetry.reserved_bit, false);
+                    assert_eq!(decoded.how.alert, false);
+                    assert_eq!(decoded.how.anti_spoofing, false);
+                } else {
+                    assert_eq!(decoded.telemetry.integrity, true);
+                    assert_eq!(decoded.telemetry.reserved_bit, true);
+                    assert_eq!(decoded.how.alert, true);
+                    assert_eq!(decoded.how.anti_spoofing, true);
+                }
+            }
+
+            info!("EPH-1.bin MESSAGE {}", message + 1);
+
+            ptr += processed_size / 8 - 1;
+            size -= processed_size / 8 - 1;
+
+            if size <= GPS_FRAME_BYTES - 2 {
+                assert_eq!(message, 128, "did not parse enough messages");
+            }
+        }
+        assert_eq!(message, 128, "did not parse enough messages");
+    }
+}
+

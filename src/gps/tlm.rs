@@ -105,6 +105,15 @@ impl GpsQzssTelemetry {
 
         GpsDataWord::from(value)
     }
+
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self {
+            message: 0x048D,
+            integrity: false,
+            reserved_bit: true,
+        }
+    }
 }
 
 #[cfg(test)]

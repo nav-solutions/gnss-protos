@@ -31,8 +31,9 @@ impl<const M: usize> std::io::Write for Buffer<M> {
     /// [Buffer] then proposes other methods to operate at the bit level.
     fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
         let size = self
-            .write(src)
+            .fill(src)
             .map_err(|e| Into::<std::io::Error>::into(e))?;
+
         Ok(size)
     }
 
