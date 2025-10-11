@@ -38,11 +38,9 @@ pub(crate) struct Buffer<const M: usize> {
     /// offset withint current RD ptr (<8)
     rd_offset: usize,
 
-    /// bytewise WR ptr
+    /// Writes work only bytewise, to facilitate this whole thing.
+    /// Because writes only arrive from the user interface, and it can only be aligned to [u8].
     wr_ptr: usize,
-
-    /// offset withint current WR ptr (<8)
-    wr_offset: usize,
 }
 
 impl<const M: usize> Default for Buffer<M> {
@@ -51,7 +49,6 @@ impl<const M: usize> Default for Buffer<M> {
             rd_ptr: 0,
             wr_ptr: 0,
             rd_offset: 0,
-            wr_offset: 0,
             inner: [0; M],
         }
     }
@@ -75,19 +72,14 @@ impl<const M: usize> Buffer<M> {
 
     /// Returns total number of effective bits in this [Buffer].
     pub fn read_available_bits(&self) -> usize {
-        (self.wr_ptr - self.rd_ptr) * 8 + self.rd_offset
+        (self.wr_ptr - self.rd_ptr) * 8 - self.rd_offset
     }
 
     /// Returns total number of bytes that can be written.
+    /// For correct and simple [Self::fill] and [std::io::Write] requirements,
+    /// this function works bytewise only.
     pub fn write_available(&self) -> usize {
         M - self.wr_ptr
-    }
-    
-    /// Returns total number of bits that can be written to this [Buffer].
-    pub fn write_available_bits(&self) -> usize {
-        let mut size = (M - self.wr_ptr) * 8;
-        size -= self.wr_offset;
-        size
     }
 
     pub fn read(&mut self, dest: &mut [u8]) -> Result<usize, BufferingError> {
@@ -141,18 +133,14 @@ impl<const M: usize> Buffer<M> {
             return Err(BufferingError::WouldBlock);
         }
 
-        if self.wr_offset == 0 {
-            if src_size > avail {
-                self.inner[self.wr_ptr..].copy_from_slice(&src[..avail]);
-                self.wr_ptr = M;
-                Ok(avail)
-            } else {
-                self.inner[self.wr_ptr..self.wr_ptr + src_size].copy_from_slice(&src);
-                self.wr_ptr += src_size;
-                Ok(src_size)
-            }
+        if src_size > avail {
+            self.inner[self.wr_ptr..].copy_from_slice(&src[..avail]);
+            self.wr_ptr = M;
+            Ok(avail)
         } else {
-            panic!("not yet");
+            self.inner[self.wr_ptr..self.wr_ptr + src_size].copy_from_slice(&src);
+            self.wr_ptr += src_size;
+            Ok(src_size)
         }
     }
 
@@ -202,32 +190,30 @@ impl<const M: usize> Buffer<M> {
     /// by a read operation. The bits are trashed and will no longer be viewable
     /// (not proposed to following read operations).
     pub fn discard_bits_mut(&mut self, bits: usize) {
-
         let (bytes, bits) = (bits / 8, bits % 8);
 
         if bytes > 0 {
             self.discard_bytes_mut(bytes);
         }
 
-        let mut avail = self.read_available_bits() / 8;
+        if bits > 0 {
+            // shifts all effective bits
+            let mask = 2u8.pow(bits as u32) - 1;
 
-        // if bits > 0 {
-        //     let mask = 2u8.pow(bits as u32) - 1;
+            let avail = self.read_available_bits() / 8; // significant bytes
 
-        //     // shift & rotate all effective bytes
-        //     for i in 0..self.read_available() {
-        //         self.inner[i] <<= bits;
-        //         
-        //         if i < M -1 {
-        //             self.inner[i] |= (self.inner[i +1] >> (8 - bits)) & mask;
-        //         }
-        //     }
+            // for all significant bytes
+            for i in 0..M {
+                self.inner[i] <<= bits;
 
-        //     self.wr_offset += bits;
-        //     self.rd_offset += bits;
-        // }
+                if i < M - 1 {
+                    self.inner[i] |= (self.inner[i + 1] >> (8 - bits)) & mask;
+                }
+            }
+
+            self.rd_offset += bits;
+        }
     }
-
 }
 
 #[cfg(test)]
@@ -689,31 +675,144 @@ mod test {
         assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         assert_eq!(buffer.wr_ptr, 16);
-        assert_eq!(buffer.wr_offset, 0);
         assert_eq!(buffer.rd_ptr, 0);
         assert_eq!(buffer.rd_offset, 0);
 
         // discard
         buffer.discard_bits_mut(1);
-        assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available_bits(), 16 * 8);
-        assert_eq!(buffer.wr_ptr, 16);
-        assert_eq!(buffer.wr_offset, 1);
+        assert_eq!(buffer.wr_ptr, 16); // write status (for .fill()) works
+        assert_eq!(buffer.write_available(), 0); // bytewise
+
         assert_eq!(buffer.rd_ptr, 0);
-        assert_eq!(buffer.rd_offset, 0);
+        assert_eq!(buffer.rd_offset, 1);
+        assert_eq!(buffer.read_available_bits(), 16 * 8 - 1);
 
         assert_eq!(
             buffer.view().into_iter().collect::<Vec<_>>(),
-            vec![0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0e, 0x10, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10]
+            vec![
+                0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0e, 0x10, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C,
+                0x0E, 0x10
+            ]
         );
-        
+
         buffer.discard_bits_mut(2);
-        assert_eq!(buffer.write_available(), 2);
-        assert_eq!(buffer.read_available_bits(), 14);
-        
+        assert_eq!(buffer.wr_ptr, 16); // write status (for easier .fills()) works bytewise
+        assert_eq!(buffer.write_available(), 0); // write status (for easier .fills()) works bytewise
+
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 3);
+        assert_eq!(buffer.read_available_bits(), 16 * 8 - 3);
+
         assert_eq!(
             buffer.view().into_iter().collect::<Vec<_>>(),
-            vec![0x02<<2, 0x04<<2, 0x06<<2, 0x08<<2, 0x0A<<2, 0x0C<<2, 0x0E<<2, 0x10<<2, 0x02<<2, 0x04<<2, 0x06<<2, 0x08<<2, 0x0A<<2, 0x0C<<2, 0x0E<<2, 0x10<<2],
+            vec![
+                0x02 << 2,
+                0x04 << 2,
+                0x06 << 2,
+                0x08 << 2,
+                0x0A << 2,
+                0x0C << 2,
+                0x0E << 2,
+                0x10 << 2,
+                0x02 << 2,
+                0x04 << 2,
+                0x06 << 2,
+                0x08 << 2,
+                0x0A << 2,
+                0x0C << 2,
+                0x0E << 2,
+                0x10 << 2
+            ],
+        );
+
+        buffer.discard_bits_mut(1);
+        assert_eq!(buffer.wr_ptr, 16); // write status (for easier .fills()) works bytewise
+        assert_eq!(buffer.write_available(), 0); // write status (for easier .fills()) works bytewise
+
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 4);
+        assert_eq!(buffer.read_available_bits(), 16 * 8 - 4);
+
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![
+                0x02 << 3,
+                0x04 << 3,
+                0x06 << 3,
+                0x08 << 3,
+                0x0A << 3,
+                0x0C << 3,
+                0x0E << 3,
+                0x10 << 3,
+                0x02 << 3,
+                0x04 << 3,
+                0x06 << 3,
+                0x08 << 3,
+                0x0A << 3,
+                0x0C << 3,
+                0x0E << 3,
+                0x10 << 3
+            ],
+        );
+
+        buffer.discard_bits_mut(1);
+        assert_eq!(buffer.wr_ptr, 16); // write status (for easier .fills()) works bytewise
+        assert_eq!(buffer.write_available(), 0); // write status (for easier .fills()) works bytewise
+
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 5);
+        assert_eq!(buffer.read_available_bits(), 16 * 8 - 5);
+
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![
+                0x02 << 4,
+                0x04 << 4,
+                0x06 << 4,
+                0x08 << 4,
+                0x0A << 4,
+                0x0C << 4,
+                0x0E << 4 | 0x01,
+                0x10 << 4,
+                0x02 << 4,
+                0x04 << 4,
+                0x06 << 4,
+                0x08 << 4,
+                0x0A << 4,
+                0x0C << 4,
+                0x0E << 4 | 0x01,
+                0x10 << 4
+            ],
+        );
+
+        buffer.discard_bits_mut(1);
+        assert_eq!(buffer.wr_ptr, 16); // write status (for easier .fills()) works bytewise
+        assert_eq!(buffer.write_available(), 0); // write status (for easier .fills()) works bytewise
+
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 6);
+        assert_eq!(buffer.read_available_bits(), 16 * 8 - 6);
+
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![
+                0x02 << 5,
+                0x04 << 5,
+                0x06 << 5,
+                0x08 << 5,
+                0x0A << 5,
+                0x0C << 5,
+                0x0E << 5 | 0x01,
+                0x10 << 5,
+                0x02 << 5,
+                0x04 << 5,
+                0x06 << 5,
+                0x08 << 5,
+                0x0A << 5,
+                0x0C << 5,
+                0x0E << 5 | 0x01,
+                0x10 << 5
+            ],
         );
     }
 }

@@ -14,7 +14,7 @@ use crate::gps::GpsDataWord;
 pub struct BufferView<'a, const M: usize> {
     /// Pointer
     ptr: usize,
-    
+
     /// Snapshot view
     inner: &'a [u8; M],
 }

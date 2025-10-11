@@ -54,8 +54,8 @@ pub trait Decoder {
     /// a GPS burst is 300 bit long. You may insert padding bits (blanking)
     /// in between frames but not inside frames. Otherwise, the binary content
     /// would be corrupt and impossible to decode.
-    /// 
-    /// If you don't need 100% efficiency and can afford to loose one frame 
+    ///
+    /// If you don't need 100% efficiency and can afford to loose one frame
     /// from time to time (say one per receiver capture), then you are fine and may
     /// use padding whenever that suites you.
     ///

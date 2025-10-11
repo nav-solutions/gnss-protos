@@ -124,7 +124,7 @@ impl Decoder for GpsQzssDecoder {
 
     fn decode(&mut self) -> Option<Self::M> {
         loop {
-            let available = self.buffer.read_available_bits() /8;
+            let available = self.buffer.read_available_bits() / 8;
             let needed = self.state.read_size();
 
             let mut consumed_bits = 0;
