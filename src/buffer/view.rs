@@ -7,6 +7,7 @@ use crate::buffer::Buffer;
 ///
 /// [BufferView] implements [Iterator] for convenient iteration
 /// but it is stepped bytes per bytes ([u8] size) at the moment.
+#[derive(Copy, Clone)]
 pub struct BufferView<'a, const M: usize> {
     /// Snapshot view
     inner: &'a [u8; M],

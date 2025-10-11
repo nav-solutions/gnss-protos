@@ -3,22 +3,34 @@ pub use view::*;
 
 /// [Buffer] storage that helps capture and decode
 /// a real-time binary stream. You should adapt the total pre-allocated
-/// depth to the protocol being dealt with.
+/// size to the protocol being received.
 ///
 /// [Buffer] implements [std::io::Read] and [std::io::Write]
 /// for convenient and easy system interfacing. It also provides
-/// internal rotations (binary shifts) and bit by bit indexing
-/// and iteration, by obtaining a [BufferView].
+/// bytewise or bitwise operations.
+///
+/// [Buffer] does not provide bitwise filling,
+/// [std::io::Write] is the only option to feed new data, and it operates bytewise.
+/// In otherwords, zero padding and slight inefficiency will have to be introduced
+/// inevitably at some point, when interfacing unaligned hardware streams to a decoder in software.
+/// But [Buffer] proposes methods like [Self::read_available_bits] which, when correctly implement,
+/// allows you to drop padding bits, making the decoding process fully efficient.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Buffer<const M: usize> {
     /// Bytes storage
     inner: [u8; M],
 
-    /// RD ptr
+    /// Byte wise RD ptr
     rd_ptr: usize,
 
-    /// WR ptr
+    /// offset withint current RD ptr (<8)
+    rd_offset: usize,
+
+    /// bytewise WR ptr
     wr_ptr: usize,
+
+    /// offset withint current WR ptr (<8)
+    wr_offset: usize,
 }
 
 impl<const M: usize> Default for Buffer<M> {
@@ -26,16 +38,18 @@ impl<const M: usize> Default for Buffer<M> {
         Self {
             rd_ptr: 0,
             wr_ptr: 0,
+            rd_offset: 0,
+            wr_offset: 0,
             inner: [0; M],
         }
     }
 }
 
 impl<const M: usize> std::io::Read for Buffer<M> {
-    /// [Buffer] implements the standard bytewise [std::io::Read] operation,
-    /// for convenient system interfacing, usually needed when receiving a real-time stream.
-    ///
-    /// [Buffer] then proposes other methods to operate at the bit level.
+    /// Grabs bytes from this [Read]able [Buffer], this is most useful when
+    /// interfacing and receiving a real-time stream.
+    /// Not all returned bytes will be significant (last byte is zero terminated):
+    /// you need to check [Self::read_available_bits] ahead of time.
     fn read(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
         let dest_size = dest.len();
         let avail = self.read_available();
@@ -108,9 +122,17 @@ impl<const M: usize> Buffer<M> {
         M
     }
 
-    /// Returns total number of bytes available to read.
+    /// Returns total number of bytes that can be returned by a read operation.
+    /// Those are not necessarily significant (zero terminated), you should check [Self::read_available_bits]
+    /// to know the exact significant bits.
     pub fn read_available(&self) -> usize {
         self.wr_ptr - self.rd_ptr
+    }
+
+    pub fn read_available_bits(&self) -> usize {
+        let avail_bytes = self.read_available();
+
+        avail_bytes
     }
 
     /// Returns total number of bytes that can be written.
@@ -168,6 +190,32 @@ impl<const M: usize> Buffer<M> {
 
         // internal bytewise swap:
         // shift internal buffer, preserving remaining data while accepting new writes.
+        self.inner.copy_within(self.rd_ptr + bytes..self.wr_ptr, 0);
+
+        self.wr_ptr -= bytes;
+
+        if bytes > bytes_avail {
+            self.rd_ptr -= bytes;
+        } else {
+            self.rd_ptr = 0;
+        }
+
+        if bits > 0 {
+            let mask = 2u8.pow(bits as u32) - 1;
+            for i in 0..self.wr_ptr {
+                self.inner[i] <<= bits;
+                if i < self.wr_ptr - 1 {
+                    self.inner[i] |= (self.inner[i + 1] >> 8 - bits) & mask;
+                }
+            }
+
+            // consumed 1 more byte
+            self.wr_ptr -= 1;
+
+            if self.rd_ptr > 0 {
+                self.rd_ptr -= 1;
+            }
+        }
     }
 
     /// Shfits internal buffer to the right.
@@ -181,7 +229,7 @@ impl<const M: usize> Buffer<M> {
 
 #[cfg(test)]
 mod test {
-    use super::Buffer;
+    use super::{Buffer, BufferView};
     use std::io::{Read, Write};
 
     #[test]
@@ -375,7 +423,7 @@ mod test {
     }
 
     #[test]
-    fn buffer_8_16_discard() {
+    fn buffer_8_16_discard_bytes() {
         let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
         let mut dest = source.clone();
 
@@ -484,5 +532,153 @@ mod test {
         buffer.discard_bytes_mut(16);
         assert_eq!(buffer.write_available(), 16);
         assert_eq!(buffer.read_available(), 0);
+    }
+
+    #[test]
+    fn buffer_8_16_discard_bits() {
+        let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
+        let mut dest = source.clone();
+
+        let mut buffer = Buffer::<16>::default();
+
+        // empty at this point
+        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.write_available(), 16);
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0],
+        );
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+
+        // full at this point
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard
+        buffer.discard_bits_mut(16);
+        assert_eq!(buffer.wr_ptr, 14);
+        assert_eq!(buffer.write_available(), 2);
+        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(
+            buffer.slice(),
+            &[3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
+        );
+
+        // discard
+        buffer.discard_bits_mut(16);
+        assert_eq!(buffer.wr_ptr, 12);
+        assert_eq!(buffer.write_available(), 4);
+        assert_eq!(buffer.read_available(), 12);
+        assert_eq!(
+            buffer.slice(),
+            &[5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
+        );
+
+        // discard
+        buffer.discard_bits_mut(8);
+        assert_eq!(buffer.wr_ptr, 11);
+        assert_eq!(buffer.write_available(), 5);
+        assert_eq!(buffer.read_available(), 11);
+        // TODO verify internal
+
+        buffer.discard_bits_mut(8);
+        assert_eq!(buffer.wr_ptr, 10);
+        assert_eq!(buffer.write_available(), 6);
+        assert_eq!(buffer.read_available(), 10);
+
+        buffer.discard_bits_mut(16);
+        assert_eq!(buffer.write_available(), 8);
+        assert_eq!(buffer.read_available(), 8);
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+
+        // full at this point
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard all but one
+        buffer.discard_bits_mut(15 * 8);
+        assert_eq!(buffer.write_available(), 15);
+        assert_eq!(buffer.read_available(), 1);
+
+        // emptied
+        buffer.discard_bits_mut(8);
+        assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available(), 0);
+    }
+
+    #[test]
+    fn buffer_8_16_discard_bits2() {
+        let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
+        let mut dest = source.clone();
+
+        let mut buffer = Buffer::<16>::default();
+
+        // empty at this point
+        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.write_available(), 16);
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0],
+        );
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+
+        // full at this point
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard
+        buffer.discard_bits_mut(3);
+        assert_eq!(buffer.write_available(), 1);
+        assert_eq!(buffer.read_available(), 15);
+        // TODO CHECK content
+
+        buffer.discard_bits_mut(3);
+        assert_eq!(buffer.write_available(), 2);
+        assert_eq!(buffer.read_available(), 14);
+        // TODO CHECK content
     }
 }
