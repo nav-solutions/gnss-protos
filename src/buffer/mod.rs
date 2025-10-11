@@ -111,6 +111,23 @@ impl<const M: usize> Buffer<M> {
         &self.inner
     }
 
+    /// Discard the selected number of bytes like they were consumed.
+    /// They will no longer be proposed to following read operations or sliced view.
+    pub fn discard_bytes_mut(&mut self, bytes: usize) {
+        let avail = self.read_available();
+        let size = if bytes > avail { avail } else { bytes };
+
+        self.inner.copy_within(self.rd_ptr + size..self.wr_ptr, 0);
+
+        self.wr_ptr -= size;
+
+        if bytes > avail {
+            self.rd_ptr -= size;
+        } else {
+            self.rd_ptr = 0;
+        }
+    }
+
     /// Shfits internal buffer to the right.
     pub fn shift_right_mut(&mut self, shift: usize) {
         for i in self.rd_ptr..self.wr_ptr - 1 {
@@ -285,5 +302,101 @@ mod test {
         assert_eq!(read.unwrap(), 2);
         assert_eq!(buffer.read_available(), 0);
         assert_eq!(buffer.write_available(), 16);
+    }
+
+    #[test]
+    fn buffer_8_16_discard() {
+        let source = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8];
+        let mut dest = source.clone();
+
+        let mut buffer = Buffer::<16>::default();
+
+        // empty at this point
+        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.write_available(), 16);
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(
+            buffer.slice(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+
+        // full at this point
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard
+        buffer.discard_bytes_mut(2);
+        assert_eq!(buffer.wr_ptr, 14);
+        assert_eq!(buffer.write_available(), 2);
+        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(
+            buffer.slice(),
+            &[3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
+        );
+
+        // discard
+        buffer.discard_bytes_mut(2);
+        assert_eq!(buffer.wr_ptr, 12);
+        assert_eq!(buffer.write_available(), 4);
+        assert_eq!(buffer.read_available(), 12);
+        assert_eq!(
+            buffer.slice(),
+            &[5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
+        );
+
+        // discard
+        buffer.discard_bytes_mut(1);
+        assert_eq!(buffer.wr_ptr, 11);
+        assert_eq!(buffer.write_available(), 5);
+        assert_eq!(buffer.read_available(), 11);
+        // TODO verify internal
+
+        buffer.discard_bytes_mut(1);
+        assert_eq!(buffer.wr_ptr, 10);
+        assert_eq!(buffer.write_available(), 6);
+        assert_eq!(buffer.read_available(), 10);
+
+        buffer.discard_bytes_mut(2);
+        assert_eq!(buffer.write_available(), 8);
+        assert_eq!(buffer.read_available(), 8);
+
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+
+        // full at this point
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard all but one
+        buffer.discard_bytes_mut(15);
+        assert_eq!(buffer.write_available(), 15);
+        assert_eq!(buffer.read_available(), 1);
+
+        // emptied
+        buffer.discard_bytes_mut(1);
+        assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available(), 0);
+
+        // fill
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        let written = buffer.write(&source);
+        assert_eq!(written.unwrap(), 8); // should all fit
+        assert_eq!(buffer.write_available(), 0);
+        assert_eq!(buffer.read_available(), 16);
+
+        // discard entirely
+        buffer.discard_bytes_mut(16);
+        assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available(), 0);
     }
 }
