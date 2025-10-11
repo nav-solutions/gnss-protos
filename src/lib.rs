@@ -63,11 +63,10 @@ pub trait Decoder {
     /// because information is regurlarly updated, but that is closely related to the
     /// velocity of your receiver, and will not work well in the case of fast moving rovers.
     ///
-    /// In between frame padding is tolerated and our [Decoder]s will adapt obviously,
-    /// because all these protocols have synchronization bytes that mark
-    /// the beginning of a new frame. This library exposes all the synchronization
-    /// bytes, that you may use to create an efficient padding process,
-    /// but we do not provide helpers for that topic.
+    /// In between frame padding is tolerated and our [Decoder]s will naturally adapt,
+    /// because all these protocols use synchronization bytes to mark
+    /// the beginning of frame. This library exposes all the synchronization
+    /// bytes, that you may use to create an efficient padded receiver.
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
 
     /// Tries to decode a valid [Self::Message] using actual buffered content.
@@ -82,11 +81,11 @@ pub trait Decoder {
 }
 
 /// Two's complement parsing & interpretation.
+///
 /// ## Input
 /// - raw bytes as [u32]
 /// - bits_mask: masking u32
 /// - sign_bit_mask: sign bit
-#[cfg(feature = "gps")]
 pub(crate) fn twos_complement(value: u32, bits_mask: u32, sign_bit_mask: u32) -> i32 {
     let value = value & bits_mask;
 
@@ -100,7 +99,6 @@ pub(crate) fn twos_complement(value: u32, bits_mask: u32, sign_bit_mask: u32) ->
 }
 
 #[cfg(test)]
-#[cfg(feature = "gps")]
 mod test {
     use crate::twos_complement;
 

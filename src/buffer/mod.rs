@@ -63,34 +63,24 @@ impl<const M: usize> Buffer<M> {
         M
     }
 
-    /// Returns total number of bytes that can be returned by a read operation.
-    /// Not all bits will be significant (we use zero termination), you need to check [Self::read_available_bits].
-    pub fn read_available(&self) -> usize {
-        let mut size = self.wr_ptr;
+    /// Returns true if this [Buffer] is empty
+    pub fn is_empty(&self) -> bool {
+        self.rd_ptr == 0 && self.rd_offset == 0
+    }
 
-        size -= self.read_available_bits() / 8; // bytes
-
-        if self.rd_offset > 0 {
-            size += 1;
-        }
-
-        size
+    /// Returns true if this [Buffer] is full and cannot accept new data
+    pub fn is_full(&self) -> bool {
+        self.wr_ptr == self.capacity()
     }
 
     /// Returns total number of effective bits in this [Buffer].
     pub fn read_available_bits(&self) -> usize {
-        self.rd_ptr * 8 + self.rd_offset
+        (self.wr_ptr - self.rd_ptr) * 8 + self.rd_offset
     }
 
     /// Returns total number of bytes that can be written.
     pub fn write_available(&self) -> usize {
-        let mut size = M - self.wr_ptr;
-
-        if self.wr_offset > 0 {
-            size -= 1;
-        }
-
-        size
+        M - self.wr_ptr
     }
     
     /// Returns total number of bits that can be written to this [Buffer].
@@ -102,7 +92,12 @@ impl<const M: usize> Buffer<M> {
 
     pub fn read(&mut self, dest: &mut [u8]) -> Result<usize, BufferingError> {
         let dest_size = dest.len();
-        let avail = self.read_available();
+
+        let mut avail = self.read_available_bits() / 8;
+
+        if self.rd_offset > 0 {
+            panic!("not supported yet");
+        }
 
         if avail == 0 {
             return Ok(0);
@@ -186,7 +181,8 @@ impl<const M: usize> Buffer<M> {
     /// by a read operation. The bytes are trashed and will no longer be viewable
     /// (not proposed to following read operations).
     pub fn discard_bytes_mut(&mut self, bytes: usize) {
-        let avail = self.read_available();
+        let mut avail = self.read_available_bits() / 8;
+
         let size = if bytes > avail { avail } else { bytes };
 
         // internal swap:
@@ -206,43 +202,32 @@ impl<const M: usize> Buffer<M> {
     /// by a read operation. The bits are trashed and will no longer be viewable
     /// (not proposed to following read operations).
     pub fn discard_bits_mut(&mut self, bits: usize) {
-        let bytes_avail = self.read_available();
+
         let (bytes, bits) = (bits / 8, bits % 8);
 
-        // internal bytewise swap:
-        // shift internal buffer, preserving remaining data while accepting new writes.
-        self.inner.copy_within(self.rd_ptr + bytes..self.wr_ptr, 0);
-        
-        self.wr_ptr -= bytes;
-
-        if bits > 0 {
-            let mask = 2u8.pow(bits as u32) - 1;
-
-            // shift & rotate all effective bytes
-            for i in 0..self.read_available() {
-                self.inner[i] <<= bits;
-                
-                if i < M -1 {
-                    self.inner[i] |= (self.inner[i +1] >> (8 - bits)) & mask;
-                }
-            }
+        if bytes > 0 {
+            self.discard_bytes_mut(bytes);
         }
 
-        if bytes > bytes_avail {
-            self.rd_ptr -= bytes;
-        } else {
-            self.rd_ptr = 0;
-        }
+        let mut avail = self.read_available_bits() / 8;
 
+        // if bits > 0 {
+        //     let mask = 2u8.pow(bits as u32) - 1;
+
+        //     // shift & rotate all effective bytes
+        //     for i in 0..self.read_available() {
+        //         self.inner[i] <<= bits;
+        //         
+        //         if i < M -1 {
+        //             self.inner[i] |= (self.inner[i +1] >> (8 - bits)) & mask;
+        //         }
+        //     }
+
+        //     self.wr_offset += bits;
+        //     self.rd_offset += bits;
+        // }
     }
 
-    /// Shfits internal buffer to the right.
-    pub fn shift_right_mut(&mut self, shift: usize) {
-        for i in self.rd_ptr..self.wr_ptr - 1 {
-            self.inner[i + 1] = self.inner[i] << (8 - shift);
-            self.inner[i] >>= shift;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -258,8 +243,9 @@ mod test {
         let mut buffer = Buffer::<16>::default();
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
@@ -285,7 +271,7 @@ mod test {
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         let written = buffer.write(&source);
         assert!(written.is_err()); // full at this point
@@ -297,7 +283,7 @@ mod test {
 
         // half full at this point
         assert_eq!(buffer.write_available(), 8);
-        assert_eq!(buffer.read_available(), 8);
+        assert_eq!(buffer.read_available_bits(), 8 * 8);
 
         // read half
         let read = buffer.read(&mut dest);
@@ -305,8 +291,9 @@ mod test {
         assert_eq!(dest, [1, 2, 3, 4, 5, 6, 7, 8]);
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
     }
 
     #[test]
@@ -317,8 +304,9 @@ mod test {
         let mut buffer = Buffer::<16>::default();
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
         assert_eq!(buffer.rd_ptr, 0);
         assert_eq!(buffer.wr_ptr, 0);
 
@@ -350,7 +338,7 @@ mod test {
 
         // still not full at this point
         assert_eq!(buffer.write_available(), 2);
-        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(buffer.read_available_bits(), 14 * 8);
 
         // read half
         let read = buffer.read(&mut dest);
@@ -358,7 +346,7 @@ mod test {
         assert_eq!(dest, [1, 2, 3, 4, 5, 6, 7]);
 
         assert_eq!(buffer.write_available(), 9);
-        assert_eq!(buffer.read_available(), 7);
+        assert_eq!(buffer.read_available_bits(), 7 * 8);
 
         // read half
         let read = buffer.read(&mut dest);
@@ -366,8 +354,9 @@ mod test {
         assert_eq!(dest, [1, 2, 3, 4, 5, 6, 7]);
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 7); // should all fit
@@ -380,8 +369,8 @@ mod test {
             vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
         );
 
-        assert_eq!(buffer.read_available(), 7);
         assert_eq!(buffer.write_available(), 9);
+        assert_eq!(buffer.read_available_bits(), 7 * 8);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 7); // should all fit
@@ -394,8 +383,8 @@ mod test {
             vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
         );
 
-        assert_eq!(buffer.read_available(), 14);
         assert_eq!(buffer.write_available(), 2);
+        assert_eq!(buffer.read_available_bits(), 14 * 8);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 2); // should not fit entirely
@@ -410,7 +399,8 @@ mod test {
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
+
         assert_eq!(buffer.rd_ptr, 0);
         assert_eq!(buffer.wr_ptr, 16);
 
@@ -422,22 +412,22 @@ mod test {
         assert_eq!(read.unwrap(), 7);
         assert_eq!(buffer.rd_ptr, 0);
         assert_eq!(buffer.wr_ptr, 9);
-        assert_eq!(buffer.read_available(), 9);
         assert_eq!(buffer.write_available(), 7);
+        assert_eq!(buffer.read_available_bits(), 9 * 8);
 
         // Read 7 bytes
         let read = buffer.read(&mut dest);
         assert_eq!(read.unwrap(), 7);
         assert_eq!(buffer.rd_ptr, 0);
         assert_eq!(buffer.wr_ptr, 2);
-        assert_eq!(buffer.read_available(), 2);
         assert_eq!(buffer.write_available(), 14);
+        assert_eq!(buffer.read_available_bits(), 2 * 8);
 
         // Read 2 bytes
         let read = buffer.read(&mut dest);
         assert_eq!(read.unwrap(), 2);
-        assert_eq!(buffer.read_available(), 0);
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
     }
 
     #[test]
@@ -448,8 +438,9 @@ mod test {
         let mut buffer = Buffer::<16>::default();
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
@@ -475,13 +466,14 @@ mod test {
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         // discard
         buffer.discard_bytes_mut(2);
         assert_eq!(buffer.wr_ptr, 14);
         assert_eq!(buffer.write_available(), 2);
-        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(buffer.read_available_bits(), 14 * 8);
+
         assert_eq!(
             buffer.slice(),
             &[3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
@@ -495,7 +487,8 @@ mod test {
         buffer.discard_bytes_mut(2);
         assert_eq!(buffer.wr_ptr, 12);
         assert_eq!(buffer.write_available(), 4);
-        assert_eq!(buffer.read_available(), 12);
+        assert_eq!(buffer.read_available_bits(), 12 * 8);
+
         assert_eq!(
             buffer.slice(),
             &[5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
@@ -509,34 +502,36 @@ mod test {
         buffer.discard_bytes_mut(1);
         assert_eq!(buffer.wr_ptr, 11);
         assert_eq!(buffer.write_available(), 5);
-        assert_eq!(buffer.read_available(), 11);
+        assert_eq!(buffer.read_available_bits(), 11 * 8);
+
         // TODO verify internal
 
         buffer.discard_bytes_mut(1);
         assert_eq!(buffer.wr_ptr, 10);
         assert_eq!(buffer.write_available(), 6);
-        assert_eq!(buffer.read_available(), 10);
+        assert_eq!(buffer.read_available_bits(), 10 * 8);
 
         buffer.discard_bytes_mut(2);
         assert_eq!(buffer.write_available(), 8);
-        assert_eq!(buffer.read_available(), 8);
+        assert_eq!(buffer.read_available_bits(), 8 * 8);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         // discard all but one
         buffer.discard_bytes_mut(15);
         assert_eq!(buffer.write_available(), 15);
-        assert_eq!(buffer.read_available(), 1);
+        assert_eq!(buffer.read_available_bits(), 8);
 
         // emptied
         buffer.discard_bytes_mut(1);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
-        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         // fill
         let written = buffer.write(&source);
@@ -544,12 +539,13 @@ mod test {
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         // discard entirely
         buffer.discard_bytes_mut(16);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
-        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.read_available_bits(), 0);
     }
 
     #[test]
@@ -560,8 +556,9 @@ mod test {
         let mut buffer = Buffer::<16>::default();
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
@@ -587,13 +584,13 @@ mod test {
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         // discard
         buffer.discard_bits_mut(16);
         assert_eq!(buffer.wr_ptr, 14);
         assert_eq!(buffer.write_available(), 2);
-        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(buffer.read_available_bits(), 14 * 8);
         assert_eq!(
             buffer.slice(),
             &[3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
@@ -607,7 +604,8 @@ mod test {
         buffer.discard_bits_mut(16);
         assert_eq!(buffer.wr_ptr, 12);
         assert_eq!(buffer.write_available(), 4);
-        assert_eq!(buffer.read_available(), 12);
+        assert_eq!(buffer.read_available_bits(), 12 * 8);
+
         assert_eq!(
             buffer.slice(),
             &[5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
@@ -621,34 +619,35 @@ mod test {
         buffer.discard_bits_mut(8);
         assert_eq!(buffer.wr_ptr, 11);
         assert_eq!(buffer.write_available(), 5);
-        assert_eq!(buffer.read_available(), 11);
+        assert_eq!(buffer.read_available_bits(), 11 * 8);
         // TODO verify internal
 
         buffer.discard_bits_mut(8);
         assert_eq!(buffer.wr_ptr, 10);
         assert_eq!(buffer.write_available(), 6);
-        assert_eq!(buffer.read_available(), 10);
+        assert_eq!(buffer.read_available_bits(), 10 * 8);
 
         buffer.discard_bits_mut(16);
         assert_eq!(buffer.write_available(), 8);
-        assert_eq!(buffer.read_available(), 8);
+        assert_eq!(buffer.read_available_bits(), 8 * 8);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
 
         // discard all but one
         buffer.discard_bits_mut(15 * 8);
         assert_eq!(buffer.write_available(), 15);
-        assert_eq!(buffer.read_available(), 1);
+        assert_eq!(buffer.read_available_bits(), 8);
 
         // emptied
         buffer.discard_bits_mut(8);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
-        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.read_available_bits(), 0);
     }
 
     #[test]
@@ -659,8 +658,9 @@ mod test {
         let mut buffer = Buffer::<16>::default();
 
         // empty at this point
-        assert_eq!(buffer.read_available(), 0);
+        assert!(buffer.is_empty());
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
@@ -686,13 +686,21 @@ mod test {
 
         // full at this point
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
+
+        assert_eq!(buffer.wr_ptr, 16);
+        assert_eq!(buffer.wr_offset, 0);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 0);
 
         // discard
         buffer.discard_bits_mut(1);
         assert_eq!(buffer.write_available(), 0);
-        assert_eq!(buffer.write_available_bits(), 1);
-        assert_eq!(buffer.read_available(), 15);
+        assert_eq!(buffer.read_available_bits(), 16 * 8);
+        assert_eq!(buffer.wr_ptr, 16);
+        assert_eq!(buffer.wr_offset, 1);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.rd_offset, 0);
 
         assert_eq!(
             buffer.view().into_iter().collect::<Vec<_>>(),
@@ -701,7 +709,7 @@ mod test {
         
         buffer.discard_bits_mut(2);
         assert_eq!(buffer.write_available(), 2);
-        assert_eq!(buffer.read_available(), 14);
+        assert_eq!(buffer.read_available_bits(), 14);
         
         assert_eq!(
             buffer.view().into_iter().collect::<Vec<_>>(),
