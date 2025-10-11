@@ -1,7 +1,14 @@
+mod view;
+pub use view::*;
+
 /// [Buffer] storage that helps capture and decode
-/// a real-time binary stream. It implements [std::io::Read]
-/// for bytewise operation, it provides also a [BufferView] for
-/// binary rotation and bitwise decoding made easy.
+/// a real-time binary stream. You should adapt the total pre-allocated
+/// depth to the protocol being dealt with.
+///
+/// [Buffer] implements [std::io::Read] and [std::io::Write]
+/// for convenient and easy system interfacing. It also provides
+/// internal rotations (binary shifts) and bit by bit indexing
+/// and iteration, by obtaining a [BufferView].
 #[derive(Clone, Copy, PartialEq)]
 pub struct Buffer<const M: usize> {
     /// Bytes storage
@@ -96,6 +103,11 @@ impl<const M: usize> std::io::Write for Buffer<M> {
 }
 
 impl<const M: usize> Buffer<M> {
+    /// Returns the total storage capacity of this [Buffer]
+    pub const fn capacity(&self) -> usize {
+        M
+    }
+
     /// Returns total number of bytes available to read.
     pub fn read_available(&self) -> usize {
         self.wr_ptr - self.rd_ptr
@@ -106,17 +118,36 @@ impl<const M: usize> Buffer<M> {
         M - self.wr_ptr
     }
 
-    /// Returns a slice view of the internal bytes
+    /// Returns a slice view of the internal bytes.
+    /// Prefer the [BufferView] which supports bitwise rotation without further allocation.
     pub fn slice(&self) -> &[u8; M] {
         &self.inner
     }
 
-    /// Discard the selected number of bytes like they were consumed.
-    /// They will no longer be proposed to following read operations or sliced view.
+    /// Obtain a [BufferView] (buffer snapshot) at the current state.
+    ///
+    /// To offset and adjust the [BufferView], you can either
+    /// - adapt the initial state first, assuming you already determined
+    /// that irrelevant bits were being stored, either using
+    ///    - [Self::discard_bytes_mut] for bytewise pre adaptation
+    ///    - [Self::discard_bits_mut] for bitwise pre adaptation
+    /// All prediscarded bytes are trashed and will not be viewable
+    /// at the time the [BufferView] is obtained.
+    ///
+    /// - or use the proposed [BufferView] byte or bit iteration methods.
+    pub fn view<'a>(&'a self) -> BufferView<'a, M> {
+        BufferView::from_slice(&self.inner)
+    }
+
+    /// Discard the selected number of bytes, like they were consumed
+    /// by a read operation. The bytes are trashed and will no longer be viewable
+    /// (not proposed to following read operations).
     pub fn discard_bytes_mut(&mut self, bytes: usize) {
         let avail = self.read_available();
         let size = if bytes > avail { avail } else { bytes };
 
+        // internal swap:
+        // shift internal buffer, preserving remaining data while accepting new writes.
         self.inner.copy_within(self.rd_ptr + size..self.wr_ptr, 0);
 
         self.wr_ptr -= size;
@@ -126,6 +157,17 @@ impl<const M: usize> Buffer<M> {
         } else {
             self.rd_ptr = 0;
         }
+    }
+
+    /// Discard the selected number of bits, like they were consumed
+    /// by a read operation. The bits are trashed and will no longer be viewable
+    /// (not proposed to following read operations).
+    pub fn discard_bits_mut(&mut self, bits: usize) {
+        let bytes_avail = self.read_available();
+        let (bytes, bits) = (bits / 8, bits % 8);
+
+        // internal bytewise swap:
+        // shift internal buffer, preserving remaining data while accepting new writes.
     }
 
     /// Shfits internal buffer to the right.
@@ -159,12 +201,20 @@ mod test {
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0],
+        );
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8],
         );
 
         // full at this point
@@ -214,6 +264,10 @@ mod test {
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 7); // should all fit
@@ -222,6 +276,10 @@ mod test {
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
         );
 
         // still not full at this point
@@ -251,6 +309,10 @@ mod test {
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
+        );
 
         assert_eq!(buffer.read_available(), 7);
         assert_eq!(buffer.write_available(), 9);
@@ -261,6 +323,10 @@ mod test {
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
+        );
 
         assert_eq!(buffer.read_available(), 14);
         assert_eq!(buffer.write_available(), 2);
@@ -270,6 +336,10 @@ mod test {
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 1, 2]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 1, 2]
         );
 
         // full at this point
@@ -321,12 +391,20 @@ mod test {
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0],
+        );
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 8); // should all fit
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]
         );
 
         // full at this point
@@ -342,6 +420,10 @@ mod test {
             buffer.slice(),
             &[3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
         );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8]
+        );
 
         // discard
         buffer.discard_bytes_mut(2);
@@ -351,6 +433,10 @@ mod test {
         assert_eq!(
             buffer.slice(),
             &[5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
+        );
+        assert_eq!(
+            buffer.view().into_iter().collect::<Vec<_>>(),
+            vec![5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 7, 8, 7, 8]
         );
 
         // discard
