@@ -39,21 +39,25 @@ impl<const M: usize> std::io::Read for Buffer<M> {
 
         let ret = if dest_size < avail {
             dest.copy_from_slice(&self.inner[self.rd_ptr..self.rd_ptr + dest_size]);
+
+            // internal swap:
+            // shift internal buffer, preserving remaining data while accepting new writes.
+            self.inner
+                .copy_within(self.rd_ptr + dest_size..self.wr_ptr, 0);
+
+            self.wr_ptr -= self.rd_ptr;
+            self.wr_ptr -= dest_size;
+
             Ok(dest_size)
         } else {
             dest[..avail].copy_from_slice(&self.inner[self.rd_ptr..self.rd_ptr + avail]);
+
+            self.wr_ptr = 0;
+
             Ok(avail)
         };
 
-        // internal swap:
-        // shift internal buffer, preserving remaining data, but accepting new writes.
-        self.inner
-            .copy_within(self.rd_ptr + dest_size..self.wr_ptr, 0);
-
-        self.wr_ptr -= self.rd_ptr;
-        self.wr_ptr -= dest_size;
         self.rd_ptr = 0;
-
         ret
     }
 }
@@ -182,9 +186,13 @@ mod test {
         // empty at this point
         assert_eq!(buffer.read_available(), 0);
         assert_eq!(buffer.write_available(), 16);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 0);
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 7); // should all fit
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 7);
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -192,6 +200,8 @@ mod test {
 
         let written = buffer.write(&source);
         assert_eq!(written.unwrap(), 7); // should all fit
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 14);
         assert_eq!(
             buffer.slice(),
             &[1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 0, 0]
@@ -248,6 +258,8 @@ mod test {
         // full at this point
         assert_eq!(buffer.write_available(), 0);
         assert_eq!(buffer.read_available(), 16);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 16);
 
         let written = buffer.write(&source);
         assert!(written.is_err()); // should not accept at this point
@@ -255,19 +267,23 @@ mod test {
         // Read 7 bytes
         let read = buffer.read(&mut dest);
         assert_eq!(read.unwrap(), 7);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 9);
         assert_eq!(buffer.read_available(), 9);
         assert_eq!(buffer.write_available(), 7);
 
         // Read 7 bytes
         let read = buffer.read(&mut dest);
         assert_eq!(read.unwrap(), 7);
+        assert_eq!(buffer.rd_ptr, 0);
+        assert_eq!(buffer.wr_ptr, 2);
         assert_eq!(buffer.read_available(), 2);
         assert_eq!(buffer.write_available(), 14);
 
-        // // Read 2 bytes
-        // let read = buffer.read(&mut dest);
-        // assert_eq!(read.unwrap(), 2);
-        // assert_eq!(buffer.read_available(), 0);
-        // assert_eq!(buffer.write_available(), 16);
+        // Read 2 bytes
+        let read = buffer.read(&mut dest);
+        assert_eq!(read.unwrap(), 2);
+        assert_eq!(buffer.read_available(), 0);
+        assert_eq!(buffer.write_available(), 16);
     }
 }
