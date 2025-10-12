@@ -486,7 +486,7 @@ impl GpsQzssFrame1 {
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsBuffer, GpsQzssTelemetry},
+        gps::{GpsBuffer, GpsQzssFrame1, GpsQzssTelemetry},
         Buffering, Message,
     };
 
@@ -518,12 +518,16 @@ mod test {
                 900, 1, 2, 3, 10, 24_992, -1.0E-9, -7.0E-9, 8.0E-13, 9.0E-15, true, 10, 11, 12, 13,
             ),
         ] {
+            let iodc_lsb = (iodc & 0xff) as u8;
+            let iodc_msb = (iodc >> 8) as u8;
+
             let frame = GpsQzssFrame1 {
                 week,
                 ca_or_p_l2,
                 ura,
                 health,
-                iodc,
+                iodc_lsb,
+                iodc_msb,
                 toc,
                 tgd: tgd,
                 af0: af0,
@@ -543,19 +547,19 @@ mod test {
                 panic!("failed to decode GPS EPH-1: {}", e);
             });
 
-            assert_eq!(decoded.ura, frame1.ura);
-            assert_eq!(decoded.week, frame1.week);
-            assert_eq!(decoded.toc, frame1.toc);
-            assert_eq!(decoded.ca_or_p_l2, frame1.ca_or_p_l2);
-            assert_eq!(decoded.l2_p_data_flag, frame1.l2_p_data_flag);
-            assert_eq!(decoded.reserved_word4, frame1.reserved_word4);
-            assert_eq!(decoded.reserved_word5, frame1.reserved_word5);
-            assert_eq!(decoded.reserved_word6, frame1.reserved_word6);
-            assert_eq!(decoded.reserved_word7, frame1.reserved_word7);
+            assert_eq!(decoded.ura, frame.ura);
+            assert_eq!(decoded.week, frame.week);
+            assert_eq!(decoded.toc, frame.toc);
+            assert_eq!(decoded.ca_or_p_l2, frame.ca_or_p_l2);
+            assert_eq!(decoded.l2_p_data_flag, frame.l2_p_data_flag);
+            assert_eq!(decoded.reserved_word4, frame.reserved_word4);
+            assert_eq!(decoded.reserved_word5, frame.reserved_word5);
+            assert_eq!(decoded.reserved_word6, frame.reserved_word6);
+            assert_eq!(decoded.reserved_word7, frame.reserved_word7);
 
-            assert!((decoded.af0 - frame1.af0).abs() < 1E-10);
-            assert!((decoded.af1 - frame1.af1).abs() < 1E-14);
-            assert!((decoded.af2 - frame1.af2).abs() < 1E-14);
+            assert!((decoded.af0 - frame.af0).abs() < 1E-10);
+            assert!((decoded.af1 - frame.af1).abs() < 1E-14);
+            assert!((decoded.af2 - frame.af2).abs() < 1E-14);
         }
     }
 
