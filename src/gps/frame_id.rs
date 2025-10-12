@@ -1,6 +1,15 @@
+#[cfg(feature = "log")]
+use log::error;
+
 use crate::gps::GpsError;
 
-#[derive(Debug, Default, PartialEq, Copy, Clone)]
+use bitbuffer::{
+    BigEndian, BitError, BitRead, BitReadSized, BitReadStream, BitWrite, BitWriteSized,
+    BitWriteStream, Endianness, LittleEndian,
+};
+
+#[derive(Debug, Default, PartialEq, Copy, Clone, BitReadSized, BitWriteSized)]
+#[discriminant_bits = 3]
 pub enum GpsQzssFrameId {
     #[default]
     /// GPS / QZSS Ephemeris subframe #1
@@ -11,7 +20,81 @@ pub enum GpsQzssFrameId {
 
     /// GPS / QZSS Ephemeris subframe #3
     Ephemeris3,
+
+    /// GPS / QZSS Almanach / Status subframe #4
+    Almanach4,
+
+    /// GPS / QZSS Almanach / Status subframe #5
+    Almanach5,
 }
+
+// impl BitReadSized<'_, BigEndian> for GpsQzssFrameId {
+//     fn read(stream: &mut BitReadStream<'_, BigEndian>, size: usize) -> Result<Self,BitError> {
+//         let bits = stream.read_sized::<u8>(size)?;
+//
+//         #[cfg(not(feature = "log"))]
+//         let decoded = Self::decode(bits)
+//             .map_err(|_| {
+//                 BitError::TooManyBits {
+//                     requested: 0,
+//                     max: 0,
+//                 }
+//             })?;
+//
+//         #[cfg(feature = "log")]
+//         let decoded = Self::decode(bits)
+//             .map_err(|e| {
+//                 error!("unknown GPS frame ID: {}", bits);
+//
+//                 BitError::TooManyBits {
+//                     requested: 0,
+//                     max: 0,
+//                 }
+//             })?;
+//
+//         Ok(decoded)
+//     }
+// }
+//
+// impl BitReadSized<'_, LittleEndian> for GpsQzssFrameId {
+//     fn read(stream: &mut BitReadStream<'_, LittleEndian>, size: usize) -> Result<Self, BitError> {
+//         let bits = stream.read_sized::<u8>(size)?;
+//
+//         #[cfg(not(feature = "log"))]
+//         let decoded = Self::decode(bits)
+//             .map_err(|_| {
+//                 BitError::TooManyBits {
+//                     requested: 0,
+//                     max: 0,
+//                 }
+//             })?;
+//
+//         #[cfg(feature = "log")]
+//         let decoded = Self::decode(bits)
+//             .map_err(|e| {
+//                 error!("unknown GPS frame ID: {}", bits);
+//
+//                 BitError::TooManyBits {
+//                     requested: 0,
+//                     max: 0,
+//                 }
+//             })?;
+//
+//         Ok(decoded)
+//     }
+// }
+//
+// impl BitWriteSized<BigEndian> for GpsQzssFrameId {
+//     fn write_sized(&self, stream: &mut BitWriteStream<'_, BigEndian>, size: usize) -> Result<(), BitError> {
+//         stream.write_int::<u8>(self.encode(), size)
+//     }
+// }
+//
+// impl BitWriteSized<LittleEndian> for GpsQzssFrameId {
+//     fn write_sized(&self, stream: &mut BitWriteStream<'_, LittleEndian>, size: usize) -> Result<(), BitError> {
+//         stream.write_int::<u8>(self.encode(), size)
+//     }
+// }
 
 #[cfg(feature = "std")]
 impl std::fmt::Display for GpsQzssFrameId {
@@ -20,6 +103,8 @@ impl std::fmt::Display for GpsQzssFrameId {
             Self::Ephemeris1 => write!(f, "EPH-1"),
             Self::Ephemeris2 => write!(f, "EPH-2"),
             Self::Ephemeris3 => write!(f, "EPH-3"),
+            Self::Almanach4 => write!(f, "ALM-4"),
+            Self::Almanach5 => write!(f, "ALM-5"),
         }
     }
 }
@@ -31,6 +116,8 @@ impl GpsQzssFrameId {
             1 => Ok(Self::Ephemeris1),
             2 => Ok(Self::Ephemeris2),
             3 => Ok(Self::Ephemeris3),
+            4 => Ok(Self::Almanach4),
+            5 => Ok(Self::Almanach5),
             _ => Err(GpsError::UnknownFrameType),
         }
     }
@@ -41,6 +128,8 @@ impl GpsQzssFrameId {
             Self::Ephemeris1 => 1,
             Self::Ephemeris2 => 2,
             Self::Ephemeris3 => 3,
+            Self::Almanach4 => 4,
+            Self::Almanach5 => 5,
         }
     }
 }

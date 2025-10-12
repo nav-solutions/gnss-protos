@@ -65,8 +65,8 @@ pub use errors::GpsError;
 mod frame_id;
 pub use frame_id::GpsQzssFrameId;
 
-// mod how;
-// pub use how::GpsQzssHow;
+mod how;
+pub use how::GpsQzssHow;
 
 mod tlm;
 pub use tlm::GpsQzssTelemetry;

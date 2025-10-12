@@ -75,13 +75,6 @@ impl Message for GpsQzssTelemetry {
 
         let mut stream = buffer.bit_write_stream();
         stream.write(self)?;
-
-        // stream.write_int(GPS_PREAMBLE_BYTE, 8)?;
-        // stream.write_int(self.message & 0x3fff, 14)?;
-        // stream.write_bool(self.integrity)?;
-        // stream.write_bool(self.reserved_bit)?;
-        // stream.write_int(self.parity, 6)?;
-
         Ok(encoding_size)
     }
 
@@ -174,7 +167,6 @@ mod test {
             assert!(tlm.encode(&mut tx).is_ok(), "failed to encode frame");
 
             let decoded = GpsQzssTelemetry::decode(&tx).unwrap_or_else(|e| {
-                println!("WR={} RD={}", tx.inner.wr_ptr, tx.inner.rd_ptr);
                 panic!("GPS TLM reciprocal failed: {}", e);
             });
 

@@ -1,9 +1,12 @@
 use crate::{
-    gps::{GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS},
-    BufferingError, Message,
+    gps::{GpsBuffer, GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS},
+    Buffering, BufferingError, Message,
 };
 
-use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite, BitWriteStream, Endianness};
+use bitbuffer::{
+    BigEndian, BitRead, BitReadBuffer, BitReadSized, BitWrite, BitWriteSized, BitWriteStream,
+    Endianness,
+};
 
 use crate::gps::GpsQzssFrameId;
 
@@ -12,11 +15,12 @@ use crate::gps::GpsQzssTelemetry;
 
 /// [GpsQzssHow] (GPS Hand Over Word) marks the beginning of each frame, following [GpsQzssTelemetry],
 /// and defines the content to follow.
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, BitRead, BitWrite)]
 pub struct GpsQzssHow {
     /// TOW: elapsed time within current GPS week (in seconds),
     /// at the instant of transmission of the 1st bit of the next frame to follow
     /// this [GpsQzssHow] word.
+    #[size = 17]
     pub tow: u32,
 
     /// The alert bit serves two purposes.
@@ -32,73 +36,60 @@ pub struct GpsQzssHow {
     /// For other satellite, this indicates A/S is active.
     pub anti_spoofing: bool,
 
+    #[size = 3]
     /// Following Frame ID (to decode following data words)
     pub frame_id: GpsQzssFrameId,
 
-    /// 6 Parity bits
+    /// Parity
+    #[size = 6]
     parity: u8,
 }
 
+impl Default for GpsQzssHow {
+    /// Generates a default Null [GpsQzssHow] (Eph-1).
+    fn default() -> Self {
+        Self {
+            tow: Default::default(),
+            alert: Default::default(),
+            anti_spoofing: Default::default(),
+            frame_id: Default::default(),
+            parity: Default::default(), // TODO
+        }
+    }
+}
+
 impl Message for GpsQzssHow {
-    type Err = GpsError; 
-    
+    type Err = GpsError;
+
+    type B = GpsBuffer;
+
     fn encoding_size(&self) -> usize {
         4
     }
 
     fn encoding_bitsize(&self) -> usize {
-        GPS_WORD_BITS
+        30
     }
-    
-    /// [GpsQzssHow] decoding attempt from a burst of
-    /// GPS bits, where first received bits were stored in MSB position.
-    fn decode(buf: &[u8]) -> Result<Self, GpsError> {
-        let buf = BitReadBuffer::new(buf, BigEndian);
 
-        let tow = buf.read_int::<u8>(0, 17)? * 3 / 2;
-        let alert = buf.read_bool(18)?;
-        let anti_spoofing = buf.read_bool(19)?;
-        let frame_id = buf.read_int::<u8>(20, 3)?;
-        let parity = buf.read_int::<u8>(24, 6);
-        
-        let frame_id = GpsFrameId::decode(frame_id)?;
-
-        Ok(Self {
-            tow,
-            alert,
-            frame_id,
-            parity,
-            anti_spoofing,
-        })
+    fn decode(buffer: &GpsBuffer) -> Result<Self, Self::Err> {
+        let mut stream = buffer.bit_read_stream();
+        let s = stream.read::<Self>()?;
+        // TODO check parity
+        Ok(s)
     }
 
     /// Encodes this [GpsQzssHow] as big-endian stream,
     /// last byte will be padded because a GPS word is not aligned to [u8].
-    fn encode(&self, buf: &mut [u8]) -> Result<usize, GpsError> {
-        let len = buf.len();
+    fn encode(&self, buffer: &mut GpsBuffer) -> Result<usize, Self::Err> {
+        let capacity = buffer.write_capacity();
         let encoding_size = self.encoding_size();
 
-        if len < encoding_size {
+        if capacity < encoding_size {
             return Err(GpsError::Buffering(BufferingError::StorageFull));
         }
 
-        let tow = (self.tow  * 2 / 3) 0x1ffff;
-
-        encoded[3] |= ((tow & 0x1_8000) >> 15) as u8;
-        encoded[4] = ((tow & 0x0_7f80) >> 7) as u8;
-        encoded[5] = (tow & 0x0_007f) as u8;
-        encoded[5] <<= 1;
-
-        if self.how.alert {
-            encoded[5] |= 0x01;
-        }
-
-        if self.how.anti_spoofing {
-            encoded[6] |= 0x80;
-        }
-
-        buf[3] = (self.parity & 0x003f) << 2;
-
+        let mut stream = buffer.bit_write_stream();
+        stream.write(self)?;
         Ok(encoding_size)
     }
 }
@@ -177,51 +168,16 @@ impl GpsQzssHow {
     pub fn ephemeris3() -> Self {
         Self::default().with_frame_id(GpsQzssFrameId::Ephemeris3)
     }
-
-    /// Decodes [GpsQzssHow] from this [GpsDataWord].
-    /// Subframe must be supported for this to work.
-    pub(crate) fn from_word(word: GpsDataWord) -> Result<Self, GpsError> {
-        let value = word.value();
-
-        let zcount = (value & ZCOUNT_MASK) >> ZCOUNT_SHIFT;
-        let frame_id = GpsQzssFrameId::decode(((value & FRAMEID_MASK) >> FRAMEID_SHIFT) as u8)?;
-        let alert = (value & ALERT_MASK) > 0;
-        let anti_spoofing = (value & AS_MASK) > 0;
-
-        Ok(Self {
-            alert,
-            frame_id,
-            anti_spoofing,
-            tow: zcount * 3 / 2,
-        })
-    }
-
-    /// Encodes this [GpsQzssHow] word as [GpsDataWord].
-    pub(crate) fn to_word(&self) -> GpsDataWord {
-        let mut value = 0u32;
-
-        if self.alert {
-            value |= ALERT_MASK;
-        }
-
-        if self.anti_spoofing {
-            value |= AS_MASK;
-        }
-
-        value |= ((self.tow * 2 / 3) & 0x1ffff) << ZCOUNT_SHIFT;
-        value += (self.frame_id.encode() as u32) << FRAMEID_SHIFT;
-
-        // TODO parity
-
-        value <<= 2;
-
-        GpsDataWord::from(value)
-    }
 }
 
 #[cfg(test)]
-mod how {
-    use crate::gps::{GpsDataWord, GpsQzssFrameId, GpsQzssHow};
+mod test {
+    use crate::{
+        gps::{GpsBuffer, GpsQzssFrameId, GpsQzssHow},
+        Buffering, Message,
+    };
+
+    use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite};
 
     #[test]
     fn encoding() {
@@ -235,12 +191,15 @@ mod how {
                 frame_id,
                 anti_spoofing,
                 alert,
+                parity: 0, // TODO
             };
 
-            let gps_word = how.to_word();
+            let mut tx = GpsBuffer::default();
 
-            let decoded = GpsQzssHow::from_word(gps_word).unwrap_or_else(|e| {
-                panic!("failed to decode gps-how from {:?} : {}", gps_word, e);
+            assert!(how.encode(&mut tx).is_ok(), "failed to encode frame");
+
+            let decoded = GpsQzssHow::decode(&tx).unwrap_or_else(|e| {
+                panic!("GPS HOW reciprocal failed: {}", e);
             });
 
             assert_eq!(decoded.tow, tow);
