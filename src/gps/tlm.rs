@@ -93,10 +93,8 @@ impl GpsQzssTelemetry {
 mod telemetry {
     use crate::{
         gps::{GpsBuffer, GpsQzssTelemetry},
-        Buffering, Message,
+        Buffering,
     };
-
-    use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite};
 
     #[test]
     fn encoding() {

@@ -4,6 +4,9 @@ use crate::gps::{
     GpsQzssFrame1,
 };
 
+#[cfg(test)]
+use crate::gps::GpsQzssFrameId;
+
 use bitbuffer::{BigEndian, BitError, BitWrite, BitWriteStream};
 
 /// GPS / QZSS Interpreted subframes
@@ -96,10 +99,7 @@ impl GpsQzssSubframe {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        gps::{GpsBuffer, GpsQzssSubframe},
-        Buffering, Message,
-    };
+    use crate::gps::{GpsBuffer, GpsQzssSubframe};
 
     #[test]
     fn default_reciprocal() {

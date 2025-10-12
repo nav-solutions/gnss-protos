@@ -130,10 +130,8 @@ impl GpsQzssHow {
 mod test {
     use crate::{
         gps::{GpsBuffer, GpsQzssFrameId, GpsQzssHow},
-        Buffering, Message,
+        Buffering,
     };
-
-    use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite};
 
     #[test]
     fn encoding() {

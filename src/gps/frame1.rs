@@ -496,11 +496,9 @@ impl GpsQzssFrame1 {
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsBuffer, GpsQzssFrame1, GpsQzssTelemetry},
-        Buffering, Message,
+        gps::{GpsBuffer, GpsQzssFrame1},
+        Buffering,
     };
-
-    use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite};
 
     #[test]
     fn encoding() {

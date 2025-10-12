@@ -5,7 +5,7 @@ use std::{fs::File, io::Write};
 use crate::{
     gps::{
         GpsBuffer, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow,
-        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BYTES,
     },
     tests::init_logger,
     Buffering, Decoder, Message,
