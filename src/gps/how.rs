@@ -58,42 +58,6 @@ impl Default for GpsQzssHow {
     }
 }
 
-impl Message for GpsQzssHow {
-    type Err = GpsError;
-
-    type B = GpsBuffer;
-
-    fn encoding_size(&self) -> usize {
-        4
-    }
-
-    fn encoding_bitsize(&self) -> usize {
-        30
-    }
-
-    fn decode(buffer: &GpsBuffer) -> Result<Self, Self::Err> {
-        let mut stream = buffer.bit_read_stream();
-        let s = stream.read::<Self>()?;
-        // TODO check parity
-        Ok(s)
-    }
-
-    /// Encodes this [GpsQzssHow] as big-endian stream,
-    /// last byte will be padded because a GPS word is not aligned to [u8].
-    fn encode(&self, buffer: &mut GpsBuffer) -> Result<usize, Self::Err> {
-        let capacity = buffer.write_capacity();
-        let encoding_size = self.encoding_size();
-
-        if capacity < encoding_size {
-            return Err(GpsError::Buffering(BufferingError::StorageFull));
-        }
-
-        let mut stream = buffer.bit_write_stream();
-        stream.write(self)?;
-        Ok(encoding_size)
-    }
-}
-
 #[cfg(feature = "std")]
 impl std::fmt::Display for GpsQzssHow {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -195,10 +159,11 @@ mod test {
             };
 
             let mut tx = GpsBuffer::default();
+            let mut writer = tx.bit_write_stream();
+            assert!(writer.write(&how).is_ok(), "failed to encode frame");
 
-            assert!(how.encode(&mut tx).is_ok(), "failed to encode frame");
-
-            let decoded = GpsQzssHow::decode(&tx).unwrap_or_else(|e| {
+            let mut reader = tx.bit_read_stream();
+            let decoded = reader.read::<GpsQzssHow>().unwrap_or_else(|e| {
                 panic!("GPS HOW reciprocal failed: {}", e);
             });
 

@@ -84,15 +84,13 @@ pub trait Message: Copy + Clone + Default + PartialEq {
     /// For aligned protocol, this value strictly equals [Self::encoding_size].
     fn encoding_bitsize(&self) -> usize;
 
-    /// [Message] encoding attempt to mutable [Self::B].
+    /// [Message] encoding attempt to mutable [Self::B],
+    /// which must fit completely in current buffer state.
     ///
     /// Returns total number of encoded bytes on success,
     /// depending on protocol, this may include padding bits.
     /// Returns [Self::Err] on encoding issues.
     fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err>;
-
-    /// [Message] decoding attempt from readable [Self::B].
-    fn decode(buffer: &Self::B) -> Result<Self, Self::Err>;
 }
 
 /// Two's complement parsing & interpretation.

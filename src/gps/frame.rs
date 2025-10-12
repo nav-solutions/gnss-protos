@@ -1,4 +1,12 @@
-use crate::gps::{GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry};
+use crate::{
+    gps::{
+        GpsBuffer, GpsError, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
+        GPS_FRAME_BITS, GPS_FRAME_BYTES,
+    },
+    Buffering, Message,
+};
+
+use bitbuffer::{BitRead, BitWrite};
 
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -12,6 +20,31 @@ pub struct GpsQzssFrame {
 
     /// [GpsQzssSubframe] depends on associated [GpsQzssHow].
     pub subframe: GpsQzssSubframe,
+}
+
+impl Message for GpsQzssFrame {
+    type Err = GpsError;
+    type B = GpsBuffer;
+
+    fn encoding_size(&self) -> usize {
+        GPS_FRAME_BYTES
+    }
+
+    fn encoding_bitsize(&self) -> usize {
+        GPS_FRAME_BITS
+    }
+
+    fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err> {
+        let mut stream = buffer.bit_write_stream();
+        stream.write(&self.telemetry)?;
+        stream.write(&self.how)?;
+
+        match self.subframe {
+            GpsQzssSubframe::Ephemeris1(eph1) => stream.write(&eph1)?,
+        }
+
+        Ok(GPS_FRAME_BYTES)
+    }
 }
 
 impl GpsQzssFrame {
@@ -42,10 +75,13 @@ impl GpsQzssFrame {
 
         match subframe {
             GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
-            GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
-            GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
+            // GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
+            // GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
         }
 
         self
     }
 }
+
+#[cfg(test)]
+mod test {}

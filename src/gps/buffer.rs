@@ -5,7 +5,7 @@ const CAPACITY: usize = 1024;
 
 use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream, Endianness};
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub struct GpsBuffer {
     pub(crate) inner: StreamBuffer<CAPACITY>,
 }

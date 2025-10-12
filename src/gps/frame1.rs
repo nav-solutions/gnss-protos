@@ -145,14 +145,51 @@ impl PartialEq for GpsQzssFrame1 {
     }
 }
 
-impl BitReadSized<'_, BigEndian> for GpsQzssFrame1 {
-    fn read(stream: &mut BitReadStream<'_, BigEndian>, size: usize) -> Result<Self, BitError> {
+impl BitWrite<BigEndian> for GpsQzssFrame1 {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(self.week, 10)?;
+        stream.write_int(self.ca_or_p_l2, 2)?;
+        stream.write_int(self.ura, 4)?;
+        stream.write_int(self.health, 6)?;
+        stream.write_int(self.iodc_msb, 2)?;
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        stream.write_bool(self.l2_p_data_flag)?;
+        stream.write_int(self.reserved_word4, 23)?;
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        stream.write_int(self.reserved_word5, 24)?;
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        stream.write_int(self.reserved_word6, 24)?;
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        stream.write_int(self.reserved_word7, 16)?; // TODO
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        // stream.write_float(self.tgd, 8)?; // TODO (scaling)
+        stream.write_int(self.iodc_lsb, 8)?;
+        stream.write_int(self.toc, 16)?; // TODO (scaling)
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        // stream.write_float(self.af2, 8)?; // TODO (scaling)
+        // stream.write_float(self.af1, 16)?; // TODO (scaling)
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        // stream.write_float(self.af0, 2)?; // TODO (scaling)
+        stream.write_int(0, 2)?; // TODO (parity)
+        stream.write_int(0, 6) // TODO (parity)
+    }
+}
+
+impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let week = stream.read_int::<u16>(10)?;
         let ca_or_p_l2 = stream.read_int::<u8>(2)?;
         let ura = stream.read_int::<u8>(4)?;
         let health = stream.read_int::<u8>(6)?;
         let iodc_msb = stream.read_int::<u8>(2)?;
-        let parity = stream.read_int::<u8>(6)?;
+        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
         let l2_p_data_flag = stream.read_bool()?;
         let reserved_word4 = stream.read_int::<u32>(23)?;
@@ -198,27 +235,6 @@ impl BitReadSized<'_, BigEndian> for GpsQzssFrame1 {
             af1: 0.0,
             af0: 0.0,
         })
-    }
-}
-
-impl Message for GpsQzssFrame1 {
-    type Err = GpsError;
-    type B = GpsBuffer;
-
-    fn encoding_size(&self) -> usize {
-        38
-    }
-
-    fn encoding_bitsize(&self) -> usize {
-        300
-    }
-
-    fn encode(&self, buffer: &mut GpsBuffer) -> Result<usize, Self::Err> {
-        Ok(0)
-    }
-
-    fn decode(buffer: &GpsBuffer) -> Result<Self, Self::Err> {
-        Ok(Self::default())
     }
 }
 
@@ -540,10 +556,13 @@ mod test {
                 reserved_word7,
             };
 
-            let mut tx = GpsBuffer::default();
-            assert!(frame.encode(&mut tx).is_ok(), "failed to encode frame");
+            let mut buf = GpsBuffer::default();
+            let mut writer = buf.bit_write_stream();
+            assert!(writer.write(&frame).is_ok(), "failed to encode frame");
 
-            let decoded = GpsQzssFrame1::decode(&tx).unwrap_or_else(|e| {
+            let mut reader = buf.bit_read_stream();
+
+            let decoded = reader.read::<GpsQzssFrame1>().unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-1: {}", e);
             });
 

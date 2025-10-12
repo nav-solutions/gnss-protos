@@ -52,45 +52,6 @@ impl std::fmt::Display for GpsQzssTelemetry {
     }
 }
 
-impl Message for GpsQzssTelemetry {
-    type Err = GpsError;
-
-    type B = GpsBuffer;
-
-    fn encoding_size(&self) -> usize {
-        4
-    }
-
-    fn encoding_bitsize(&self) -> usize {
-        30
-    }
-
-    fn encode(&self, buffer: &mut GpsBuffer) -> Result<usize, Self::Err> {
-        let capacity = buffer.write_capacity();
-        let encoding_size = self.encoding_size();
-
-        if capacity < encoding_size {
-            return Err(GpsError::Buffering(BufferingError::StorageFull));
-        }
-
-        let mut stream = buffer.bit_write_stream();
-        stream.write(self)?;
-        Ok(encoding_size)
-    }
-
-    fn decode(buffer: &GpsBuffer) -> Result<Self, Self::Err> {
-        let mut stream = buffer.bit_read_stream();
-        let s = stream.read::<Self>()?;
-
-        if s.preamble == GPS_PREAMBLE_BYTE {
-            // TODO check parity
-            Ok(s)
-        } else {
-            Err(GpsError::InvalidPreamble)
-        }
-    }
-}
-
 impl GpsQzssTelemetry {
     /// Generates a realistic frame model for testing purposes
     #[cfg(test)]
@@ -133,7 +94,7 @@ impl GpsQzssTelemetry {
 }
 
 #[cfg(test)]
-mod test {
+mod telemetry {
     use crate::{
         gps::{GpsBuffer, GpsQzssTelemetry},
         Buffering, Message,
@@ -142,7 +103,7 @@ mod test {
     use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite};
 
     #[test]
-    fn test() {
+    fn encoding() {
         let mut buffer = [0, 1, 2, 3];
 
         for (dword, message, integrity, reserved_bit) in [
@@ -154,8 +115,9 @@ mod test {
             (0x8B123500u32, 0x048D, false, true),
         ] {
             let rx = GpsBuffer::from_slice(&dword.to_be_bytes());
+            let mut reader = rx.bit_read_stream();
 
-            let tlm = GpsQzssTelemetry::decode(&rx).unwrap_or_else(|e| {
+            let tlm = reader.read::<GpsQzssTelemetry>().unwrap_or_else(|e| {
                 panic!("failed to decode GPS TLM from 0x{:08X} - {}", dword, e);
             });
 
@@ -164,13 +126,16 @@ mod test {
             assert_eq!(tlm.reserved_bit, reserved_bit);
 
             let mut tx = GpsBuffer::default();
-            assert!(tlm.encode(&mut tx).is_ok(), "failed to encode frame");
+            let mut writer = tx.bit_write_stream();
 
-            let decoded = GpsQzssTelemetry::decode(&tx).unwrap_or_else(|e| {
+            assert!(writer.write(&tlm).is_ok(), "failed to encode frame");
+
+            let mut reader = tx.bit_read_stream();
+            let decoded = reader.read::<GpsQzssTelemetry>().unwrap_or_else(|e| {
                 panic!("GPS TLM reciprocal failed: {}", e);
             });
 
-            // assert_eq!(decoded, tlm, "GPS TLM reciprocal failed");
+            assert_eq!(decoded, tlm, "GPS TLM reciprocal failed");
         }
     }
 }
