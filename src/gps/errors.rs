@@ -1,4 +1,7 @@
+use bitbuffer::BitError;
 use thiserror::Error;
+
+use crate::BufferingError;
 
 #[derive(Error, Debug)]
 pub enum GpsError {
@@ -16,11 +19,15 @@ pub enum GpsError {
     #[error("internal FSM error")]
     InternalFSM,
 
-    /// Size is too small to encode a correct data frame
-    #[error("buffer to small for this GPS frame")]
-    WouldNotFit,
-
     /// Invalid Word Parity
     #[error("invalid word parity")]
     Parity,
+
+    /// Buffer read issue
+    #[error("read issue: not enough bytes?")]
+    BufferRead(#[from] BitError),
+
+    /// Buffering Error
+    #[error("buffering error: {0}")]
+    Buffering(#[from] BufferingError),
 }

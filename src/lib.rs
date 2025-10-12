@@ -12,7 +12,7 @@
  */
 
 mod errors;
-pub use errors::Error;
+pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
 mod gps;
@@ -23,12 +23,87 @@ pub use gps::*;
 #[cfg(test)]
 mod tests;
 
+use bitbuffer::{BitRead, BitReadBuffer, BitWrite, Endianness};
+
+/// All our GNSS decoders implement the [Decoder] trait.
+pub trait Decoder {
+    /// [Message] type returned by [Self::decode].
+    type M: Message;
+
+    /// Provide new data to this [Decoder].
+    ///
+    /// Most of these protocols are not aligned to [u8], for example
+    /// a GPS burst is 300 bit long. You may insert padding bits (blanking)
+    /// in between frames but not inside frames. Otherwise, the binary content
+    /// would be corrupt and impossible to decode.
+    ///
+    /// If you don't need 100% efficiency and can afford to loose one frame
+    /// from time to time (say one per receiver capture), then you are fine and may
+    /// use padding whenever that suites you.
+    ///
+    /// Note that, even real-time navigation does not require 100% efficiency,
+    /// because information is regurlarly updated, but that is closely related to the
+    /// velocity of your receiver, and will not work well in the case of fast moving rovers.
+    ///
+    /// In between frame padding is tolerated and our [Decoder]s will naturally adapt,
+    /// because all these protocols use synchronization bytes to mark
+    /// the beginning of frame. This library exposes all the synchronization
+    /// bytes, that you may use to create an efficient padded receiver.
+    fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
+
+    /// Tries to decode a valid [Self::Message] using actual buffered content.
+    /// Provide content to decode using either:
+    /// - [Self::fill] which is always available
+    /// - [std::io::Write] when feasible
+    ///
+    /// ## Ouput
+    /// - [Self::Message] on decoding success.
+    fn decode(&mut self) -> Option<Self::M>;
+}
+
+/// All GNSS messages implement the [Message] trait
+pub trait Message: Default {
+    /// The error type returned by [Self::decode].
+    type Err;
+
+    /// Returns the total number of bytes required to encode this [Message].
+    /// Most [Message]s are not aligned to [u8], so the returned value here
+    /// is more than needed, meaning that padding was introduced at some point.
+    fn encoding_size(&self) -> usize;
+
+    /// Returns the total number of bits required to encode this [Message].
+    /// For aligned protocol, this value strictly equals [Self::encoding_size].
+    fn encoding_bitsize(&self) -> usize;
+
+    /// [Message] decoding attempt from provided buffer, which must completely
+    /// describe this [Message] (fully contained). For streaming compliant
+    /// decoding, you should move on to a dedicated [Decoder].
+    /// You must refer to each specific implementation for protocol dependent endianness.
+    ///
+    /// ## Input
+    /// - buf: read-only buffer of bytes (bit stream)
+    ///
+    /// ## Output
+    /// - [Self] on decoding success
+    /// - [Self::Err] on decoding errors
+    fn decode(buf: &[u8]) -> Result<Self, Self::Err>;
+
+    /// Encode this [Message] into mutable buffer.
+    ///
+    /// ## Input
+    /// - buf: destination buffer with write access.
+    ///
+    /// ## Output
+    /// - Total number of bytes encoded, this includes possible padding.
+    /// - [Self::Err] on encoding issues
+    fn encode(&self, buf: &mut [u8]) -> Result<usize, Self::Err>;
+}
+
 /// Two's complement parsing & interpretation.
 /// ## Input
 /// - raw bytes as [u32]
 /// - bits_mask: masking u32
 /// - sign_bit_mask: sign bit
-#[cfg(feature = "gps")]
 pub(crate) fn twos_complement(value: u32, bits_mask: u32, sign_bit_mask: u32) -> i32 {
     let value = value & bits_mask;
 
