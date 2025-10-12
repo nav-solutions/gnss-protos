@@ -6,8 +6,16 @@ use crate::Message;
 use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
 
 /// All our protocols buffer implement the [Buffering] trait.
-pub trait Buffering {
+pub trait Buffering: Default {
+    /// Creates a new buffered object from a sliced view.
+    /// The first received bits must be stored in most signficant position (Big Endian stream).
+    fn from_slice(slice: &[u8]) -> Self;
+
+    /// Converts this buffered object to a sliced view.
+    fn to_slice(&self) -> &[u8];
+
     /// Feed new data into this mutable buffer.
+    /// The first received bits must be stored in most signficant position (Big Endian stream).
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
 
     /// Returns true when not a single byte may be accept, buffer is full.
@@ -44,10 +52,10 @@ pub trait Buffering {
 #[derive(Copy, Clone)]
 pub(crate) struct StreamBuffer<const M: usize> {
     /// RD pointer
-    rd_ptr: usize,
+    pub(crate) rd_ptr: usize,
 
     /// WR pointer
-    wr_ptr: usize,
+    pub(crate) wr_ptr: usize,
 
     /// Internal storage, for more than two frames.
     inner: [u8; M],
@@ -86,6 +94,28 @@ impl<const M: usize> Buffering for StreamBuffer<M> {
             self.inner[self.wr_ptr..].copy_from_slice(&src[..capacity]);
             self.wr_ptr = M;
             Ok(capacity)
+        }
+    }
+
+    fn to_slice(&self) -> &[u8] {
+        &self.inner
+    }
+
+    fn from_slice(slice: &[u8]) -> Self {
+        Self {
+            rd_ptr: 0,
+            wr_ptr: slice.len(),
+            inner: {
+                let mut values = [0; M];
+
+                let size = slice.len().min(M);
+
+                for i in 0..size {
+                    values[i] = slice[i];
+                }
+
+                values
+            },
         }
     }
 

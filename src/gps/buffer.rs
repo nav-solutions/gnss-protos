@@ -5,6 +5,7 @@ const CAPACITY: usize = 1024;
 
 use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream, Endianness};
 
+#[derive(Default)]
 pub struct GpsBuffer {
     pub(crate) inner: StreamBuffer<CAPACITY>,
 }
@@ -12,6 +13,16 @@ pub struct GpsBuffer {
 impl Buffering for GpsBuffer {
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
         self.inner.fill(src)
+    }
+
+    fn to_slice(&self) -> &[u8] {
+        self.inner.to_slice()
+    }
+
+    fn from_slice(slice: &[u8]) -> Self {
+        Self {
+            inner: StreamBuffer::<CAPACITY>::from_slice(slice),
+        }
     }
 
     fn is_full(&self) -> bool {

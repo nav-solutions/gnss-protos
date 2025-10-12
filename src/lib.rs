@@ -27,7 +27,7 @@ pub use errors::{BufferingError, Error};
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-use bitbuffer::{BitRead, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
+use bitbuffer::{BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream, Endianness};
 
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder {
@@ -89,7 +89,7 @@ pub trait Message: Copy + Clone + Default {
     /// Returns total number of encoded bytes on success,
     /// depending on protocol, this may include padding bits.
     /// Returns [Self::Err] on encoding issues.
-    fn encode(&self, buffer: &mut &Self::B) -> Result<usize, Self::Err>;
+    fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err>;
 
     /// [Message] decoding attempt from readable [Self::B].
     fn decode(buffer: &Self::B) -> Result<Self, Self::Err>;
