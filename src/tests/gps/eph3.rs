@@ -235,3 +235,39 @@ fn generate_bin_file() {
         // TODO: continue
     }
 }
+
+#[test]
+fn ublox() {
+    init_logger();
+
+    let mut decoder = GpsQzssDecoder::default().without_parity_verification();
+
+    decoder
+        .fill(&[
+         // TLM
+         0x22, 0xC1, 0x3E, 0x1B, // HOW
+         0x15, 0x28, 0x0B, 0xDB, // WORD3
+         0x00, 0x0A, 0xEA, 0x34, // WORD4
+         0x03, 0x3C, 0xFF, 0xEE, // WORD5
+         0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+         0x13, 0x6F, 0xB6, 0x4E, // WORD7
+         0x86, 0xF4, 0xAB, 0x2C, // WORD8
+         0x06, 0x71, 0xEB, 0x44, // WORD9
+         0x3F, 0xEA, 0xF6, 0x02, // WORD10
+         0x92, 0x45, 0x52, 0x13,
+        ])
+        .unwrap_or_else(|e| {
+            panic!("failed to fill buffer: {}", e);
+        });
+
+    let frame = decoder.decode().unwrap_or_else(|| {
+        panic!("failed to decode valid frame!");
+    });
+
+    assert_eq!(frame.telemetry.message, 0x13E);
+    assert_eq!(frame.telemetry.integrity, false);
+    assert_eq!(frame.telemetry.reserved_bit, false);
+    assert_eq!(frame.how.alert, false);
+    assert_eq!(frame.how.anti_spoofing, true);
+    assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris3);
+}

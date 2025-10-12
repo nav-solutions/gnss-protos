@@ -38,7 +38,7 @@ enum State {
 ///
 /// let mut buffer = [0u8; 1024];
 ///
-// let mut fd = File::open("data/GPS/eph1.bin")
+/// let mut fd = File::open("data/GPS/eph1.bin")
 ///     .unwrap();
 ///
 /// let size = fd.read(&mut buffer).unwrap();
@@ -85,6 +85,14 @@ impl GpsQzssDecoder {
         self.parity_verification = true;
         self
     }
+
+    /// Creates a new [GpsQzssDecoder] without parity verification.
+    /// Potentially corrupt frames will not be invalidated.
+    /// This is currently our [Default] behavior.
+    pub fn without_parity_verification(mut self) -> Self {
+        self.parity_verification = false;
+        self
+    }
 }
 
 impl Decoder for GpsQzssDecoder {
@@ -116,6 +124,9 @@ impl Decoder for GpsQzssDecoder {
                     Ok(how) => {
                         #[cfg(feature = "log")]
                         debug!("GPS/QZSS [how]: OK (fid={})", how.frame_id);
+
+                        // TODO for ublox test (issue)
+                        assert_eq!(how.frame_id, GpsQzssFrameId::Ephemeris1);
 
                         self.frame.how = how;
                         (State::Subframe, GPS_WORD_BITS)
