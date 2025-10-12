@@ -1,12 +1,4 @@
-use crate::{
-    gps::{GpsBuffer, GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS},
-    Buffering, BufferingError, Message,
-};
-
-use bitbuffer::{
-    BigEndian, BitRead, BitReadBuffer, BitReadSized, BitWrite, BitWriteSized, BitWriteStream,
-    Endianness,
-};
+use bitbuffer::{BitRead, BitWrite};
 
 use crate::gps::GpsQzssFrameId;
 

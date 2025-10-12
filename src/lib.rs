@@ -27,8 +27,6 @@ pub use errors::{BufferingError, Error};
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-use bitbuffer::{BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream, Endianness};
-
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder {
     /// [Message] type returned by [Self::decode].
@@ -91,6 +89,11 @@ pub trait Message: Copy + Clone + Default + PartialEq {
     /// depending on protocol, this may include padding bits.
     /// Returns [Self::Err] on encoding issues.
     fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err>;
+
+    /// Conveniently encodes this [Message] as a slice of [u8].
+    /// Depending on the protocol, the slice might be terminated with padding bits (zeros).
+    #[cfg(test)]
+    fn to_slice(&self) -> Vec<u8>;
 }
 
 /// Two's complement parsing & interpretation.

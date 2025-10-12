@@ -3,7 +3,7 @@ use crate::BufferingError;
 #[cfg(doc)]
 use crate::Message;
 
-use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
+use bitbuffer::{BigEndian, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
 
 /// All our protocols buffer implement the [Buffering] trait.
 pub trait Buffering: Default {

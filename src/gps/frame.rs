@@ -6,8 +6,6 @@ use crate::{
     Buffering, Message,
 };
 
-use bitbuffer::{BitRead, BitWrite};
-
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssFrame {
@@ -44,6 +42,13 @@ impl Message for GpsQzssFrame {
         }
 
         Ok(GPS_FRAME_BYTES)
+    }
+
+    #[cfg(test)]
+    fn to_slice(&self) -> Vec<u8> {
+        let mut buf = GpsBuffer::default();
+        self.encode(&mut buf).unwrap();
+        buf.to_slice().to_vec()
     }
 }
 

@@ -1,9 +1,6 @@
 use crate::gps::GpsError;
 
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadSized, BitReadStream, BitWrite, BitWriteSized,
-    BitWriteStream, Endianness, LittleEndian,
-};
+use bitbuffer::{BigEndian, BitError, BitReadSized, BitWrite, BitWriteSized, BitWriteStream};
 
 #[derive(Debug, Default, PartialEq, Copy, Clone, BitReadSized, BitWriteSized)]
 #[discriminant_bits = 3]

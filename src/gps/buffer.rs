@@ -3,7 +3,7 @@ use crate::{buffer::StreamBuffer, Buffering, BufferingError};
 /// internal storage for more than 2 frames (300 bits)
 const CAPACITY: usize = 1024;
 
-use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream, Endianness};
+use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream};
 
 #[derive(Default, Copy, Clone)]
 pub struct GpsBuffer {

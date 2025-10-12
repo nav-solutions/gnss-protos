@@ -1,12 +1,6 @@
-use crate::{
-    gps::{GpsBuffer, GpsError, GPS_WORDS_PER_FRAME},
-    twos_complement, Buffering, BufferingError, Message,
-};
+use crate::twos_complement;
 
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadBuffer, BitReadSized, BitReadStream, BitWrite,
-    BitWriteSized, BitWriteStream, Endianness,
-};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
