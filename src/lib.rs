@@ -66,7 +66,7 @@ pub trait Decoder {
 }
 
 /// All GNSS messages implement the [Message] trait
-pub trait Message: Copy + Clone + Default {
+pub trait Message: Copy + Clone + Default + PartialEq {
     /// Error type for this messaging.
     type Err;
 

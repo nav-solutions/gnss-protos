@@ -1,6 +1,3 @@
-#[cfg(feature = "log")]
-use log::error;
-
 use crate::gps::GpsError;
 
 use bitbuffer::{
@@ -27,74 +24,6 @@ pub enum GpsQzssFrameId {
     /// GPS / QZSS Almanach / Status subframe #5
     Almanach5,
 }
-
-// impl BitReadSized<'_, BigEndian> for GpsQzssFrameId {
-//     fn read(stream: &mut BitReadStream<'_, BigEndian>, size: usize) -> Result<Self,BitError> {
-//         let bits = stream.read_sized::<u8>(size)?;
-//
-//         #[cfg(not(feature = "log"))]
-//         let decoded = Self::decode(bits)
-//             .map_err(|_| {
-//                 BitError::TooManyBits {
-//                     requested: 0,
-//                     max: 0,
-//                 }
-//             })?;
-//
-//         #[cfg(feature = "log")]
-//         let decoded = Self::decode(bits)
-//             .map_err(|e| {
-//                 error!("unknown GPS frame ID: {}", bits);
-//
-//                 BitError::TooManyBits {
-//                     requested: 0,
-//                     max: 0,
-//                 }
-//             })?;
-//
-//         Ok(decoded)
-//     }
-// }
-//
-// impl BitReadSized<'_, LittleEndian> for GpsQzssFrameId {
-//     fn read(stream: &mut BitReadStream<'_, LittleEndian>, size: usize) -> Result<Self, BitError> {
-//         let bits = stream.read_sized::<u8>(size)?;
-//
-//         #[cfg(not(feature = "log"))]
-//         let decoded = Self::decode(bits)
-//             .map_err(|_| {
-//                 BitError::TooManyBits {
-//                     requested: 0,
-//                     max: 0,
-//                 }
-//             })?;
-//
-//         #[cfg(feature = "log")]
-//         let decoded = Self::decode(bits)
-//             .map_err(|e| {
-//                 error!("unknown GPS frame ID: {}", bits);
-//
-//                 BitError::TooManyBits {
-//                     requested: 0,
-//                     max: 0,
-//                 }
-//             })?;
-//
-//         Ok(decoded)
-//     }
-// }
-//
-// impl BitWriteSized<BigEndian> for GpsQzssFrameId {
-//     fn write_sized(&self, stream: &mut BitWriteStream<'_, BigEndian>, size: usize) -> Result<(), BitError> {
-//         stream.write_int::<u8>(self.encode(), size)
-//     }
-// }
-//
-// impl BitWriteSized<LittleEndian> for GpsQzssFrameId {
-//     fn write_sized(&self, stream: &mut BitWriteStream<'_, LittleEndian>, size: usize) -> Result<(), BitError> {
-//         stream.write_int::<u8>(self.encode(), size)
-//     }
-// }
 
 #[cfg(feature = "std")]
 impl std::fmt::Display for GpsQzssFrameId {

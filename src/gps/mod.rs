@@ -47,8 +47,8 @@ pub use buffer::GpsBuffer;
 mod errors;
 pub use errors::GpsError;
 
-// mod frame1;
-// pub use frame1::GpsQzssFrame1;
+mod frame1;
+pub use frame1::GpsQzssFrame1;
 
 // mod frame2;
 // pub use frame2::GpsQzssFrame2;
