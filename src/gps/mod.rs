@@ -29,12 +29,6 @@ pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
     rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
 }
 
-// mod bytes;
-// pub use bytes::GpsDataByte;
-
-// mod word;
-// pub use word::GpsDataWord;
-
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
 
