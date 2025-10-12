@@ -11,19 +11,23 @@
  * This framework is shipped under Mozilla Public V2 license.
  */
 
+mod buffer;
+pub use buffer::Buffering;
+
 mod errors;
-pub use errors::{BufferingError, Error};
-
-#[cfg(feature = "gps")]
-mod gps;
-
-#[cfg(feature = "gps")]
-pub use gps::*;
 
 #[cfg(test)]
 mod tests;
 
-use bitbuffer::{BitRead, BitReadBuffer, BitWrite, Endianness};
+#[cfg(feature = "gps")]
+mod gps;
+
+pub use errors::{BufferingError, Error};
+
+#[cfg(feature = "gps")]
+pub use gps::*;
+
+use bitbuffer::{BitRead, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
 
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder {
@@ -51,20 +55,25 @@ pub trait Decoder {
     /// bytes, that you may use to create an efficient padded receiver.
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
 
-    /// Tries to decode a valid [Self::Message] using actual buffered content.
-    /// Provide content to decode using either:
+    /// Process internal buffer and try to decode a [Message].
+    /// You can use the following methods to provide new data:
     /// - [Self::fill] which is always available
     /// - [std::io::Write] when feasible
     ///
     /// ## Ouput
-    /// - [Self::Message] on decoding success.
+    /// - [Message] on decoding success.
     fn decode(&mut self) -> Option<Self::M>;
 }
 
 /// All GNSS messages implement the [Message] trait
-pub trait Message: Default {
-    /// The error type returned by [Self::decode].
+pub trait Message: Copy + Clone + Default {
+    /// Error type for this messaging.
     type Err;
+
+    /// Specific [Message] buffer storage.
+    /// Each message may be encoded into a specific structure, following
+    /// the underlying protocol endianness.
+    type B: Buffering;
 
     /// Returns the total number of bytes required to encode this [Message].
     /// Most [Message]s are not aligned to [u8], so the returned value here
@@ -75,28 +84,15 @@ pub trait Message: Default {
     /// For aligned protocol, this value strictly equals [Self::encoding_size].
     fn encoding_bitsize(&self) -> usize;
 
-    /// [Message] decoding attempt from provided buffer, which must completely
-    /// describe this [Message] (fully contained). For streaming compliant
-    /// decoding, you should move on to a dedicated [Decoder].
-    /// You must refer to each specific implementation for protocol dependent endianness.
+    /// [Message] encoding attempt to mutable [Self::B].
     ///
-    /// ## Input
-    /// - buf: read-only buffer of bytes (bit stream)
-    ///
-    /// ## Output
-    /// - [Self] on decoding success
-    /// - [Self::Err] on decoding errors
-    fn decode(buf: &[u8]) -> Result<Self, Self::Err>;
+    /// Returns total number of encoded bytes on success,
+    /// depending on protocol, this may include padding bits.
+    /// Returns [Self::Err] on encoding issues.
+    fn encode(&self, buffer: &mut &Self::B) -> Result<usize, Self::Err>;
 
-    /// Encode this [Message] into mutable buffer.
-    ///
-    /// ## Input
-    /// - buf: destination buffer with write access.
-    ///
-    /// ## Output
-    /// - Total number of bytes encoded, this includes possible padding.
-    /// - [Self::Err] on encoding issues
-    fn encode(&self, buf: &mut [u8]) -> Result<usize, Self::Err>;
+    /// [Message] decoding attempt from readable [Self::B].
+    fn decode(buffer: &Self::B) -> Result<Self, Self::Err>;
 }
 
 /// Two's complement parsing & interpretation.

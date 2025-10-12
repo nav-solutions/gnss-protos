@@ -1,5 +1,5 @@
 use crate::{
-    gps::{GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS},
+    gps::{GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS, GpsBuffer},
     BufferingError, Message,
 };
 
@@ -25,72 +25,6 @@ pub struct GpsQzssTelemetry {
     parity: u8,
 }
 
-impl Message for GpsQzssTelemetry {
-    type Err = GpsError;
-
-    fn encoding_size(&self) -> usize {
-        4
-    }
-
-    fn encoding_bitsize(&self) -> usize {
-        GPS_WORD_BITS
-    }
-
-    /// [GpsQzssTelemetry] decoding attempt from a burst of
-    /// GPS bits, where first received bits were stored in MSB position,
-    /// so starting on preamble bits _without any padding_.
-    fn decode(buf: &[u8]) -> Result<Self, GpsError> {
-        let buf = BitReadBuffer::new(buf, BigEndian);
-
-        let preamble = buf.read_int::<u8>(0, 8)?;
-        let message = buf.read_int::<u16>(8, 14)?;
-        let integrity = buf.read_bool(8 + 14)?;
-        let reserved_bit = buf.read_bool(8 + 15)?;
-        let parity = buf.read_int::<u8>(8 + 16, 6)?; // TODO
-
-        if preamble == GPS_PREAMBLE_BYTE {
-            Ok(Self {
-                parity,
-                preamble,
-                message,
-                integrity,
-                reserved_bit,
-            })
-        } else {
-            Err(GpsError::InvalidPreamble)
-        }
-    }
-
-    /// Encodes this [GpsQzssTelemetry] starting with preamble bits
-    /// on MSB position (big endian stream), last byte will be padded
-    /// because a GPS word is not aligned to [u8].
-    fn encode(&self, buf: &mut [u8]) -> Result<usize, GpsError> {
-        let len = buf.len();
-        let encoding_size = self.encoding_size();
-
-        if len < encoding_size {
-            return Err(GpsError::Buffering(BufferingError::StorageFull));
-        }
-
-        buf[0] = GPS_PREAMBLE_BYTE;
-        buf[1] = ((self.message & 0x3fc0) >> 6) as u8;
-        buf[2] = (self.message & 0x003f) as u8;
-        buf[2] <<= 2;
-
-        if self.integrity {
-            buf[2] |= 0x02;
-        }
-
-        if self.reserved_bit {
-            buf[2] |= 0x01;
-        }
-
-        buf[3] = (self.parity & 0x003f) << 2;
-
-        Ok(encoding_size)
-    }
-}
-
 impl Default for GpsQzssTelemetry {
     /// Generates a default (null) [GpsQzssTelemetry].
     fn default() -> Self {
@@ -112,6 +46,68 @@ impl std::fmt::Display for GpsQzssTelemetry {
             "INTEGRITY={} - MSG=0x{:08X} - reserved={}",
             self.integrity, self.message, self.reserved_bit
         )
+    }
+}
+
+impl Message for GpsQzssTelemetry {
+    type Err = GpsError;
+
+    type B = GpsBuffer;
+    
+    fn encoding_size(&self) -> usize {
+        4
+    }
+
+    fn encoding_bitsize(&self) -> usize {
+        30
+    }
+    
+    fn encode(&self, buffer: &mut &GpsBuffer) -> Result<usize, Self::Err> {
+        let len = buf.len();
+        let encoding_size = self.encoding_size();
+
+        if len < encoding_size {
+            return Err(GpsError::Buffering(BufferingError::StorageFull));
+        }
+
+        buf[0] = GPS_PREAMBLE_BYTE;
+        buf[1] = ((self.message & 0x3fc0) >> 6) as u8;
+        buf[2] = (self.message & 0x003f) as u8;
+        buf[2] <<= 2;
+
+        if self.integrity {
+            buf[2] |= 0x02;
+        }
+
+        if self.reserved_bit {
+            buf[2] |= 0x01;
+        }
+
+        buf[3] = (self.parity & 0x003f) << 2; // 2-bit padding
+
+        Ok(encoding_size)
+    }
+
+    fn decode(buffer: &GpsBuffer) -> Result<Self, Self::Err> {
+        let buf = BitReadBuffer::new(buf, BigEndian);
+
+        let preamble = buf.read_int::<u8>(0, 8)?;
+        let message = buf.read_int::<u16>(8, 14)?;
+        let integrity = buf.read_bool(8 + 14)?;
+        let reserved_bit = buf.read_bool(8 + 15)?;
+        let parity = buf.read_int::<u8>(8 + 16, 6)?; // TODO
+
+        if preamble == GPS_PREAMBLE_BYTE {
+            Ok(Self {
+                parity,
+                preamble,
+                message,
+                integrity,
+                reserved_bit,
+            })
+        } else {
+            Err(GpsError::InvalidPreamble)
+        }
     }
 }
 

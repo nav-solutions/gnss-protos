@@ -1,13 +1,9 @@
-use crate::gps::{GpsDataWord, GpsError};
+use crate::{
+    gps::{GpsError, GPS_PREAMBLE_BYTE, GPS_WORD_BITS},
+    BufferingError, Message,
+};
 
-const ZCOUNT_MASK: u32 = 0x3fffE000;
-const ZCOUNT_SHIFT: u32 = 13;
-
-const ALERT_MASK: u32 = 0x00001000;
-const AS_MASK: u32 = 0x00000800;
-
-const FRAMEID_MASK: u32 = 0x00000700;
-const FRAMEID_SHIFT: u32 = 8;
+use bitbuffer::{BigEndian, BitRead, BitReadBuffer, BitWrite, BitWriteStream, Endianness};
 
 use crate::gps::GpsQzssFrameId;
 
@@ -38,6 +34,73 @@ pub struct GpsQzssHow {
 
     /// Following Frame ID (to decode following data words)
     pub frame_id: GpsQzssFrameId,
+
+    /// 6 Parity bits
+    parity: u8,
+}
+
+impl Message for GpsQzssHow {
+    type Err = GpsError; 
+    
+    fn encoding_size(&self) -> usize {
+        4
+    }
+
+    fn encoding_bitsize(&self) -> usize {
+        GPS_WORD_BITS
+    }
+    
+    /// [GpsQzssHow] decoding attempt from a burst of
+    /// GPS bits, where first received bits were stored in MSB position.
+    fn decode(buf: &[u8]) -> Result<Self, GpsError> {
+        let buf = BitReadBuffer::new(buf, BigEndian);
+
+        let tow = buf.read_int::<u8>(0, 17)? * 3 / 2;
+        let alert = buf.read_bool(18)?;
+        let anti_spoofing = buf.read_bool(19)?;
+        let frame_id = buf.read_int::<u8>(20, 3)?;
+        let parity = buf.read_int::<u8>(24, 6);
+        
+        let frame_id = GpsFrameId::decode(frame_id)?;
+
+        Ok(Self {
+            tow,
+            alert,
+            frame_id,
+            parity,
+            anti_spoofing,
+        })
+    }
+
+    /// Encodes this [GpsQzssHow] as big-endian stream,
+    /// last byte will be padded because a GPS word is not aligned to [u8].
+    fn encode(&self, buf: &mut [u8]) -> Result<usize, GpsError> {
+        let len = buf.len();
+        let encoding_size = self.encoding_size();
+
+        if len < encoding_size {
+            return Err(GpsError::Buffering(BufferingError::StorageFull));
+        }
+
+        let tow = (self.tow  * 2 / 3) 0x1ffff;
+
+        encoded[3] |= ((tow & 0x1_8000) >> 15) as u8;
+        encoded[4] = ((tow & 0x0_7f80) >> 7) as u8;
+        encoded[5] = (tow & 0x0_007f) as u8;
+        encoded[5] <<= 1;
+
+        if self.how.alert {
+            encoded[5] |= 0x01;
+        }
+
+        if self.how.anti_spoofing {
+            encoded[6] |= 0x80;
+        }
+
+        buf[3] = (self.parity & 0x003f) << 2;
+
+        Ok(encoding_size)
+    }
 }
 
 #[cfg(feature = "std")]
