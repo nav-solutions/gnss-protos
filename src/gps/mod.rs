@@ -53,8 +53,8 @@ pub use frame1::GpsQzssFrame1;
 mod frame2;
 pub use frame2::GpsQzssFrame2;
 
-// mod frame3;
-// pub use frame3::GpsQzssFrame3;
+mod frame3;
+pub use frame3::GpsQzssFrame3;
 
 // mod frame4;
 // pub use frame4::GpsQzssFrame4;

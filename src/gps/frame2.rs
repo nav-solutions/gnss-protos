@@ -98,17 +98,14 @@ impl PartialEq for GpsQzssFrame2 {
 
 impl BitWrite<BigEndian> for GpsQzssFrame2 {
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        stream.write_int(self.iode, 8)?;
-
         let crs = (self.crs * 2.0_f64.powi(5)).round() as i16;
+        stream.write_int(self.iode, 8)?;
         stream.write_int(crs, 16)?;
-
         stream.write_int(0, 6)?; // TODO (parity)
 
         let m0 = (self.m0 * 2.0_f64.powi(31)).round() as u32;
-        let m0_msb = (m0 & 0xf00_0000) >> 24;
-        let m0_lsb = m0 & 0xff_ffff;
-
+        let m0_msb = (m0 & 0xff00_0000) >> 24;
+        let m0_lsb = m0 & 0x00ff_ffff;
         let dn = (self.dn * 2.0_f64.powi(43)).round() as i16;
 
         stream.write_int(dn, 16)?;
@@ -119,8 +116,8 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         stream.write_int(0, 6)?; // TODO (parity)
 
         let e = (self.e * 2.0_f64.powi(33)).round() as u32;
-        let e_msb = (e & 0xf00_0000) >> 24;
-        let e_lsb = e & 0x0ff_ffff;
+        let e_msb = (e & 0xff00_0000) >> 24;
+        let e_lsb = e & 0x00ff_ffff;
 
         let cuc = (self.cuc * 2.0_f64.powi(29)).round() as i16;
         stream.write_int(cuc, 16)?;
@@ -132,8 +129,8 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         stream.write_int(0, 6)?; // TODO (parity)
 
         let sqrt_a = (self.sqrt_a * 2.0_f64.powi(19)).round() as u32;
-        let sqrt_a_msb = (sqrt_a & 0xf00_0000) >> 24;
-        let sqrt_a_lsb = sqrt_a & 0x0ff_ffff;
+        let sqrt_a_msb = (sqrt_a & 0xff00_0000) >> 24;
+        let sqrt_a_lsb = sqrt_a & 0x00ff_ffff;
 
         let cus = (self.cus * 2.0_f64.powi(29)).round() as i32;
 
@@ -144,7 +141,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         stream.write_int(sqrt_a_lsb, 24)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        stream.write_int(self.toe / 16, 16)?;
+        stream.write_int((self.toe / 16) as u16, 16)?;
         stream.write_bool(self.fit_int_flag)?;
         stream.write_int(self.aodo, 5)?;
         stream.write_int(0, 6)?; // TODO (parity)
@@ -338,7 +335,7 @@ mod frame2 {
     };
 
     #[test]
-    fn encoding() {
+    fn reciprocal() {
         for (toe, iode, m0, dn, cuc, cus, crs, e, sqrt_a, fit_int_flag, aodo) in [
             (
                 345_600, 10, 9.76E-1, 4.0e-9, 9.3e-7, 2.8E-6, -88.0, 0.01, 5153.639, false, 10,
@@ -379,6 +376,26 @@ mod frame2 {
 
             assert_eq!(decoded.toe, toe);
             assert_eq!(decoded.iode, iode);
+            assert_eq!(decoded.aodo, aodo);
+            assert_eq!(decoded.cus, cus);
+            assert_eq!(decoded.crs, crs);
+            assert_eq!(decoded.fit_int_flag, fit_int_flag);
+            assert_eq!(decoded.e, e, "expecting {:.3E} got {:.3E}", e, decoded.e);
+            assert_eq!(
+                decoded.dn, dn,
+                "expecting {:.3E} got {:.3E}",
+                dn, decoded.dn
+            );
+            assert_eq!(
+                decoded.m0, m0,
+                "expecting {:.3E} got {:.3E}",
+                m0, decoded.m0
+            );
+            assert_eq!(
+                decoded.sqrt_a, sqrt_a,
+                "expecting {:.3E} got {:.3E}",
+                sqrt_a, decoded.sqrt_a
+            );
         }
     }
 }

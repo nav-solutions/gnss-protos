@@ -158,19 +158,24 @@ impl BitWrite<BigEndian> for GpsQzssFrame1 {
         stream.write_int(self.reserved_word6, 24)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        stream.write_int(self.reserved_word7, 16)?; // TODO
+        let tgd = (self.tgd * 2.0_f64.powi(31)).round() as i8;
+        stream.write_int(self.reserved_word7, 16)?;
+        stream.write_int(tgd, 8)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        // stream.write_float(self.tgd, 8)?; // TODO (scaling)
+        let toc = (self.toc / 16) as u16;
         stream.write_int(self.iodc_lsb, 8)?;
-        stream.write_int(self.toc, 16)?; // TODO (scaling)
+        stream.write_int(toc, 16)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        // stream.write_float(self.af2, 8)?; // TODO (scaling)
-        // stream.write_float(self.af1, 16)?; // TODO (scaling)
+        let af1 = (self.af1 * 2.0_f64.powi(43)).round() as i16;
+        let af2 = (self.af2 * 2.0_f64.powi(55)).round() as i8;
+        stream.write_int(af2, 8)?;
+        stream.write_int(af1, 16)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        // stream.write_float(self.af0, 2)?; // TODO (scaling)
+        let af0 = (self.af0 * 2.0_f64.powi(31)).round() as i32;
+        stream.write_int(af0 & 0x3f_ffff, 22)?;
         stream.write_int(0, 2)?; // TODO (parity)
         stream.write_int(0, 6) // TODO (parity)
     }
@@ -196,18 +201,22 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
         let parity = stream.read_int::<u8>(6)?;
 
         let reserved_word7 = stream.read_int::<u16>(16)?;
+        let tgd = stream.read_int::<i8>(8)?;
+        let tgd = (tgd as f64) * 2.0_f64.powi(-31);
         let parity = stream.read_int::<u8>(6)?;
 
-        // let tgd = stream.read_float::<f64>(8)?;
         let iodc_lsb = stream.read_int::<u8>(8)?;
-        let toc = stream.read_int::<u32>(16)?;
+        let toc = stream.read_int::<u32>(16)? * 16;
         let parity = stream.read_int::<u8>(6)?;
 
-        // let af2 = stream.read_float::<f64>(8)?;
-        // let af1 = stream.read_float::<f64>(16)?;
+        let af2 = stream.read_int::<i8>(8)?;
+        let af2 = (af2 as f64) * 2.0_f64.powi(-55);
+        let af1 = stream.read_int::<i16>(16)?;
+        let af1 = (af1 as f64) * 2.0_f64.powi(-43);
         let parity = stream.read_int::<u8>(6)?;
 
-        // let af0 = stream.read_float::<f64>(22)?;
+        let af0 = stream.read_int::<i32>(22)?;
+        let af0 = (af0 as f64) * 2.0_f64.powi(-31);
         let bits = stream.read_int::<u8>(2)?;
         let parity = stream.read_int::<u8>(6)?;
 
@@ -223,11 +232,11 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
             reserved_word5,
             reserved_word6,
             reserved_word7,
-            tgd: 0.0,
+            tgd,
             toc,
-            af2: 0.0,
-            af1: 0.0,
-            af0: 0.0,
+            af2,
+            af1,
+            af0,
         })
     }
 }
@@ -501,7 +510,7 @@ mod test {
     };
 
     #[test]
-    fn encoding() {
+    fn reciprocal() {
         for (
             week,
             ca_or_p_l2,
@@ -568,9 +577,24 @@ mod test {
             assert_eq!(decoded.reserved_word6, frame.reserved_word6);
             assert_eq!(decoded.reserved_word7, frame.reserved_word7);
 
-            assert!((decoded.af0 - frame.af0).abs() < 1E-10);
-            assert!((decoded.af1 - frame.af1).abs() < 1E-14);
-            assert!((decoded.af2 - frame.af2).abs() < 1E-14);
+            assert!(
+                (decoded.af0 - frame.af0).abs() < 1E-10,
+                "expecting {:.3E} got {:.3E}",
+                frame.af0,
+                decoded.af0
+            );
+            assert!(
+                (decoded.af1 - frame.af1).abs() < 1E-14,
+                "expecting {:.3E} got {:.3E}",
+                frame.af1,
+                decoded.af1
+            );
+            assert!(
+                (decoded.af2 - frame.af2).abs() < 1E-14,
+                "expecting {:.3E} got {:.3E}",
+                frame.af2,
+                decoded.af2
+            );
         }
     }
 
