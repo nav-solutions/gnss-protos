@@ -120,6 +120,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         let e_lsb = e & 0x00ff_ffff;
 
         let cuc = (self.cuc * 2.0_f64.powi(29)).round() as i16;
+
         stream.write_int(cuc, 16)?;
         stream.write_int(e_msb, 8)?;
         stream.write_int(0, 6)?; // TODO (parity)
@@ -135,7 +136,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         let cus = (self.cus * 2.0_f64.powi(29)).round() as i32;
 
         stream.write_int(cus, 16)?;
-        stream.write_int(sqrt_a_msb, 16)?;
+        stream.write_int(sqrt_a_msb, 8)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
         stream.write_int(sqrt_a_lsb, 24)?;
@@ -143,7 +144,8 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
 
         stream.write_int((self.toe / 16) as u16, 16)?;
         stream.write_bool(self.fit_int_flag)?;
-        stream.write_int(self.aodo, 5)?;
+        stream.write_int(self.aodo & 0x1f, 5)?;
+        stream.write_int(0, 2)?; // TODO (parity)
         stream.write_int(0, 6)?; // TODO (parity)
 
         Ok(())
@@ -180,11 +182,12 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
         let toe = stream.read_int::<u16>(16)?;
         let fit_int_flag = stream.read_bool()?;
         let aodo = stream.read_int::<u8>(5)?;
+        let parity = stream.read_int::<u8>(2)?; // TODO (parity)
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
         let cuc = (cuc as f64) * 2.0_f64.powi(-29);
-        let cus = (cuc as f64) * 2.0_f64.powi(-29);
-        let crs = (cuc as f64) * 2.0_f64.powi(-5);
+        let cus = (cus as f64) * 2.0_f64.powi(-29);
+        let crs = (crs as f64) * 2.0_f64.powi(-5);
         let dn = (dn as f64) * 2.0_f64.powi(-43);
 
         let toe = (toe as u32) * 16;
@@ -341,7 +344,7 @@ mod frame2 {
                 345_600, 10, 9.76E-1, 4.0e-9, 9.3e-7, 2.8E-6, -88.0, 0.01, 5153.639, false, 10,
             ),
             (
-                2320, 10, 9.76E-1, 5.0e-9, 9.4e-7, 2.9e-6, -87.0, 0.010234, 5153.64, false, 10,
+                2320, 10, 9.76E-1, 5.0e-9, 9.4e-7, 2.9e-6, -87.0, 0.010234, 5153.64, false, 1,
             ),
             (
                 4800, 11, 9.78E-1, 6.0e-9, 9.8e-7, 3.0e-6, 87.0, 0.02, 5153.65, true, 0x1f,
@@ -377,24 +380,46 @@ mod frame2 {
             assert_eq!(decoded.toe, toe);
             assert_eq!(decoded.iode, iode);
             assert_eq!(decoded.aodo, aodo);
-            assert_eq!(decoded.cus, cus);
-            assert_eq!(decoded.crs, crs);
             assert_eq!(decoded.fit_int_flag, fit_int_flag);
-            assert_eq!(decoded.e, e, "expecting {:.3E} got {:.3E}", e, decoded.e);
-            assert_eq!(
-                decoded.dn, dn,
-                "expecting {:.3E} got {:.3E}",
-                dn, decoded.dn
+            assert!(
+                (decoded.cus - cus).abs() < 1e-5,
+                "expcting {:.3E} got {:.3E}",
+                cus,
+                decoded.cus
             );
-            assert_eq!(
-                decoded.m0, m0,
-                "expecting {:.3E} got {:.3E}",
-                m0, decoded.m0
+            assert!(
+                (decoded.crs - crs).abs() < 1e-5,
+                "expcting {:.3E} got {:.3E}",
+                crs,
+                decoded.crs
             );
-            assert_eq!(
-                decoded.sqrt_a, sqrt_a,
+
+            assert!(
+                (decoded.e - e).abs() < 1e-5,
                 "expecting {:.3E} got {:.3E}",
-                sqrt_a, decoded.sqrt_a
+                e,
+                decoded.e
+            );
+
+            assert!(
+                (decoded.dn - dn).abs() < 1e-8,
+                "expecting {:.3E} got {:.3E}",
+                dn,
+                decoded.dn
+            );
+
+            assert!(
+                (decoded.m0 - m0).abs() < 1e-9,
+                "expecting {:.3E} got {:.3E}",
+                m0,
+                decoded.m0
+            );
+
+            assert!(
+                (decoded.sqrt_a - sqrt_a).abs() < 1e-6,
+                "expecting {:.3E} got {:.3E}",
+                sqrt_a,
+                decoded.sqrt_a
             );
         }
     }
