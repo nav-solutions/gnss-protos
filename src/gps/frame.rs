@@ -38,7 +38,8 @@ impl Message for GpsQzssFrame {
         stream.write(&self.how)?;
 
         match self.subframe {
-            GpsQzssSubframe::Ephemeris1(eph1) => stream.write(&eph1)?,
+            GpsQzssSubframe::Ephemeris1(eph) => stream.write(&eph)?,
+            GpsQzssSubframe::Ephemeris2(eph) => stream.write(&eph)?,
         }
 
         Ok(GPS_FRAME_BYTES)
@@ -80,13 +81,10 @@ impl GpsQzssFrame {
 
         match subframe {
             GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
-            // GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
+            GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
             // GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
         }
 
         self
     }
 }
-
-#[cfg(test)]
-mod test {}

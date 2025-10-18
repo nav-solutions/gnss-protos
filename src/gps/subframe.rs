@@ -1,7 +1,7 @@
 use crate::gps::{
-    // GpsQzssFrame2,
     // GpsQzssFrame3,
     GpsQzssFrame1,
+    GpsQzssFrame2,
 };
 
 #[cfg(test)]
@@ -14,9 +14,9 @@ use bitbuffer::{BigEndian, BitError, BitWrite, BitWriteStream};
 pub enum GpsQzssSubframe {
     /// GPS Ephemeris Frame #1
     Ephemeris1(GpsQzssFrame1),
-    // /// GPS Ephemeris Frame #2
-    // Ephemeris2(GpsQzssFrame2),
 
+    /// GPS Ephemeris Frame #2
+    Ephemeris2(GpsQzssFrame2),
     // /// GPS Ephemeris Frame #3
     // Ephemeris3(GpsQzssFrame3),
 }
@@ -24,7 +24,8 @@ pub enum GpsQzssSubframe {
 impl BitWrite<BigEndian> for GpsQzssSubframe {
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         match self {
-            Self::Ephemeris1(eph1) => stream.write(eph1),
+            Self::Ephemeris1(eph) => stream.write(eph),
+            Self::Ephemeris2(eph) => stream.write(eph),
         }
     }
 }
@@ -64,21 +65,21 @@ impl GpsQzssSubframe {
         }
     }
 
-    // /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    // pub fn as_eph2(&self) -> Option<GpsQzssFrame2> {
-    //     match self {
-    //         Self::Ephemeris2(frame) => Some(*frame),
-    //         _ => None,
-    //     }
-    // }
+    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    pub fn as_eph2(&self) -> Option<GpsQzssFrame2> {
+        match self {
+            Self::Ephemeris2(frame) => Some(*frame),
+            _ => None,
+        }
+    }
 
-    // /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
-    // pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
-    //     match self {
-    //         Self::Ephemeris2(frame) => Some(frame),
-    //         _ => None,
-    //     }
-    // }
+    /// Unwraps self as [GpsQzssFrame2] reference (if feasible)
+    pub fn as_mut_eph2(&mut self) -> Option<&mut GpsQzssFrame2> {
+        match self {
+            Self::Ephemeris2(frame) => Some(frame),
+            _ => None,
+        }
+    }
 
     // /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
     // pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {

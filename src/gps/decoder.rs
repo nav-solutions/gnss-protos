@@ -1,7 +1,7 @@
 use crate::{
     gps::{
-        GpsBuffer, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-        GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_WORD_BITS,
+        GpsBuffer, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_WORD_BITS,
     },
     Buffering, BufferingError, Decoder,
 };
@@ -152,6 +152,25 @@ impl Decoder for GpsQzssDecoder {
                             #[cfg(feature = "log")]
                             Err(e) => {
                                 error!("GPS/QZSS [eph-1]: {}", e);
+                            },
+                            #[cfg(not(feature = "log"))]
+                            Err(_) => {},
+                        }
+
+                        (State::Telemetry, GPS_SUBFRAME_BITS)
+                    },
+                    GpsQzssFrameId::Ephemeris2 => {
+                        match reader.read::<GpsQzssFrame2>() {
+                            Ok(eph2) => {
+                                #[cfg(feature = "log")]
+                                debug!("GPS/QZSS [eph-2]: OK (iode={})", eph2.iode);
+
+                                self.frame.subframe = GpsQzssSubframe::Ephemeris2(eph2);
+                                ret = Some(self.frame);
+                            },
+                            #[cfg(feature = "log")]
+                            Err(e) => {
+                                error!("GPS/QZSS [eph-2]: {}", e);
                             },
                             #[cfg(not(feature = "log"))]
                             Err(_) => {},
