@@ -1,15 +1,11 @@
-use crate::gps::GPS_PREAMBLE_BYTE;
+use crate::gps::{GpsError, GPS_PREAMBLE_BYTE};
 
-use bitbuffer::{BitRead, BitWrite};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// [GpsQzssTelemetry] marks the beginning of each frame
-#[derive(Debug, Copy, Clone, PartialEq, BitRead, BitWrite)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct GpsQzssTelemetry {
-    /// First 8 bits serving as synchronization byte.
-    preamble: u8,
-
     /// TLM Message
-    #[size = 14]
     pub message: u16,
 
     /// Integrity bit is asserted means the conveying signal is provided
@@ -18,21 +14,52 @@ pub struct GpsQzssTelemetry {
 
     /// Reserved bit
     pub reserved_bit: bool,
+}
 
-    /// Parity
-    #[size = 6]
-    parity: u8,
+impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let preamble = stream.read_int::<u8>(8)?;
+        let message = stream.read_int::<u16>(14)?;
+        let integrity = stream.read_bool()?;
+        let reserved_bit = stream.read_bool()?;
+        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+
+        if preamble == GPS_PREAMBLE_BYTE {
+            Ok(Self {
+                message,
+                integrity,
+                reserved_bit,
+            })
+        } else {
+            Err(BitError::UnmatchedDiscriminant {
+                discriminant: 8,
+                enum_name: "preamble".to_string(),
+            })
+        }
+    }
+}
+
+impl BitWrite<BigEndian> for GpsQzssTelemetry {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(GPS_PREAMBLE_BYTE, 8)?;
+        stream.write_int(self.message & 0x3fff, 14)?;
+        stream.write_bool(self.integrity)?;
+        stream.write_bool(self.reserved_bit)?;
+
+        stream.write_int(0, 2)?; // TODO (parity)
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        Ok(())
+    }
 }
 
 impl Default for GpsQzssTelemetry {
     /// Generates a default (null) [GpsQzssTelemetry].
     fn default() -> Self {
         Self {
-            preamble: GPS_PREAMBLE_BYTE,
             message: Default::default(),
             integrity: Default::default(),
             reserved_bit: Default::default(),
-            parity: Default::default(), // TODO
         }
     }
 }
@@ -97,9 +124,7 @@ mod telemetry {
     };
 
     #[test]
-    fn encoding() {
-        let mut buffer = [0, 1, 2, 3];
-
+    fn reciprocal() {
         for (dword, message, integrity, reserved_bit) in [
             (0x8B000000u32, 0x0000, false, false),
             (0x8B04F86Cu32, 0x04F8 >> 2, false, false),

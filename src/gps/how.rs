@@ -1,4 +1,4 @@
-use bitbuffer::{BitRead, BitWrite};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::gps::GpsQzssFrameId;
 
@@ -7,12 +7,11 @@ use crate::gps::GpsQzssTelemetry;
 
 /// [GpsQzssHow] (GPS Hand Over Word) marks the beginning of each frame, following [GpsQzssTelemetry],
 /// and defines the content to follow.
-#[derive(Debug, Copy, Clone, PartialEq, BitRead, BitWrite)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct GpsQzssHow {
     /// TOW: elapsed time within current GPS week (in seconds),
     /// at the instant of transmission of the 1st bit of the next frame to follow
     /// this [GpsQzssHow] word.
-    #[size = 17]
     pub tow: u32,
 
     /// The alert bit serves two purposes.
@@ -28,13 +27,48 @@ pub struct GpsQzssHow {
     /// For other satellite, this indicates A/S is active.
     pub anti_spoofing: bool,
 
-    #[size = 3]
     /// Following Frame ID (to decode following data words)
     pub frame_id: GpsQzssFrameId,
+}
 
-    /// Parity
-    #[size = 6]
-    parity: u8,
+impl BitRead<'_, BigEndian> for GpsQzssHow {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let zcount = stream.read_int::<u32>(17)?;
+        let alert = stream.read_bool()?;
+        let anti_spoofing = stream.read_bool()?;
+        let frame_id = stream.read_int::<u8>(3)?;
+
+        if let Ok(frame_id) = GpsQzssFrameId::decode(frame_id) {
+            let nib = stream.read_int::<u8>(2)?; // TODO (parity)
+            let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+
+            Ok(Self {
+                alert,
+                frame_id,
+                anti_spoofing,
+                tow: zcount * 3 / 2,
+            })
+        } else {
+            Err(BitError::UnmatchedDiscriminant {
+                discriminant: 3,
+                enum_name: "frame-id".to_string(),
+            })
+        }
+    }
+}
+
+impl BitWrite<BigEndian> for GpsQzssHow {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(self.tow * 2 / 3, 17)?;
+        stream.write_bool(self.alert)?;
+        stream.write_bool(self.anti_spoofing)?;
+        stream.write_int(self.frame_id.encode(), 3)?;
+
+        stream.write_int(0, 2)?; // TODO (parity)
+        stream.write_int(0, 6)?; // TODO (parity)
+
+        Ok(())
+    }
 }
 
 impl Default for GpsQzssHow {
@@ -45,7 +79,6 @@ impl Default for GpsQzssHow {
             alert: Default::default(),
             anti_spoofing: Default::default(),
             frame_id: Default::default(),
-            parity: Default::default(), // TODO
         }
     }
 }
@@ -134,18 +167,19 @@ mod test {
     };
 
     #[test]
-    fn encoding() {
+    fn reciprocal() {
         for (tow, frame_id, alert, anti_spoofing) in [
             (0x05DC, GpsQzssFrameId::Ephemeris1, true, false),
             (0x0708, GpsQzssFrameId::Ephemeris1, false, false),
             (0x0_1194, GpsQzssFrameId::Ephemeris1, false, true),
+            (0x0_1194, GpsQzssFrameId::Ephemeris2, false, true),
+            (0x0_1194, GpsQzssFrameId::Ephemeris3, false, true),
         ] {
             let how = GpsQzssHow {
                 tow,
                 frame_id,
                 anti_spoofing,
                 alert,
-                parity: 0, // TODO
             };
 
             let mut tx = GpsBuffer::default();

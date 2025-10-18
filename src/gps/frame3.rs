@@ -218,13 +218,13 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
         stream.write_int(omega_lsb, 24)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
-        let omega_dot = (self.omega_dot * 2.0_f64.powi(43)).round() as i16;
+        let omega_dot = (self.omega_dot * 2.0_f64.powi(43)).round() as i32;
         stream.write_int(omega_dot, 24)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
         let idot = (self.idot * 2.0_f64.powi(43)).round() as i16;
         stream.write_int(self.iode, 8)?;
-        stream.write_int(idot, 16)?;
+        stream.write_int(idot, 14)?;
         stream.write_int(0, 2)?; // TODO (parity)
         stream.write_int(0, 6)?; // TODO (parity)
 
@@ -235,7 +235,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
 impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let cic = stream.read_int::<i16>(16)?;
-        let cic = (cic as f64) * 2.0_f64.powi(29);
+        let cic = (cic as f64) * 2.0_f64.powi(-29);
 
         let omega0_msb = stream.read_int::<u8>(8)?;
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
@@ -246,10 +246,10 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
         let mut omega0 = omega0_msb as u32;
         omega0 <<= 24;
         omega0 |= omega0_lsb;
-        let omega0 = (omega0 as f64) * 2.0_f64.powi(31);
+        let omega0 = (omega0 as f64) * 2.0_f64.powi(-31);
 
         let cis = stream.read_int::<i16>(16)?;
-        let cis = (cis as f64) * 2.0_f64.powi(29);
+        let cis = (cis as f64) * 2.0_f64.powi(-29);
 
         let i0_msb = stream.read_int::<u8>(8)?;
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
@@ -260,10 +260,10 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
         let mut i0 = i0_msb as u32;
         i0 <<= 24;
         i0 |= i0_lsb;
-        let i0 = (i0 as f64) * 2.0_f64.powi(31);
+        let i0 = (i0 as f64) * 2.0_f64.powi(-31);
 
         let crc = stream.read_int::<i16>(16)?;
-        let crc = (crc as f64) * 2.0_f64.powi(5);
+        let crc = (crc as f64) * 2.0_f64.powi(-5);
 
         let omega_msb = stream.read_int::<u8>(8)?;
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
@@ -274,15 +274,17 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
         let mut omega = omega_msb as u32;
         omega <<= 24;
         omega |= omega_lsb;
-        let omega = (omega as f64) * 2.0_f64.powi(31);
+        let omega = (omega as f64) * 2.0_f64.powi(-31);
 
         let omega_dot = stream.read_int::<u32>(24)?;
-        let omega_dot = (omega_dot as f64) * 2.0_f64.powi(43);
+        let omega_dot = (omega_dot as f64) * 2.0_f64.powi(-43);
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
         let iode = stream.read_int::<u8>(8)?;
-        let idot = stream.read_int::<i16>(16)?;
-        let idot = (idot as f64) * 2.0_f64.powi(43);
+        let idot = stream.read_int::<i16>(14)?;
+        let idot = (idot as f64) * 2.0_f64.powi(-43);
+
+        let nib = stream.read_int::<u8>(2)?; // TODO (parity)
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
         Ok(Self {
@@ -338,14 +340,14 @@ mod frame3 {
                 panic!("failed to decode GPS EPH-3: {}", e);
             });
 
-            assert_eq!(decoded.cic, cic);
-            assert_eq!(decoded.cis, cis);
-            assert_eq!(decoded.i0, i0);
             assert_eq!(decoded.iode, iode);
-            assert_eq!(decoded.idot, idot);
-            assert_eq!(decoded.omega0, omega0);
-            assert_eq!(decoded.omega, omega);
-            assert_eq!(decoded.omega_dot, omega_dot);
+            assert!((decoded.cic - cic).abs() < 1e-9);
+            assert!((decoded.cis - cis).abs() < 1e-9);
+            assert!((decoded.i0 - i0).abs() < 1e-9);
+            assert!((decoded.idot - idot).abs() < 1e-9);
+            assert!((decoded.omega0 - omega0).abs() < 1e-9);
+            assert!((decoded.omega - omega).abs() < 1e-9);
+            assert!((decoded.omega_dot - omega_dot).abs() < 1e-9);
         }
     }
 }
