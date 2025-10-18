@@ -29,8 +29,8 @@ pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
     rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
 }
 
-mod buffer;
-pub use buffer::GpsBuffer;
+// mod buffer;
+// pub use buffer::GpsBuffer;
 
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
@@ -40,9 +40,6 @@ pub use buffer::GpsBuffer;
 
 mod decoder;
 pub use decoder::GpsQzssDecoder;
-
-// mod decoding;
-// mod encoding;
 
 mod errors;
 pub use errors::GpsError;

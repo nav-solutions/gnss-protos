@@ -12,7 +12,7 @@
  */
 
 mod buffer;
-pub use buffer::Buffering;
+pub use buffer::Buffer;
 
 mod errors;
 
@@ -26,6 +26,8 @@ pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
 pub use gps::*;
+
+use bitbuffer::{BitRead, BitWrite};
 
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder {
@@ -63,15 +65,17 @@ pub trait Decoder {
     fn decode(&mut self) -> Option<Self::M>;
 }
 
-/// All GNSS messages implement the [Message] trait
+/// All GNSS messages implement the [Message] trait, which
+/// implicitely means:
+///
+/// - [Copy] and [Clone]
+/// - [PartialEq] comparison method
+/// - Simple yet efficient [Default] builder
+/// - [Message::encode] to dump to bytes
+/// - [Message::decode] to read from bytes
 pub trait Message: Copy + Clone + Default + PartialEq {
     /// Error type for this messaging.
     type Err;
-
-    /// Specific [Message] buffer storage.
-    /// Each message may be encoded into a specific structure, following
-    /// the underlying protocol endianness.
-    type B: Buffering;
 
     /// Returns the total number of bytes required to encode this [Message].
     /// Most [Message]s are not aligned to [u8], so the returned value here
@@ -82,18 +86,18 @@ pub trait Message: Copy + Clone + Default + PartialEq {
     /// For aligned protocol, this value strictly equals [Self::encoding_size].
     fn encoding_bitsize(&self) -> usize;
 
-    /// [Message] encoding attempt to mutable [Self::B],
-    /// which must fit completely in current buffer state.
+    /// [Message] encoding attempt to mutable buffer.
+    /// [Message] must fit entirely.
     ///
     /// Returns total number of encoded bytes on success,
     /// depending on protocol, this may include padding bits.
     /// Returns [Self::Err] on encoding issues.
-    fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err>;
+    fn encode(&self, buffer: &mut [u8]) -> Result<usize, Self::Err>;
 
-    /// Conveniently encodes this [Message] as a slice of [u8].
-    /// Depending on the protocol, the slice might be terminated with padding bits (zeros).
-    #[cfg(test)]
-    fn to_slice(&self) -> Vec<u8>;
+    /// [Message] decoding attempt, from read-only buffer state.
+    /// This is not compatible with a real-time decoder, for this task you are
+    /// expected to run a mutable [Decoder] implementation.
+    fn decode(buffer: &[u8]) -> Result<Self, Self::Err>;
 }
 
 /// Two's complement parsing & interpretation.

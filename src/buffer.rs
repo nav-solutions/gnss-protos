@@ -1,24 +1,25 @@
-use crate::BufferingError;
+use crate::{BufferingError, Message};
 
 #[cfg(doc)]
-use crate::Message;
+use crate::Decoder;
 
-use bitbuffer::{BigEndian, BitReadBuffer, BitReadStream, BitWriteStream, Endianness};
+use bitbuffer::{
+    BigEndian, BitReadBuffer, BitReadStream, BitWriteStream, Endianness, LittleEndian,
+};
 
-/// All our protocols buffer implement the [Buffering] trait.
-pub trait Buffering: Default {
+/// All our protocols buffer implement the [Buffer] trait.
+pub trait Buffer: Default {
     /// Creates a new buffered object from a sliced view.
-    /// The first received bits must be stored in most signficant position (Big Endian stream).
     fn from_slice(slice: &[u8]) -> Self;
 
     /// Converts this buffered object to a sliced view.
     fn to_slice(&self) -> &[u8];
 
-    /// Feed new data into this mutable buffer.
-    /// The first received bits must be stored in most signficant position (Big Endian stream).
+    /// Feed new bytes into this mutable buffer.
     fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
 
-    /// Returns true when not a single byte may be accept, buffer is full.
+    /// Returns true when not a single byte may be accepted, buffer is full.
+    /// You need to consume, with [std::io::Read] if feasible for example.
     fn is_full(&self) -> bool;
 
     /// Returns true when not a single byte is currently buffered.
@@ -33,36 +34,26 @@ pub trait Buffering: Default {
     /// Returns total buffering capacity (bytewise)
     fn capacity() -> usize;
 
-    /// Creates a [BitReadBuffer] view with preset [Endianness], from current buffer state.
-    fn bit_read<'a>(&'a self) -> BitReadBuffer<'a, BigEndian>;
-
-    /// Creates a [BitReadStream]er with preset [Endianness], from current buffer state.
-    fn bit_read_stream<'a>(&'a self) -> BitReadStream<'a, BigEndian> {
-        BitReadStream::new(self.bit_read())
-    }
-
-    /// Creates a mutable [BitWriteStream]er with preset [Endianness]
-    fn bit_write_stream<'a>(&'a mut self) -> BitWriteStream<'a, BigEndian>;
+    /// Obtain a [BitReadBuffer] from current readable bytes.
+    /// Usually used by receivers, possibly in streaming implementations.
+    fn to_bitread_buffer<'a, E: Endianness>(&'a self, endianness: E) -> BitReadBuffer<'a, E>;
 }
 
-/// Generic [StreamBuffer] used by receiving and decoding proceses.
-/// For correct operations, we always recommend a minimal allocation
-/// so 2 [Messages] fit in the buffer entirely.
-/// The higher the allocation here, the more efficient your I/O operations.
+/// Generic [StaticBuffer] used by receivers and protocols decoding,
+/// where a fixed size may apply.
 #[derive(Copy, Clone)]
-pub(crate) struct StreamBuffer<const M: usize> {
+pub(crate) struct StaticBuffer<const M: usize> {
     /// RD pointer
-    pub(crate) rd_ptr: usize,
+    rd_ptr: usize,
 
     /// WR pointer
-    pub(crate) wr_ptr: usize,
+    wr_ptr: usize,
 
     /// Internal storage, for more than two frames.
     inner: [u8; M],
 }
 
-impl<const M: usize> Default for StreamBuffer<M> {
-    /// Allocates a new [StreamBuffer].
+impl<const M: usize> Default for StaticBuffer<M> {
     fn default() -> Self {
         Self {
             rd_ptr: 0,
@@ -72,7 +63,7 @@ impl<const M: usize> Default for StreamBuffer<M> {
     }
 }
 
-impl<const M: usize> Buffering for StreamBuffer<M> {
+impl<const M: usize> Buffer for StaticBuffer<M> {
     /// Feed new data into the buffer.
     /// Returns total number of bytes that were correctly latched.
     /// Returns [BufferingError] on errors.
@@ -131,28 +122,21 @@ impl<const M: usize> Buffering for StreamBuffer<M> {
         M - self.wr_ptr
     }
 
-    /// Returns total number of bytes currently available for read operation.
     fn read_available(&self) -> usize {
-        self.rd_ptr
+        self.wr_ptr - self.rd_ptr
     }
 
-    /// Returns total buffering capacity (bytewise)
     fn capacity() -> usize {
         M
     }
 
-    /// Creates a [BitReadBuffer] view with desired [Endianness], from current buffer state.
-    fn bit_read<'a>(&'a self) -> BitReadBuffer<'a, BigEndian> {
-        BitReadBuffer::new(&self.inner[self.rd_ptr..], BigEndian::endianness())
-    }
-
-    fn bit_write_stream<'a>(&'a mut self) -> BitWriteStream<'a, BigEndian> {
-        BitWriteStream::from_slice(&mut self.inner[self.wr_ptr..], BigEndian::endianness())
+    fn to_bitread_buffer<'a, E: Endianness>(&'a self, endianness: E) -> BitReadBuffer<'a, E> {
+        BitReadBuffer::new(&self.inner[self.rd_ptr..self.wr_ptr], endianness)
     }
 }
 
 #[cfg(feature = "std")]
-impl<const M: usize> std::io::Write for StreamBuffer<M> {
+impl<const M: usize> std::io::Write for StaticBuffer<M> {
     fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
         let size = self
             .fill(src)
@@ -163,5 +147,12 @@ impl<const M: usize> std::io::Write for StreamBuffer<M> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<const M: usize> std::io::Read for StaticBuffer<M> {
+    fn read(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
     }
 }

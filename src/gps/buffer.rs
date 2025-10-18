@@ -1,9 +1,9 @@
-use crate::{buffer::StreamBuffer, Buffering, BufferingError};
+use crate::{buffer::StreamBuffer, Buffering, BufferingError, gps::GpsQzssFrame};
+
+use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream, Endianness};
 
 /// internal storage for more than 2 frames (300 bits)
 const CAPACITY: usize = 1024;
-
-use bitbuffer::{BigEndian, BitReadBuffer, BitWriteStream};
 
 #[derive(Default, Copy, Clone)]
 pub struct GpsBuffer {
@@ -45,11 +45,11 @@ impl Buffering for GpsBuffer {
         CAPACITY
     }
 
-    fn bit_read<'a>(&'a self) -> BitReadBuffer<'a, BigEndian> {
-        self.inner.bit_read()
+    fn to_bitread_buffer<'a, E: Endianness>(&'a self, endianness: E) -> BitReadBuffer<'a, E> {
+        self.inner.to_bitread_buffer(endianness)
     }
-
-    fn bit_write_stream<'a>(&'a mut self) -> BitWriteStream<'a, BigEndian> {
-        self.inner.bit_write_stream()
+    
+    fn write_message<MSG: Message>(&mut self, frame: GpsQzssFrame) -> Result<usize, BufferingError> {
+        Ok(0)
     }
 }

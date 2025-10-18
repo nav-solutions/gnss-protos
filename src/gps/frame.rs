@@ -1,9 +1,13 @@
 use crate::{
     gps::{
-        GpsBuffer, GpsError, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry,
-        GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsError, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
     },
-    Buffering, Message,
+    Buffer, BufferingError, Message,
+};
+
+use bitbuffer::{
+    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
 };
 
 /// GPS / QZSS interpreted frame.
@@ -20,9 +24,46 @@ pub struct GpsQzssFrame {
     pub subframe: GpsQzssSubframe,
 }
 
+impl BitRead<'_, BigEndian> for GpsQzssFrame {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let telemetry = stream.read::<GpsQzssTelemetry>()?;
+        let how = stream.read::<GpsQzssHow>()?;
+
+        let subframe = match how.frame_id {
+            GpsQzssFrameId::Ephemeris1 => {
+                let eph = stream.read::<GpsQzssFrame1>()?;
+                GpsQzssSubframe::Ephemeris1(eph)
+            },
+            GpsQzssFrameId::Ephemeris2 => {
+                let eph = stream.read::<GpsQzssFrame2>()?;
+                GpsQzssSubframe::Ephemeris2(eph)
+            },
+            GpsQzssFrameId::Ephemeris3 => {
+                let eph = stream.read::<GpsQzssFrame3>()?;
+                GpsQzssSubframe::Ephemeris3(eph)
+            },
+            _ => unimplemented!("almanach"),
+        };
+
+        Ok(Self {
+            telemetry,
+            how,
+            subframe,
+        })
+    }
+}
+
+impl BitWrite<BigEndian> for GpsQzssFrame {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write(&self.telemetry)?;
+        stream.write(&self.how)?;
+        stream.write(&self.subframe)?;
+        Ok(())
+    }
+}
+
 impl Message for GpsQzssFrame {
     type Err = GpsError;
-    type B = GpsBuffer;
 
     fn encoding_size(&self) -> usize {
         GPS_FRAME_BYTES
@@ -32,8 +73,14 @@ impl Message for GpsQzssFrame {
         GPS_FRAME_BITS
     }
 
-    fn encode(&self, buffer: &mut Self::B) -> Result<usize, Self::Err> {
-        let mut stream = buffer.bit_write_stream();
+    fn encode(&self, buffer: &mut [u8]) -> Result<usize, Self::Err> {
+        let avail = buffer.len();
+
+        if avail < GPS_FRAME_BYTES {
+            return Err(GpsError::Buffering(BufferingError::StorageFull));
+        }
+
+        let mut stream = BitWriteStream::from_slice(buffer, BigEndian);
         stream.write(&self.telemetry)?;
         stream.write(&self.how)?;
 
@@ -46,11 +93,10 @@ impl Message for GpsQzssFrame {
         Ok(GPS_FRAME_BYTES)
     }
 
-    #[cfg(test)]
-    fn to_slice(&self) -> Vec<u8> {
-        let mut buf = GpsBuffer::default();
-        self.encode(&mut buf).unwrap();
-        buf.to_slice().to_vec()
+    fn decode(buffer: &[u8]) -> Result<Self, Self::Err> {
+        let buffer = BitReadBuffer::new(buffer, BigEndian);
+        let mut reader = BitReadStream::new(buffer);
+        Ok(reader.read::<Self>()?)
     }
 }
 
@@ -87,5 +133,31 @@ impl GpsQzssFrame {
         }
 
         self
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        gps::{GpsBuffer, GpsQzssFrame},
+        Buffering, Message,
+    };
+
+    #[test]
+    fn default_reciprocal() {
+        let default = GpsQzssFrame::default();
+
+        let mut buffer = GpsBuffer::default();
+        let mut writer = buffer.bit_write_stream();
+
+        assert!(writer.write(&default).is_ok(), "failed to encode frame");
+
+        let mut reader = buffer.bit_read_stream();
+
+        let decoded = reader.read::<GpsQzssFrame>().unwrap_or_else(|e| {
+            panic!("failed to decode frame: {}", e);
+        });
+
+        assert_eq!(decoded, default);
     }
 }

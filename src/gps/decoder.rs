@@ -1,10 +1,13 @@
 use crate::{
+    buffer::StaticBuffer,
     gps::{
-        GpsBuffer, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId,
-        GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_WORD_BITS,
+        GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_WORD_BITS,
     },
-    Buffering, BufferingError, Decoder,
+    Buffer, BufferingError, Decoder,
 };
+
+use bitbuffer::{BigEndian, BitReadStream, Endianness};
 
 #[cfg(feature = "log")]
 use log::{debug, error};
@@ -21,6 +24,16 @@ enum State {
 
     /// Decoding subframe
     Subframe,
+}
+
+impl State {
+    fn needs(&self) -> usize {
+        match self {
+            Self::HOW => 4,
+            Self::Telemetry => 4,
+            Self::Subframe => 8 * 4,
+        }
+    }
 }
 
 /// [GpsQzssDecoder] can decode GPS (or QZSS) messages.
@@ -58,7 +71,7 @@ pub struct GpsQzssDecoder {
 
     /// Enough bytes to store everything +1
     /// so we can manipulate and realign everything.
-    buffer: GpsBuffer,
+    buffer: StaticBuffer<2048>,
 
     /// True when parity verification is requested
     parity_verification: bool,
@@ -70,8 +83,8 @@ impl Default for GpsQzssDecoder {
         Self {
             state: Default::default(),
             parity_verification: false,
-            buffer: GpsBuffer::default(),
             frame: Default::default(),
+            buffer: StaticBuffer::default(),
         }
     }
 }
@@ -105,12 +118,21 @@ impl Decoder for GpsQzssDecoder {
     fn decode(&mut self) -> Option<Self::M> {
         // #[cfg(feature = "log")]
         let mut ret = Option::<Self::M>::None;
-        let mut reader = self.buffer.bit_read_stream();
+
+        // deploy a bit stream from current readable state
         let mut available = self.buffer.read_available();
+        let mut bitbuffer = self.buffer.to_bitread_buffer(BigEndian::endianness());
+        let mut bitstream = BitReadStream::new(bitbuffer);
 
         loop {
+            debug!("state={:?} (avail={})", self.state, available);
+
+            if available < self.state.needs() {
+                return None;
+            }
+
             let (next_state, consumed) = match self.state {
-                State::Telemetry => match reader.read::<GpsQzssTelemetry>() {
+                State::Telemetry => match bitstream.read::<GpsQzssTelemetry>() {
                     Ok(telemetry) => {
                         #[cfg(feature = "log")]
                         debug!("GPS/QZSS [tlm]: OK (message=0x{:02x})", telemetry.message);
@@ -120,7 +142,7 @@ impl Decoder for GpsQzssDecoder {
                     },
                     Err(_) => (State::Telemetry, GPS_WORD_BITS),
                 },
-                State::HOW => match reader.read::<GpsQzssHow>() {
+                State::HOW => match bitstream.read::<GpsQzssHow>() {
                     Ok(how) => {
                         #[cfg(feature = "log")]
                         debug!("GPS/QZSS [how]: OK (fid={})", how.frame_id);
@@ -141,7 +163,7 @@ impl Decoder for GpsQzssDecoder {
                 },
                 State::Subframe => match self.frame.how.frame_id {
                     GpsQzssFrameId::Ephemeris1 => {
-                        match reader.read::<GpsQzssFrame1>() {
+                        match bitstream.read::<GpsQzssFrame1>() {
                             Ok(eph1) => {
                                 #[cfg(feature = "log")]
                                 debug!("GPS/QZSS [eph-1]: OK (iodc={})", eph1.iodc());
@@ -160,7 +182,7 @@ impl Decoder for GpsQzssDecoder {
                         (State::Telemetry, GPS_SUBFRAME_BITS)
                     },
                     GpsQzssFrameId::Ephemeris2 => {
-                        match reader.read::<GpsQzssFrame2>() {
+                        match bitstream.read::<GpsQzssFrame2>() {
                             Ok(eph2) => {
                                 #[cfg(feature = "log")]
                                 debug!("GPS/QZSS [eph-2]: OK (iode={})", eph2.iode);
@@ -179,7 +201,7 @@ impl Decoder for GpsQzssDecoder {
                         (State::Telemetry, GPS_SUBFRAME_BITS)
                     },
                     GpsQzssFrameId::Ephemeris3 => {
-                        match reader.read::<GpsQzssFrame3>() {
+                        match bitstream.read::<GpsQzssFrame3>() {
                             Ok(eph3) => {
                                 #[cfg(feature = "log")]
                                 debug!("GPS/QZSS [eph-3]: OK (iode={})", eph3.iode);
@@ -202,16 +224,7 @@ impl Decoder for GpsQzssDecoder {
             };
 
             self.state = next_state;
-
-            match reader.set_pos(consumed) {
-                Ok(_) => {},
-                Err(_) => {
-                    // consumed everything most likely
-                    if ret.is_none() {
-                        return None;
-                    }
-                },
-            }
+            available -= consumed;
 
             if let Some(ret) = ret {
                 return Some(ret);

@@ -50,7 +50,7 @@ impl BitRead<'_, BigEndian> for GpsQzssHow {
             })
         } else {
             Err(BitError::UnmatchedDiscriminant {
-                discriminant: 3,
+                discriminant: frame_id as usize,
                 enum_name: "frame-id".to_string(),
             })
         }
@@ -62,7 +62,7 @@ impl BitWrite<BigEndian> for GpsQzssHow {
         stream.write_int(self.tow * 2 / 3, 17)?;
         stream.write_bool(self.alert)?;
         stream.write_bool(self.anti_spoofing)?;
-        stream.write_int(self.frame_id.encode(), 3)?;
+        stream.write_int(self.frame_id.encode() & 0x07, 3)?;
 
         stream.write_int(0, 2)?; // TODO (parity)
         stream.write_int(0, 6)?; // TODO (parity)
@@ -77,8 +77,8 @@ impl Default for GpsQzssHow {
         Self {
             tow: Default::default(),
             alert: Default::default(),
-            anti_spoofing: Default::default(),
             frame_id: Default::default(),
+            anti_spoofing: Default::default(),
         }
     }
 }
@@ -167,6 +167,22 @@ mod test {
     };
 
     #[test]
+    fn default_reciprocal() {
+        let default = GpsQzssHow::default();
+
+        let mut buffer = GpsBuffer::default();
+        let mut writer = buffer.bit_write_stream();
+        assert!(writer.write(&default).is_ok(), "failed to encode frame");
+
+        let mut reader = buffer.bit_read_stream();
+        let decoded = reader.read::<GpsQzssHow>().unwrap_or_else(|e| {
+            panic!("failed to decode HOW: {}", e);
+        });
+
+        assert_eq!(decoded, default);
+    }
+
+    #[test]
     fn reciprocal() {
         for (tow, frame_id, alert, anti_spoofing) in [
             (0x05DC, GpsQzssFrameId::Ephemeris1, true, false),
@@ -183,10 +199,12 @@ mod test {
             };
 
             let mut tx = GpsBuffer::default();
+
             let mut writer = tx.bit_write_stream();
             assert!(writer.write(&how).is_ok(), "failed to encode frame");
 
             let mut reader = tx.bit_read_stream();
+
             let decoded = reader.read::<GpsQzssHow>().unwrap_or_else(|e| {
                 panic!("GPS HOW reciprocal failed: {}", e);
             });

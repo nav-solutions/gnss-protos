@@ -24,13 +24,7 @@ pub enum GpsQzssFrameId {
 
 impl BitWrite<BigEndian> for GpsQzssFrameId {
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        match self {
-            Self::Ephemeris1 => stream.write_int::<u8>(1, 3),
-            Self::Ephemeris2 => stream.write_int::<u8>(2, 3),
-            Self::Ephemeris3 => stream.write_int::<u8>(3, 3),
-            Self::Almanach4 => stream.write_int::<u8>(4, 3),
-            Self::Almanach5 => stream.write_int::<u8>(5, 3),
-        }
+        stream.write_int(self.encode(), 3)
     }
 }
 
@@ -80,34 +74,17 @@ mod test {
     };
 
     #[test]
-    fn from_int() {
+    fn reciprocal() {
         for (value, expected) in [
             (1, GpsQzssFrameId::Ephemeris1),
             (2, GpsQzssFrameId::Ephemeris2),
             (3, GpsQzssFrameId::Ephemeris3),
+            (4, GpsQzssFrameId::Almanach4),
+            (5, GpsQzssFrameId::Almanach5),
         ] {
             let frame_id = GpsQzssFrameId::decode(value).unwrap();
             assert_eq!(frame_id, expected);
-        }
-    }
-
-    #[test]
-    fn from_stream() {
-        for (fid, encoded_value) in [
-            (GpsQzssFrameId::Ephemeris1, 1 << 5),
-            (GpsQzssFrameId::Ephemeris2, 2 << 5),
-            (GpsQzssFrameId::Ephemeris3, 3 << 5),
-            (GpsQzssFrameId::Almanach4, 4 << 5),
-            (GpsQzssFrameId::Almanach5, 5 << 5),
-        ] {
-            let mut buffer = GpsBuffer::default();
-            let mut stream = buffer.bit_write_stream();
-
-            stream.write(&fid).unwrap_or_else(|e| {
-                panic!("Failed to encode FID {}: {}", fid, e);
-            });
-
-            assert_eq!(buffer.to_slice()[0], encoded_value);
+            assert_eq!(frame_id.encode(), value);
         }
     }
 }

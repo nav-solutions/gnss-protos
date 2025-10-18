@@ -32,7 +32,7 @@ impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
             })
         } else {
             Err(BitError::UnmatchedDiscriminant {
-                discriminant: 8,
+                discriminant: preamble as usize,
                 enum_name: "preamble".to_string(),
             })
         }
