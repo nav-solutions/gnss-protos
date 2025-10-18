@@ -1,8 +1,4 @@
-use crate::gps::{
-    // GpsQzssFrame3,
-    GpsQzssFrame1,
-    GpsQzssFrame2,
-};
+use crate::gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3};
 
 #[cfg(test)]
 use crate::gps::GpsQzssFrameId;
@@ -17,8 +13,9 @@ pub enum GpsQzssSubframe {
 
     /// GPS Ephemeris Frame #2
     Ephemeris2(GpsQzssFrame2),
-    // /// GPS Ephemeris Frame #3
-    // Ephemeris3(GpsQzssFrame3),
+
+    /// GPS Ephemeris Frame #3
+    Ephemeris3(GpsQzssFrame3),
 }
 
 impl BitWrite<BigEndian> for GpsQzssSubframe {
@@ -26,6 +23,7 @@ impl BitWrite<BigEndian> for GpsQzssSubframe {
         match self {
             Self::Ephemeris1(eph) => stream.write(eph),
             Self::Ephemeris2(eph) => stream.write(eph),
+            Self::Ephemeris3(eph) => stream.write(eph),
         }
     }
 }
@@ -43,9 +41,9 @@ impl GpsQzssSubframe {
     pub fn model(frame_id: GpsQzssFrameId) -> Self {
         match frame_id {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
+            GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
+            GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
             _ => panic!("not yet"),
-            // GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
-            // GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
         }
     }
 
@@ -81,21 +79,21 @@ impl GpsQzssSubframe {
         }
     }
 
-    // /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    // pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {
-    //     match self {
-    //         Self::Ephemeris3(frame) => Some(*frame),
-    //         _ => None,
-    //     }
-    // }
+    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    pub fn as_eph3(&self) -> Option<GpsQzssFrame3> {
+        match self {
+            Self::Ephemeris3(frame) => Some(*frame),
+            _ => None,
+        }
+    }
 
-    // /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
-    // pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
-    //     match self {
-    //         Self::Ephemeris3(frame) => Some(frame),
-    //         _ => None,
-    //     }
-    // }
+    /// Unwraps self as [GpsQzssFrame3] reference (if feasible)
+    pub fn as_mut_eph3(&mut self) -> Option<&mut GpsQzssFrame3> {
+        match self {
+            Self::Ephemeris3(frame) => Some(frame),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
