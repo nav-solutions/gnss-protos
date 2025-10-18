@@ -225,6 +225,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
         let idot = (self.idot * 2.0_f64.powi(43)).round() as i16;
         stream.write_int(self.iode, 8)?;
         stream.write_int(idot, 16)?;
+        stream.write_int(0, 2)?; // TODO (parity)
         stream.write_int(0, 6)?; // TODO (parity)
 
         Ok(())
