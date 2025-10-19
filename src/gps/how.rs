@@ -175,10 +175,8 @@ impl GpsQzssHow {
 mod test {
     use crate::{
         gps::{GpsQzssFrameId, GpsQzssHow},
-        Buffer, Message, StaticBuffer,
+        Message,
     };
-
-    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn default_reciprocal() {

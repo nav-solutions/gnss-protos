@@ -129,8 +129,6 @@ impl GpsQzssTelemetry {
 mod telemetry {
     use crate::{gps::GpsQzssTelemetry, Buffer, Message, StaticBuffer};
 
-    use bitbuffer::{BigEndian, BitReadStream};
-
     #[test]
     fn reciprocal() {
         for (dword, message, integrity, reserved_bit) in [
