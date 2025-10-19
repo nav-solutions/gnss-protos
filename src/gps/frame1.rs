@@ -36,8 +36,8 @@ pub struct GpsQzssFrame1 {
     /// - 15: 6144.00 < ura
     pub ura: u8,
 
-    /// Health mask, 0 means all good.
-    pub health: u8,
+    /// [GpsQzssSatelliteHealth] flags.
+    pub health: GpsQzssSatelliteHealth,
 
     /// (MSB) IODC message identifier.
     iodc_msb: u8,
@@ -379,65 +379,9 @@ impl GpsQzssFrame1 {
         self
     }
 
-    /// Returns true if [GpsQzssFrame1] indicates all-signals are OK.
-    pub fn healthy(&self) -> bool {
-        self.health == 0
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite is temporarily
-    /// out of service
-    pub fn unavailable(&self) -> bool {
-        self.health == 0x1C
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite has a pending
-    /// maintenance operation (should be used with caution)
-    pub fn pending_maintenance(&self) -> bool {
-        self.health == 0x1D
-    }
-
-    /// Returns true if [GpsQzssFrame1] indicates this satellite is experiencing
-    /// code modulation or tranmission issues.
-    pub fn transmission_issues(&self) -> bool {
-        !self.healthy()
-            && !self.pending_maintenance()
-            && !self.unavailable()
-            && self.health != 0x1E
-            && self.health != 0x1F
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with all-signals marked as OK.
-    pub fn with_all_signals_ok(mut self) -> Self {
-        self.health = 0;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// temporary unavailability (under maintenance operation).
-    pub fn with_unavailable_access(mut self) -> Self {
-        self.health = 0x1C;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// future (scheduled) unavailability (pending maintenance operation).
-    pub fn with_pending_maintenance(mut self) -> Self {
-        self.health = 0x1D;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with special status code marking
-    /// a transmission issue.
-    pub fn with_transmission_issue(mut self) -> Self {
-        self.health = 0x0C;
-        self
-    }
-
-    /// Copies and returns [GpsQzssFrame1] with updated 6-bit health mask.
-    /// The MSB can be used to mask the non-healthiness.
-    /// The 5-LSB are health mask for each signal components.
-    pub fn with_health_mask(mut self, health: u8) -> Self {
-        self.health = health & 0x3f;
+    /// Copies and returns [GpsQzssFrame1] with updated [GpsQzssSatelliteHealth] flags.
+    pub fn with_health(mut self, health: GpsQzssSatelliteHealth) -> Self {
+        self.health = health;
         self
     }
 

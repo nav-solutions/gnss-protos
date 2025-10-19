@@ -26,7 +26,6 @@ impl Message<BigEndian> for GpsQzssFrame {
     fn encoding_size(&self) -> usize {
         GPS_FRAME_BYTES
     }
-
     fn encoding_bits(&self) -> usize {
         GPS_FRAME_BITS
     }
@@ -36,6 +35,8 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame {
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let telemetry = stream.read::<GpsQzssTelemetry>()?;
         let how = stream.read::<GpsQzssHow>()?;
+
+        panic!("HOW: {:?}", how);
 
         let subframe = match how.frame_id {
             GpsQzssFrameId::Ephemeris1 => {
@@ -50,7 +51,11 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame {
                 let eph = stream.read::<GpsQzssFrame3>()?;
                 GpsQzssSubframe::Ephemeris3(eph)
             },
-            _ => unimplemented!("almanach"),
+            GpsQzssFrameId::Almanach5 => {
+                let alm = stream.read::<GpsQzssFrame5>()?;
+                GpsQzssSubframe::Almaach5(alm)
+            },
+            _ => unimplemented!("almanach-4"),
         };
 
         Ok(Self {
@@ -99,6 +104,7 @@ impl GpsQzssFrame {
             GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
             GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
             GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
+            GpsQzssSubframe::Almanach5(_) => self.how.frame_id = GpsQzssFrameId::Almanach5,
         }
 
         self

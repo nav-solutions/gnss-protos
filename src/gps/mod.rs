@@ -44,6 +44,9 @@ pub use almanach::GpsQzssAlmanach;
 mod errors;
 pub use errors::GpsError;
 
+mod health;
+pub use health::GpsQzssSatelliteHealth;
+
 mod frame1;
 pub use frame1::GpsQzssFrame1;
 
@@ -56,8 +59,8 @@ pub use frame3::GpsQzssFrame3;
 // mod frame4;
 // pub use frame4::GpsQzssFrame4;
 
-// mod frame5;
-// pub use frame5::GpsQzssFrame5;
+mod frame5;
+pub use frame5::GpsQzssFrame5;
 
 mod frame_id;
 pub use frame_id::GpsQzssFrameId;
