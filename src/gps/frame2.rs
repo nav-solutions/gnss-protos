@@ -1,11 +1,9 @@
 use crate::{
-    gps::{rad_to_semicircles, GpsError, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{rad_to_semicircles, GPS_WORD_BITS, GPS_WORD_BYTES},
     Message,
 };
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
-
-use core::f64::consts::PI;
 
 /// [GpsQzssFrame2] Ephemeris #2 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
@@ -270,7 +268,7 @@ impl GpsQzssFrame2 {
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated mean anomaly (in radians) at reference time.
-    pub fn with_mean_anomaly_radians(mut self, m0_rad: f64) -> Self {
+    pub fn with_mean_anomaly_radians(self, m0_rad: f64) -> Self {
         self.with_mean_anomaly_semicircles(rad_to_semicircles(m0_rad))
     }
 
@@ -281,7 +279,7 @@ impl GpsQzssFrame2 {
     }
 
     /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in radians)
-    pub fn with_mean_motion_difference_radians(mut self, dn_rad: f64) -> Self {
+    pub fn with_mean_motion_difference_radians(self, dn_rad: f64) -> Self {
         self.with_mean_motion_difference_semicircles(rad_to_semicircles(dn_rad))
     }
 

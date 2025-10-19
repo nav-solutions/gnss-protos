@@ -1,9 +1,7 @@
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
-};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::{
-    gps::{GpsError, GpsQzssFrameId, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{GpsQzssFrameId, GPS_WORD_BITS, GPS_WORD_BYTES},
     Message,
 };
 

@@ -1,8 +1,5 @@
 use crate::{
-    gps::{
-        rad_to_semicircles, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
-        GPS_WORD_BYTES,
-    },
+    gps::{rad_to_semicircles, GPS_WORD_BITS, GPS_WORD_BYTES},
     Message,
 };
 

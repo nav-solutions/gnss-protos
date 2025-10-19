@@ -1,7 +1,9 @@
-use crate::gps::{
-    GpsDataWord,
-    GpsError,
-    GpsQzssAlmanach,
+use crate::{
+    gps::{
+        GpsError,
+        GpsQzssAlmanach,
+    },
+    Message,
 };
 
 mod status;

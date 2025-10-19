@@ -1,11 +1,6 @@
-use crate::{
-    gps::{GpsError, GPS_PREAMBLE_BYTE},
-    Message, GPS_WORD_BITS, GPS_WORD_BYTES,
-};
+use crate::{gps::GPS_PREAMBLE_BYTE, Message, GPS_WORD_BITS, GPS_WORD_BYTES};
 
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
-};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// [GpsQzssTelemetry] marks the beginning of each frame
 #[derive(Debug, Copy, Clone, PartialEq)]

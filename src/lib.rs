@@ -31,9 +31,6 @@ pub use bitbuffer::{BigEndian, BitError, BitRead, BitWrite, Endianness, LittleEn
 
 use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
 
-#[cfg(feature = "std")]
-use std::io::{Read, Write};
-
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder<E: Endianness>: Default {
     /// [Message] type returned by [Self::decode].

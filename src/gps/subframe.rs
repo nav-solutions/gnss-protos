@@ -1,12 +1,9 @@
-use crate::{
-    gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GPS_WORD_BITS, GPS_WORD_BYTES},
-    BigEndian, Message,
-};
+use crate::gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3};
 
 #[cfg(test)]
 use crate::gps::GpsQzssFrameId;
 
-use bitbuffer::{BitError, BitWrite, BitWriteStream};
+use bitbuffer::{BigEndian, BitError, BitWrite, BitWriteStream};
 
 /// GPS / QZSS Interpreted subframes
 #[derive(Debug, Copy, Clone, PartialEq)]

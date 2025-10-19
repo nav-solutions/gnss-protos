@@ -13,8 +13,8 @@ pub const GPS_WORDS_PER_FRAME: usize = 10;
 /// Total GPS/QZSS frame size (in bits!)
 pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
 
-/// Total GPS/QZSS subframe size (in bits!)
-pub(crate) const GPS_SUBFRAME_BITS: usize = (GPS_WORDS_PER_FRAME - 2) * GPS_WORD_BITS;
+// /// Total GPS/QZSS subframe size (in bits!)
+// pub(crate) const GPS_SUBFRAME_BITS: usize = (GPS_WORDS_PER_FRAME - 2) * GPS_WORD_BITS;
 
 /// Total GPS/QZSS frame size (in bytes!)
 pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
@@ -35,8 +35,8 @@ pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
 
-// mod almanach;
-// pub use almanach::GpsQzssAlmanach;
+mod almanach;
+pub use almanach::GpsQzssAlmanach;
 
 // mod decoder;
 // pub use decoder::GpsQzssDecoder;

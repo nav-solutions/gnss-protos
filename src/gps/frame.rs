@@ -1,14 +1,12 @@
 use crate::{
     gps::{
-        GpsError, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow,
-        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
+        GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
     },
-    Buffer, BufferingError, Message,
+    Message,
 };
 
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
-};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// GPS / QZSS interpreted frame.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]

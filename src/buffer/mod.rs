@@ -1,15 +1,10 @@
-use crate::{BufferingError, Message};
-
 #[cfg(feature = "std")]
 mod std;
 
 #[cfg(doc)]
 use crate::Decoder;
 
-use bitbuffer::{
-    BigEndian, BitError, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream, Endianness,
-    LittleEndian,
-};
+use bitbuffer::{BitReadBuffer, Endianness};
 
 /// All our protocols buffer implement the [Buffer] trait.
 pub trait Buffer: Default {
