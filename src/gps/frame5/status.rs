@@ -1,8 +1,9 @@
 use crate::{
-    gps::{GpsDataWord, GPS_WORDS_PER_FRAME},
+    gps::{GPS_WORD_BITS, GPS_WORD_BYTES},
     twos_complement,
 };
 
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct SatelliteConfigHealth {
     /// True when A/S is turned on
     pub anti_spoofing: bool,
@@ -13,7 +14,7 @@ pub struct SatelliteConfigHealth {
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssConfigHealth {
-    /// Array of [SatelliteConfigHealth] 
+    /// [SatelliteConfigHealth] array for 32 satellites.
     pub config_health: [SatelliteConfigHealth; 32]
 }
 
@@ -368,7 +369,7 @@ impl Word10 {
 }
 
 #[cfg(test)]
-mod frame1 {
+mod test {
     use super::*;
 
     #[test]
