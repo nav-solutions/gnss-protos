@@ -119,6 +119,20 @@ impl GpsQzssFrame3 {
     pub fn with_omega_dot_rad_s(mut self, omega_dot_rad: f64) -> Self {
         self.with_omega_dot_semicircles_s(rad_to_semicircles(omega_dot_rad))
     }
+
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_cic_radians(1.0e-6)
+            .with_cis_radians(2.0e-6)
+            .with_crc_meters(122.0)
+            .with_iode(0x12)
+            .with_omega_semicircles(4e-1)
+            .with_omega_dot_semicircles_s(1e-3)
+            .with_inclination_semicircles(1e-3)
+            .with_inclination_rate_semicircles_s(1e-9)
+            .with_longitude_ascending_node_semicircles(3e-1)
+    }
 }
 
 impl PartialEq for GpsQzssFrame3 {
@@ -170,20 +184,6 @@ impl Message<BigEndian> for GpsQzssFrame3 {
 
     fn encoding_bits(&self) -> usize {
         8 * GPS_WORD_BITS
-    }
-
-    #[cfg(test)]
-    fn model() -> Self {
-        Self::default()
-            .with_cic_radians(1.0e-6)
-            .with_cis_radians(2.0e-6)
-            .with_crc_meters(122.0)
-            .with_iode(0x12)
-            .with_omega_semicircles(4e-1)
-            .with_omega_dot_semicircles_s(1e-3)
-            .with_inclination_semicircles(1e-3)
-            .with_inclination_rate_semicircles_s(1e-9)
-            .with_longitude_ascending_node_semicircles(3e-1)
     }
 }
 

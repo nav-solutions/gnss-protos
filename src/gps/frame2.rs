@@ -104,22 +104,6 @@ impl Message<BigEndian> for GpsQzssFrame2 {
     fn encoding_bits(&self) -> usize {
         8 * GPS_WORD_BITS
     }
-
-    #[cfg(test)]
-    fn model() -> Self {
-        Self::default()
-            .with_toe_seconds(54_320)
-            .with_iode(0x01)
-            .with_mean_anomaly_semicircles(1.0e-1)
-            .with_mean_motion_difference_semicircles(2.0e-1)
-            .with_square_root_semi_major_axis(5353.0)
-            .with_eccentricity(1.0e-1)
-            .with_aodo(0x12)
-            .with_cuc_radians(1e-6)
-            .with_cus_radians(2e-6)
-            .with_crs_meters(87.0)
-            .with_fit_interval_flag()
-    }
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame2 {
@@ -250,6 +234,22 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
 }
 
 impl GpsQzssFrame2 {
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_toe_seconds(54_320)
+            .with_iode(0x01)
+            .with_mean_anomaly_semicircles(1.0e-1)
+            .with_mean_motion_difference_semicircles(2.0e-1)
+            .with_square_root_semi_major_axis(5353.0)
+            .with_eccentricity(1.0e-1)
+            .with_aodo(0x12)
+            .with_cuc_radians(1e-6)
+            .with_cus_radians(2e-6)
+            .with_crs_meters(87.0)
+            .with_fit_interval_flag()
+    }
+
     /// Copies and returns [GpsQzssFrame2] with updated time of issue of Ephemeris
     /// in seconds of week.
     pub fn with_toe_seconds(mut self, toe_seconds: u32) -> Self {

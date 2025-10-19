@@ -87,10 +87,6 @@ pub trait Message<E: Endianness>:
         let decoded = reader.read::<Self>()?;
         Ok(decoded)
     }
-
-    /// Generates a realistic (physically valid) frame, for testing purposes.
-    #[cfg(test)]
-    fn model() -> Self;
 }
 
 /// Two's complement parsing & interpretation.

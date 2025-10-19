@@ -68,11 +68,11 @@ pub use how::GpsQzssHow;
 mod tlm;
 pub use tlm::GpsQzssTelemetry;
 
-// mod frame;
-// pub use frame::GpsQzssFrame;
+mod frame;
+pub use frame::GpsQzssFrame;
 
-// mod subframe;
-// pub use subframe::GpsQzssSubframe;
+mod subframe;
+pub use subframe::GpsQzssSubframe;
 
 #[cfg(test)]
 mod test {

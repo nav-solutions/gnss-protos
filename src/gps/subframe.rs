@@ -1,9 +1,12 @@
-use crate::gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3};
+use crate::{
+    gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GPS_WORD_BITS, GPS_WORD_BYTES},
+    BigEndian, Message,
+};
 
 #[cfg(test)]
 use crate::gps::GpsQzssFrameId;
 
-use bitbuffer::{BigEndian, BitError, BitWrite, BitWriteStream};
+use bitbuffer::{BitError, BitWrite, BitWriteStream};
 
 /// GPS / QZSS Interpreted subframes
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -92,21 +95,6 @@ impl GpsQzssSubframe {
         match self {
             Self::Ephemeris3(frame) => Some(frame),
             _ => None,
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{gps::GpsQzssSubframe, Buffer, StaticBuffer};
-
-    #[test]
-    fn default_reciprocal() {
-        for subframe in [GpsQzssSubframe::Ephemeris1(Default::default())] {
-            let mut buf = StaticBuffer::<1024>::default();
-            buf.bitwrite(&subframe).unwrap_or_else(|e| {
-                panic!("Failed to encoded frame: {}", e);
-            });
         }
     }
 }

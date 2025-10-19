@@ -29,14 +29,6 @@ impl Message<BigEndian> for GpsQzssTelemetry {
     fn encoding_bits(&self) -> usize {
         GPS_WORD_BITS
     }
-
-    #[cfg(test)]
-    fn model() -> Self {
-        Self::default()
-            .with_message(0x1234)
-            .with_integrity()
-            .with_reserved_bit()
-    }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
@@ -99,6 +91,14 @@ impl std::fmt::Display for GpsQzssTelemetry {
 }
 
 impl GpsQzssTelemetry {
+    #[cfg(test)]
+    pub fn model() -> Self {
+        Self::default()
+            .with_message(0x1234)
+            .with_integrity()
+            .with_reserved_bit()
+    }
+
     /// Copies and returns new [GpsQzssTelemetry] with updated 14-bit TLM message
     pub fn with_message(mut self, message_14b: u16) -> Self {
         self.message = message_14b & 0x3fff;

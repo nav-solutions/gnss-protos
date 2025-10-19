@@ -24,6 +24,16 @@ pub struct GpsQzssFrame {
     pub subframe: GpsQzssSubframe,
 }
 
+impl Message<BigEndian> for GpsQzssFrame {
+    fn encoding_size(&self) -> usize {
+        GPS_FRAME_BYTES
+    }
+
+    fn encoding_bits(&self) -> usize {
+        GPS_FRAME_BITS
+    }
+}
+
 impl BitRead<'_, BigEndian> for GpsQzssFrame {
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let telemetry = stream.read::<GpsQzssTelemetry>()?;
@@ -62,48 +72,9 @@ impl BitWrite<BigEndian> for GpsQzssFrame {
     }
 }
 
-impl Message for GpsQzssFrame {
-    type Err = GpsError;
-
-    fn encoding_size(&self) -> usize {
-        GPS_FRAME_BYTES
-    }
-
-    fn encoding_bitsize(&self) -> usize {
-        GPS_FRAME_BITS
-    }
-
-    fn encode(&self, buffer: &mut [u8]) -> Result<usize, Self::Err> {
-        let avail = buffer.len();
-
-        if avail < GPS_FRAME_BYTES {
-            return Err(GpsError::Buffering(BufferingError::StorageFull));
-        }
-
-        let mut stream = BitWriteStream::from_slice(buffer, BigEndian);
-        stream.write(&self.telemetry)?;
-        stream.write(&self.how)?;
-
-        match self.subframe {
-            GpsQzssSubframe::Ephemeris1(eph) => stream.write(&eph)?,
-            GpsQzssSubframe::Ephemeris2(eph) => stream.write(&eph)?,
-            GpsQzssSubframe::Ephemeris3(eph) => stream.write(&eph)?,
-        }
-
-        Ok(GPS_FRAME_BYTES)
-    }
-
-    fn decode(buffer: &[u8]) -> Result<Self, Self::Err> {
-        let buffer = BitReadBuffer::new(buffer, BigEndian);
-        let mut reader = BitReadStream::new(buffer);
-        Ok(reader.read::<Self>()?)
-    }
-}
-
 impl GpsQzssFrame {
-    /// Generates a realistic frame model for testing purposes.
     #[cfg(test)]
-    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+    fn model(frame_id: GpsQzssFrameId) -> Self {
         Self::default()
             .with_telemetry(GpsQzssTelemetry::model())
             .with_hand_over_word(GpsQzssHow::model(frame_id))
@@ -146,13 +117,13 @@ mod test {
     fn default_reciprocal() {
         let default = GpsQzssFrame::default();
 
-        let mut buffer = StaticBuffer::<1024>::default();
-        assert!(buffer.bitwrite(&default).is_ok(), "failed to encode frame");
+        let mut buffer = [0; 1024];
+        assert!(
+            default.encode(&mut buffer).is_ok(),
+            "failed to encode frame"
+        );
 
-        let mut reader = buffer.to_bitread_buffer(BigEndian);
-        let mut stream = BitReadStream::new(reader);
-
-        let decoded = stream.read::<GpsQzssFrame>().unwrap_or_else(|e| {
+        let decoded = GpsQzssFrame::decode(&buffer).unwrap_or_else(|e| {
             panic!("failed to decode frame: {}", e);
         });
 

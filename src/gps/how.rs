@@ -44,14 +44,6 @@ impl Message<BigEndian> for GpsQzssHow {
     fn encoding_bits(&self) -> usize {
         GPS_WORD_BITS
     }
-
-    #[cfg(test)]
-    fn model() -> Self {
-        Self::default()
-            .with_tow_seconds(15_000)
-            .with_alert_bit()
-            .with_anti_spoofing()
-    }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssHow {
@@ -118,6 +110,15 @@ impl std::fmt::Display for GpsQzssHow {
 }
 
 impl GpsQzssHow {
+    #[cfg(test)]
+    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+        Self::default()
+            .with_frame_id(frame_id)
+            .with_tow_seconds(15_000)
+            .with_alert_bit()
+            .with_anti_spoofing()
+    }
+
     /// Copies and returns [GpsQzssHow] with updated TOW in seconds.
     /// This value should be aligned to midnight and always a multiple of 6 seconds,
     /// the message transmission rate.
