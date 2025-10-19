@@ -22,8 +22,6 @@ pub struct GpsQzssTelemetry {
 }
 
 impl Message<BigEndian> for GpsQzssTelemetry {
-    type Err = GpsError;
-
     fn encoding_size(&self) -> usize {
         GPS_WORD_BYTES
     }

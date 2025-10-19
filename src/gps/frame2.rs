@@ -1,6 +1,6 @@
 use crate::{
-    gps::{rad_to_semicircles, GpsError, GPS_WORDS_PER_FRAME},
-    twos_complement,
+    gps::{rad_to_semicircles, GpsError, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES},
+    Message,
 };
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
@@ -93,6 +93,32 @@ impl PartialEq for GpsQzssFrame2 {
         }
 
         true
+    }
+}
+
+impl Message<BigEndian> for GpsQzssFrame2 {
+    fn encoding_size(&self) -> usize {
+        8 * GPS_WORD_BYTES
+    }
+
+    fn encoding_bits(&self) -> usize {
+        8 * GPS_WORD_BITS
+    }
+
+    #[cfg(test)]
+    fn model() -> Self {
+        Self::default()
+            .with_toe_seconds(54_320)
+            .with_iode(0x01)
+            .with_mean_anomaly_semicircles(1.0e-1)
+            .with_mean_motion_difference_semicircles(2.0e-1)
+            .with_square_root_semi_major_axis(5353.0)
+            .with_eccentricity(1.0e-1)
+            .with_aodo(0x12)
+            .with_cuc_radians(1e-6)
+            .with_cus_radians(2e-6)
+            .with_crs_meters(87.0)
+            .with_fit_interval_flag()
     }
 }
 
@@ -224,22 +250,6 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
 }
 
 impl GpsQzssFrame2 {
-    #[cfg(test)]
-    pub fn model() -> Self {
-        Self::default()
-            .with_toe_seconds(54_320)
-            .with_iode(0x01)
-            .with_mean_anomaly_semicircles(1.0e-1)
-            .with_mean_motion_difference_semicircles(2.0e-1)
-            .with_square_root_semi_major_axis(5353.0)
-            .with_eccentricity(1.0e-1)
-            .with_aodo(0x12)
-            .with_cuc_radians(1e-6)
-            .with_cus_radians(2e-6)
-            .with_crs_meters(87.0)
-            .with_fit_interval_flag()
-    }
-
     /// Copies and returns [GpsQzssFrame2] with updated time of issue of Ephemeris
     /// in seconds of week.
     pub fn with_toe_seconds(mut self, toe_seconds: u32) -> Self {
@@ -332,7 +342,7 @@ impl GpsQzssFrame2 {
 
 #[cfg(test)]
 mod frame2 {
-    use crate::{gps::GpsQzssFrame2, Buffer, StaticBuffer};
+    use crate::{gps::GpsQzssFrame2, Buffer, Message, StaticBuffer};
 
     use bitbuffer::{BigEndian, BitReadStream};
 
@@ -366,16 +376,13 @@ mod frame2 {
                 aodo,
             };
 
-            let mut buf = StaticBuffer::<1024>::default();
+            let mut buf = [0; 1024];
 
-            buf.bitwrite(&frame).unwrap_or_else(|e| {
+            frame.encode(&mut buf).unwrap_or_else(|e| {
                 panic!("failed to encode frame: {}", e);
             });
 
-            let mut reader = buf.to_bitread_buffer(BigEndian);
-            let mut stream = BitReadStream::new(reader);
-
-            let decoded = stream.read::<GpsQzssFrame2>().unwrap_or_else(|e| {
+            let decoded = GpsQzssFrame2::decode(&buf).unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-2: {}", e);
             });
 

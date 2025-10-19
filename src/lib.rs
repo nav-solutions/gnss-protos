@@ -27,7 +27,7 @@ pub use errors::{BufferingError, Error};
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-pub use bitbuffer::{BitError, BitRead, BitWrite, Endianness};
+pub use bitbuffer::{BigEndian, BitError, BitRead, BitWrite, Endianness, LittleEndian};
 
 use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
 
@@ -60,9 +60,6 @@ pub trait Decoder<E: Endianness>: Default {
 pub trait Message<E: Endianness>:
     Copy + Clone + Default + PartialEq + BitWrite<E> + for<'a> BitRead<'a, E>
 {
-    /// Error type for this messaging.
-    type Err;
-
     /// Bytewise encoding size. Some protocols may use padding,
     /// in these cases, we use zero terminations.
     fn encoding_size(&self) -> usize;

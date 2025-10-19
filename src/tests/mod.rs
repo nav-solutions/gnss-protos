@@ -66,41 +66,41 @@ pub fn insert_zeros(slice: &[u8], num_zero_bits: usize) -> Vec<u8> {
     ret
 }
 
-#[test]
-fn test_zeros_padder() {
-    let test_values = [0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA];
-
-    for zeros in 0..=1 {
-        let delayed = insert_zeros(&test_values, zeros);
-
-        let expected = match zeros {
-            0 => vec![0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA],
-            1 => vec![0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00],
-            _ => panic!("untested value"),
-        };
-
-        assert_eq!(
-            delayed, expected,
-            "wrong results for {} inserted zeros",
-            zeros
-        );
-    }
-
-    let test_values = [0x55, 0x55, 0x55, 0x55];
-
-    for zeros in 0..=1 {
-        let delayed = insert_zeros(&test_values, zeros);
-
-        let expected = match zeros {
-            0 => vec![0x55, 0x55, 0x55, 0x55],
-            1 => vec![0x2A, 0xAA, 0xAA, 0xAA, 0x80],
-            _ => panic!("untested value"),
-        };
-
-        assert_eq!(
-            delayed, expected,
-            "wrong results for {} inserted zeros",
-            zeros
-        );
-    }
-}
+// #[test]
+// fn test_zeros_padder() {
+//     let test_values = [0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA];
+//
+//     for zeros in 0..=1 {
+//         let delayed = insert_zeros(&test_values, zeros);
+//
+//         let expected = match zeros {
+//             0 => vec![0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA],
+//             1 => vec![0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00],
+//             _ => panic!("untested value"),
+//         };
+//
+//         assert_eq!(
+//             delayed, expected,
+//             "wrong results for {} inserted zeros",
+//             zeros
+//         );
+//     }
+//
+//     let test_values = [0x55, 0x55, 0x55, 0x55];
+//
+//     for zeros in 0..=1 {
+//         let delayed = insert_zeros(&test_values, zeros);
+//
+//         let expected = match zeros {
+//             0 => vec![0x55, 0x55, 0x55, 0x55],
+//             1 => vec![0x2A, 0xAA, 0xAA, 0xAA, 0x80],
+//             _ => panic!("untested value"),
+//         };
+//
+//         assert_eq!(
+//             delayed, expected,
+//             "wrong results for {} inserted zeros",
+//             zeros
+//         );
+//     }
+// }

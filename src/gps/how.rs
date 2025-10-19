@@ -37,8 +37,6 @@ pub struct GpsQzssHow {
 }
 
 impl Message<BigEndian> for GpsQzssHow {
-    type Err = GpsError;
-
     fn encoding_size(&self) -> usize {
         GPS_WORD_BYTES
     }

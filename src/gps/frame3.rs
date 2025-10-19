@@ -1,6 +1,9 @@
 use crate::{
-    gps::{rad_to_semicircles, GPS_WORDS_PER_FRAME},
-    twos_complement,
+    gps::{
+        rad_to_semicircles, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
+        GPS_WORD_BYTES,
+    },
+    Message,
 };
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
@@ -37,20 +40,6 @@ pub struct GpsQzssFrame3 {
 }
 
 impl GpsQzssFrame3 {
-    #[cfg(test)]
-    pub fn model() -> Self {
-        Self::default()
-            .with_cic_radians(1.0e-6)
-            .with_cis_radians(2.0e-6)
-            .with_crc_meters(122.0)
-            .with_iode(0x12)
-            .with_omega_semicircles(4e-1)
-            .with_omega_dot_semicircles_s(1e-3)
-            .with_inclination_semicircles(1e-3)
-            .with_inclination_rate_semicircles_s(1e-9)
-            .with_longitude_ascending_node_semicircles(3e-1)
-    }
-
     /// Copies and returns [GpsQzssFrame3] with updated IODE
     pub fn with_iode(mut self, iode: u8) -> Self {
         self.iode = iode;
@@ -171,6 +160,30 @@ impl PartialEq for GpsQzssFrame3 {
         }
 
         true
+    }
+}
+
+impl Message<BigEndian> for GpsQzssFrame3 {
+    fn encoding_size(&self) -> usize {
+        8 * GPS_WORD_BYTES
+    }
+
+    fn encoding_bits(&self) -> usize {
+        8 * GPS_WORD_BITS
+    }
+
+    #[cfg(test)]
+    fn model() -> Self {
+        Self::default()
+            .with_cic_radians(1.0e-6)
+            .with_cis_radians(2.0e-6)
+            .with_crc_meters(122.0)
+            .with_iode(0x12)
+            .with_omega_semicircles(4e-1)
+            .with_omega_dot_semicircles_s(1e-3)
+            .with_inclination_semicircles(1e-3)
+            .with_inclination_rate_semicircles_s(1e-9)
+            .with_longitude_ascending_node_semicircles(3e-1)
     }
 }
 
@@ -298,7 +311,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
 
 #[cfg(test)]
 mod frame3 {
-    use crate::{gps::GpsQzssFrame3, Buffer, StaticBuffer};
+    use crate::{gps::GpsQzssFrame3, Buffer, Message, StaticBuffer};
 
     use bitbuffer::{BigEndian, BitReadStream};
 
@@ -324,16 +337,13 @@ mod frame3 {
                 omega_dot,
             };
 
-            let mut buf = StaticBuffer::<1024>::default();
+            let mut buf = [0; 1024];
 
-            buf.bitwrite(&frame).unwrap_or_else(|e| {
+            frame.encode(&mut buf).unwrap_or_else(|e| {
                 panic!("Failed to encode frame: {}", e);
             });
 
-            let mut reader = buf.to_bitread_buffer(BigEndian);
-            let mut stream = BitReadStream::new(reader);
-
-            let decoded = stream.read::<GpsQzssFrame3>().unwrap_or_else(|e| {
+            let decoded = GpsQzssFrame3::decode(&buf).unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-3: {}", e);
             });
 
