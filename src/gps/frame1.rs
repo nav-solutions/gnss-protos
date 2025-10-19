@@ -1,6 +1,12 @@
-use crate::twos_complement;
+use crate::{
+    Message,
+    gps::{
+        GPS_FRAME_BYTES,
+        GPS_FRAME_BITS,
+    },
+};
 
-use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream, BitReadBuffer};
 
 /// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
@@ -136,6 +142,16 @@ impl PartialEq for GpsQzssFrame1 {
         }
 
         true
+    }
+}
+
+impl Message<BigEndian> for GpsQzssFrame1 {
+    fn encoding_size(&self) -> usize {
+        GPS_FRAME_BYTES
+    }
+
+    fn encoding_bits(&self) -> usize {
+        GPS_FRAME_BITS
     }
 }
 
@@ -504,10 +520,9 @@ impl GpsQzssFrame1 {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        gps::{GpsBuffer, GpsQzssFrame1},
-        Buffering,
-    };
+    use crate::{gps::GpsQzssFrame1, Buffer, StaticBuffer};
+
+    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn reciprocal() {
@@ -557,13 +572,16 @@ mod test {
                 reserved_word7,
             };
 
-            let mut buf = GpsBuffer::default();
-            let mut writer = buf.bit_write_stream();
-            assert!(writer.write(&frame).is_ok(), "failed to encode frame");
+            let mut buf = StaticBuffer::<1024>::default();
 
-            let mut reader = buf.bit_read_stream();
+            buf.bitwrite(&frame).unwrap_or_else(|e| {
+                panic!("failed to encode frame: {}", e);
+            });
 
-            let decoded = reader.read::<GpsQzssFrame1>().unwrap_or_else(|e| {
+            let mut reader = buf.to_bitread_buffer(BigEndian);
+            let mut stream = BitReadStream::new(reader);
+
+            let decoded = stream.read::<GpsQzssFrame1>().unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-1: {}", e);
             });
 
@@ -583,12 +601,14 @@ mod test {
                 frame.af0,
                 decoded.af0
             );
+
             assert!(
                 (decoded.af1 - frame.af1).abs() < 1E-14,
                 "expecting {:.3E} got {:.3E}",
                 frame.af1,
                 decoded.af1
             );
+
             assert!(
                 (decoded.af2 - frame.af2).abs() < 1E-14,
                 "expecting {:.3E} got {:.3E}",

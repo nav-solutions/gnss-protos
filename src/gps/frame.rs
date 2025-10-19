@@ -138,23 +138,21 @@ impl GpsQzssFrame {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        gps::{GpsBuffer, GpsQzssFrame},
-        Buffering, Message,
-    };
+    use crate::{gps::GpsQzssFrame, Buffer, Message, StaticBuffer};
+
+    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn default_reciprocal() {
         let default = GpsQzssFrame::default();
 
-        let mut buffer = GpsBuffer::default();
-        let mut writer = buffer.bit_write_stream();
+        let mut buffer = StaticBuffer::<1024>::default();
+        assert!(buffer.bitwrite(&default).is_ok(), "failed to encode frame");
 
-        assert!(writer.write(&default).is_ok(), "failed to encode frame");
+        let mut reader = buffer.to_bitread_buffer(BigEndian);
+        let mut stream = BitReadStream::new(reader);
 
-        let mut reader = buffer.bit_read_stream();
-
-        let decoded = reader.read::<GpsQzssFrame>().unwrap_or_else(|e| {
+        let decoded = stream.read::<GpsQzssFrame>().unwrap_or_else(|e| {
             panic!("failed to decode frame: {}", e);
         });
 

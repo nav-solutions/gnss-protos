@@ -4,6 +4,9 @@ pub const GPS_PREAMBLE_BYTE: u8 = 0x8B;
 /// GPS data word size (in bits)
 pub const GPS_WORD_BITS: usize = 30;
 
+/// GPS data word size (in bytes)
+pub const GPS_WORD_BYTES: usize = 4;
+
 /// Number of words in a frame
 pub const GPS_WORDS_PER_FRAME: usize = 10;
 
@@ -29,29 +32,26 @@ pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
     rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
 }
 
-// mod buffer;
-// pub use buffer::GpsBuffer;
-
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
 
 // mod almanach;
 // pub use almanach::GpsQzssAlmanach;
 
-mod decoder;
-pub use decoder::GpsQzssDecoder;
+// mod decoder;
+// pub use decoder::GpsQzssDecoder;
 
 mod errors;
 pub use errors::GpsError;
 
-mod frame1;
-pub use frame1::GpsQzssFrame1;
-
-mod frame2;
-pub use frame2::GpsQzssFrame2;
-
-mod frame3;
-pub use frame3::GpsQzssFrame3;
+// mod frame1;
+// pub use frame1::GpsQzssFrame1;
+//
+// mod frame2;
+// pub use frame2::GpsQzssFrame2;
+//
+// mod frame3;
+// pub use frame3::GpsQzssFrame3;
 
 // mod frame4;
 // pub use frame4::GpsQzssFrame4;
@@ -68,11 +68,11 @@ pub use how::GpsQzssHow;
 mod tlm;
 pub use tlm::GpsQzssTelemetry;
 
-mod frame;
-pub use frame::GpsQzssFrame;
+// mod frame;
+// pub use frame::GpsQzssFrame;
 
-mod subframe;
-pub use subframe::GpsQzssSubframe;
+// mod subframe;
+// pub use subframe::GpsQzssSubframe;
 
 #[cfg(test)]
 mod test {

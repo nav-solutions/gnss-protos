@@ -12,7 +12,7 @@
  */
 
 mod buffer;
-pub use buffer::Buffer;
+pub use buffer::{Buffer, StaticBuffer};
 
 mod errors;
 
@@ -27,33 +27,17 @@ pub use errors::{BufferingError, Error};
 #[cfg(feature = "gps")]
 pub use gps::*;
 
-use bitbuffer::{BitRead, BitWrite};
+pub use bitbuffer::{BitError, BitRead, BitWrite, Endianness};
+
+use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
+
+#[cfg(feature = "std")]
+use std::io::{Read, Write};
 
 /// All our GNSS decoders implement the [Decoder] trait.
-pub trait Decoder {
+pub trait Decoder<E: Endianness>: Default {
     /// [Message] type returned by [Self::decode].
-    type M: Message;
-
-    /// Provide new data to this [Decoder].
-    ///
-    /// Most of these protocols are not aligned to [u8], for example
-    /// a GPS burst is 300 bit long. You may insert padding bits (blanking)
-    /// in between frames but not inside frames. Otherwise, the binary content
-    /// would be corrupt and impossible to decode.
-    ///
-    /// If you don't need 100% efficiency and can afford to loose one frame
-    /// from time to time (say one per receiver capture), then you are fine and may
-    /// use padding whenever that suites you.
-    ///
-    /// Note that, even real-time navigation does not require 100% efficiency,
-    /// because information is regurlarly updated, but that is closely related to the
-    /// velocity of your receiver, and will not work well in the case of fast moving rovers.
-    ///
-    /// In between frame padding is tolerated and our [Decoder]s will naturally adapt,
-    /// because all these protocols use synchronization bytes to mark
-    /// the beginning of frame. This library exposes all the synchronization
-    /// bytes, that you may use to create an efficient padded receiver.
-    fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError>;
+    type M: Message<E>;
 
     /// Process internal buffer and try to decode a [Message].
     /// You can use the following methods to provide new data:
@@ -68,23 +52,23 @@ pub trait Decoder {
 /// All GNSS messages implement the [Message] trait, which
 /// implicitely means:
 ///
-/// - [Copy] and [Clone]
+/// - [Copy] and [Clone] objects
 /// - [PartialEq] comparison method
 /// - Simple yet efficient [Default] builder
 /// - [Message::encode] to dump to bytes
 /// - [Message::decode] to read from bytes
-pub trait Message: Copy + Clone + Default + PartialEq {
+pub trait Message<E: Endianness>:
+    Copy + Clone + Default + PartialEq + BitWrite<E> + for<'a> BitRead<'a, E>
+{
     /// Error type for this messaging.
     type Err;
 
-    /// Returns the total number of bytes required to encode this [Message].
-    /// Most [Message]s are not aligned to [u8], so the returned value here
-    /// is more than needed, meaning that padding was introduced at some point.
+    /// Bytewise encoding size. Some protocols may use padding,
+    /// in these cases, we use zero terminations.
     fn encoding_size(&self) -> usize;
 
-    /// Returns the total number of bits required to encode this [Message].
-    /// For aligned protocol, this value strictly equals [Self::encoding_size].
-    fn encoding_bitsize(&self) -> usize;
+    /// Bitwise encoding size. Some protocols may be unaligned.
+    fn encoding_bits(&self) -> usize;
 
     /// [Message] encoding attempt to mutable buffer.
     /// [Message] must fit entirely.
@@ -92,12 +76,24 @@ pub trait Message: Copy + Clone + Default + PartialEq {
     /// Returns total number of encoded bytes on success,
     /// depending on protocol, this may include padding bits.
     /// Returns [Self::Err] on encoding issues.
-    fn encode(&self, buffer: &mut [u8]) -> Result<usize, Self::Err>;
+    fn encode(&self, buffer: &mut [u8]) -> Result<usize, BitError> {
+        let mut writer = BitWriteStream::from_slice(buffer, E::endianness());
+        writer.write(self)?;
+        Ok(self.encoding_size())
+    }
 
     /// [Message] decoding attempt, from read-only buffer state.
     /// This is not compatible with a real-time decoder, for this task you are
     /// expected to run a mutable [Decoder] implementation.
-    fn decode(buffer: &[u8]) -> Result<Self, Self::Err>;
+    fn decode(buffer: &[u8]) -> Result<Self, BitError> {
+        let mut reader = BitReadStream::new(BitReadBuffer::new(buffer, E::endianness()));
+        let decoded = reader.read::<Self>()?;
+        Ok(decoded)
+    }
+
+    /// Generates a realistic (physically valid) frame, for testing purposes.
+    #[cfg(test)]
+    fn model() -> Self;
 }
 
 /// Two's complement parsing & interpretation.

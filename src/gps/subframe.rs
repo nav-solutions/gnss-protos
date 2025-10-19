@@ -98,12 +98,15 @@ impl GpsQzssSubframe {
 
 #[cfg(test)]
 mod test {
-    use crate::gps::{GpsBuffer, GpsQzssSubframe};
+    use crate::{gps::GpsQzssSubframe, Buffer, StaticBuffer};
 
     #[test]
     fn default_reciprocal() {
         for subframe in [GpsQzssSubframe::Ephemeris1(Default::default())] {
-            let mut buf = GpsBuffer::default();
+            let mut buf = StaticBuffer::<1024>::default();
+            buf.bitwrite(&subframe).unwrap_or_else(|e| {
+                panic!("Failed to encoded frame: {}", e);
+            });
         }
     }
 }

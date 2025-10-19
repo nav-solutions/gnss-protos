@@ -5,11 +5,6 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
-const WORD10_IODE_MASK: u32 = 0x3fc00000;
-const WORD10_IODE_SHIFT: u32 = 22;
-const WORD10_IDOT_MASK: u32 = 0x003fff00;
-const WORD10_IDOT_SHIFT: u32 = 8;
-
 /// [GpsQzssFrame3] Ephemeris #3 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct GpsQzssFrame3 {
@@ -303,10 +298,9 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
 
 #[cfg(test)]
 mod frame3 {
-    use crate::{
-        gps::{GpsBuffer, GpsQzssFrame3},
-        Buffering,
-    };
+    use crate::{gps::GpsQzssFrame3, Buffer, StaticBuffer};
+
+    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn reciprocal() {
@@ -330,13 +324,16 @@ mod frame3 {
                 omega_dot,
             };
 
-            let mut buf = GpsBuffer::default();
-            let mut writer = buf.bit_write_stream();
-            assert!(writer.write(&frame).is_ok(), "failed to encode frame");
+            let mut buf = StaticBuffer::<1024>::default();
 
-            let mut reader = buf.bit_read_stream();
+            buf.bitwrite(&frame).unwrap_or_else(|e| {
+                panic!("Failed to encode frame: {}", e);
+            });
 
-            let decoded = reader.read::<GpsQzssFrame3>().unwrap_or_else(|e| {
+            let mut reader = buf.to_bitread_buffer(BigEndian);
+            let mut stream = BitReadStream::new(reader);
+
+            let decoded = stream.read::<GpsQzssFrame3>().unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-3: {}", e);
             });
 

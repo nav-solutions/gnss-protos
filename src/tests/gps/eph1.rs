@@ -4,11 +4,11 @@ use std::{fs::File, io::Write};
 
 use crate::{
     gps::{
-        GpsBuffer, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow,
-        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BYTES,
+        GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
+        GpsQzssTelemetry, GPS_FRAME_BYTES,
     },
     tests::init_logger,
-    Buffering, Decoder, Message,
+    Buffer, Decoder, Message, StaticBuffer,
 };
 
 #[test]
@@ -47,11 +47,9 @@ fn test1() {
                 .with_user_range_accuracy_m(4.0),
         ));
 
-    let mut buffer = GpsBuffer::default();
+    let mut buffer = StaticBuffer::<1024>::default();
 
-    let mut writer = buffer.bit_write_stream();
-
-    writer.write(&frame).unwrap_or_else(|e| {
+    buffer.bitwrite(&frame).unwrap_or_else(|e| {
         panic!("Failed to encode EPH-1: {}", e);
     });
 
@@ -100,11 +98,9 @@ fn test1() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let mut decoder = GpsQzssDecoder::default();
+    let mut decoder = GpsQzssDecoder::<1024>::default();
 
-    decoder.fill(&encoded).unwrap_or_else(|e| {
-        panic!("failed to push data: {}", e);
-    });
+    decoder.buffer.fill(&encoded);
 
     let decoded = decoder.decode();
 
@@ -145,13 +141,11 @@ fn test2() {
                 .with_clock_drift_rate_seconds_s2(2E-15),
         ));
 
-    let mut buffer = GpsBuffer::default();
+    let mut encoded = [0; 1024];
 
-    frame.encode(&mut buffer).unwrap_or_else(|e| {
+    frame.encode(&mut encoded).unwrap_or_else(|e| {
         panic!("Failed to encode EPH-1: {}", e);
     });
-
-    let encoded = buffer.to_slice();
 
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x48);
@@ -196,11 +190,9 @@ fn test2() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let mut decoder = GpsQzssDecoder::default();
+    let mut decoder = GpsQzssDecoder::<1024>::default();
 
-    decoder.fill(&encoded).unwrap_or_else(|e| {
-        panic!("failed to push data: {}", e);
-    });
+    decoder.buffer.fill(&encoded);
 
     let decoded = decoder.decode();
 
@@ -245,13 +237,11 @@ fn test3() {
                 .with_user_range_accuracy_m(8.0),
         ));
 
-    let mut buffer = GpsBuffer::default();
+    let mut encoded = [0; 1024];
 
-    frame.encode(&mut buffer).unwrap_or_else(|e| {
+    frame.encode(&mut encoded).unwrap_or_else(|e| {
         panic!("Failed to encode EPH-1: {}", e);
     });
-
-    let encoded = buffer.to_slice();
 
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x04);
@@ -296,11 +286,9 @@ fn test3() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let mut decoder = GpsQzssDecoder::default();
+    let mut decoder = GpsQzssDecoder::<1024>::default();
 
-    decoder.fill(&encoded).unwrap_or_else(|e| {
-        panic!("failed to push data: {}", e);
-    });
+    decoder.buffer.fill(&encoded);
 
     let decoded = decoder.decode();
 
@@ -517,20 +505,16 @@ fn reciprocal() {
             .with_hand_over_word(how)
             .with_subframe(GpsQzssSubframe::Ephemeris1(subframe));
 
-        let mut buffer = GpsBuffer::default();
+        let mut encoded = [0; 1024];
 
-        frame.encode(&mut buffer).unwrap_or_else(|e| {
+        frame.encode(&mut encoded).unwrap_or_else(|e| {
             panic!("Failed to encode frame #{}: {}", test_num, e);
         });
 
-        let encoded = buffer.to_slice();
-
         // reciprocal
-        let mut decoder = GpsQzssDecoder::default();
+        let mut decoder = GpsQzssDecoder::<1024>::default();
 
-        decoder.fill(&encoded).unwrap_or_else(|e| {
-            panic!("Failed to fill buffer: {}", e);
-        });
+        decoder.buffer.fill(&encoded);
 
         let decoded = decoder.decode().unwrap_or_else(|| {
             panic!("Failed to decode frame #{}", test_num);
@@ -548,7 +532,7 @@ fn generate_bin_file() {
         panic!("Failed to create file: {}", e);
     });
 
-    let mut buffer = GpsBuffer::default();
+    let mut buffer = [0; 1024];
 
     let mut frame = GpsQzssFrame::default()
         .with_telemetry(GpsQzssTelemetry::model())
@@ -560,11 +544,7 @@ fn generate_bin_file() {
             panic!("Failed to encode frame #{}: {}", i, e);
         });
 
-        // TODO : only meaningful bytes !
-        // TODO : buffer pointer management !
-        let encoded = buffer.to_slice();
-
-        fd.write(&encoded[..GPS_FRAME_BYTES]).unwrap_or_else(|e| {
+        fd.write(&buffer[..GPS_FRAME_BYTES]).unwrap_or_else(|e| {
             panic!("Failed to write encoded frame #{}: {}", i, e);
         });
 
@@ -606,25 +586,21 @@ fn generate_bin_file() {
 fn ublox1() {
     init_logger();
 
-    let mut decoder = GpsQzssDecoder::default().without_parity_verification();
+    let mut decoder = GpsQzssDecoder::<1024>::default().without_parity_verification();
 
-    decoder
-        .fill(&[
-            // TLM
-            0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x15, 0x27, 0xC9, 0x73, // WORD3
-            0x13, 0xE4, 0x00, 0x04, // WORD4
-            0x10, 0x4F, 0x5D, 0x31, // WORD5
-            0x97, 0x44, 0xE6, 0xD7, // WORD6
-            0x07, 0x75, 0x57, 0x83, // WORD7
-            0x33, 0x0C, 0x80, 0xB5, // WORD8
-            0x92, 0x50, 0x42, 0xA1, // WORD9
-            0x80, 0x00, 0x16, 0x84, // WORD10
-            0x31, 0x2C, 0x30, 0x33,
-        ])
-        .unwrap_or_else(|e| {
-            panic!("failed to fill buffer: {}", e);
-        });
+    decoder.buffer.fill(&[
+        // TLM
+        0x22, 0xC1, 0x3E, 0x1B, // HOW
+        0x15, 0x27, 0xC9, 0x73, // WORD3
+        0x13, 0xE4, 0x00, 0x04, // WORD4
+        0x10, 0x4F, 0x5D, 0x31, // WORD5
+        0x97, 0x44, 0xE6, 0xD7, // WORD6
+        0x07, 0x75, 0x57, 0x83, // WORD7
+        0x33, 0x0C, 0x80, 0xB5, // WORD8
+        0x92, 0x50, 0x42, 0xA1, // WORD9
+        0x80, 0x00, 0x16, 0x84, // WORD10
+        0x31, 0x2C, 0x30, 0x33,
+    ]);
 
     let frame = decoder.decode().unwrap_or_else(|| {
         panic!("failed to decode valid frame!");
@@ -642,25 +618,21 @@ fn ublox1() {
 fn ublox2() {
     init_logger();
 
-    let mut decoder = GpsQzssDecoder::default().without_parity_verification();
+    let mut decoder = GpsQzssDecoder::<1024>::default().without_parity_verification();
 
-    decoder
-        .fill(&[
-            // TLM
-            0x22, 0xC1, 0x3E, 0x1B, // HOW
-            0x15, 0x27, 0xC9, 0x73, // WORD3
-            0x00, 0x0A, 0xEA, 0x34, // WORD4
-            0x03, 0x3C, 0xFF, 0xEE, // WORD5
-            0xBF, 0xE5, 0xC9, 0xEB, // WORD6
-            0x13, 0x6F, 0xB6, 0x4E, // WORD7
-            0x86, 0xF4, 0xAB, 0x2C, // WORD8
-            0x06, 0x71, 0xEB, 0x44, // WORD9
-            0x3F, 0xEA, 0xF6, 0x02, // WORD10
-            0x92, 0x45, 0x52, 0x13,
-        ])
-        .unwrap_or_else(|e| {
-            panic!("failed to fill buffer: {}", e);
-        });
+    decoder.buffer.fill(&[
+        // TLM
+        0x22, 0xC1, 0x3E, 0x1B, // HOW
+        0x15, 0x27, 0xC9, 0x73, // WORD3
+        0x00, 0x0A, 0xEA, 0x34, // WORD4
+        0x03, 0x3C, 0xFF, 0xEE, // WORD5
+        0xBF, 0xE5, 0xC9, 0xEB, // WORD6
+        0x13, 0x6F, 0xB6, 0x4E, // WORD7
+        0x86, 0xF4, 0xAB, 0x2C, // WORD8
+        0x06, 0x71, 0xEB, 0x44, // WORD9
+        0x3F, 0xEA, 0xF6, 0x02, // WORD10
+        0x92, 0x45, 0x52, 0x13,
+    ]);
 
     let frame = decoder.decode().unwrap_or_else(|| {
         panic!("failed to decode valid frame!");

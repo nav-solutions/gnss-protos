@@ -1,6 +1,11 @@
-use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
+use bitbuffer::{
+    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
+};
 
-use crate::gps::GpsQzssFrameId;
+use crate::{
+    gps::{GpsError, GpsQzssFrameId, GPS_WORD_BITS, GPS_WORD_BYTES},
+    Message,
+};
 
 #[cfg(doc)]
 use crate::gps::GpsQzssTelemetry;
@@ -22,13 +27,33 @@ pub struct GpsQzssHow {
 
     /// The A/S bit serves two purposes.
     /// For block 000 satellites, '1' here means the satellite is "synchronous",
-    /// the leading edge of the TLM sync is the 1.5 second epoch instant, otherwise it
+    /// the leading edge of the TLM sync is the 0.5 second epoch instant, otherwise it
     /// is asynchronous.   
     /// For other satellite, this indicates A/S is active.
     pub anti_spoofing: bool,
 
     /// Following Frame ID (to decode following data words)
     pub frame_id: GpsQzssFrameId,
+}
+
+impl Message<BigEndian> for GpsQzssHow {
+    type Err = GpsError;
+
+    fn encoding_size(&self) -> usize {
+        GPS_WORD_BYTES
+    }
+
+    fn encoding_bits(&self) -> usize {
+        GPS_WORD_BITS
+    }
+
+    #[cfg(test)]
+    fn model() -> Self {
+        Self::default()
+            .with_tow_seconds(15_000)
+            .with_alert_bit()
+            .with_anti_spoofing()
+    }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssHow {
@@ -95,16 +120,6 @@ impl std::fmt::Display for GpsQzssHow {
 }
 
 impl GpsQzssHow {
-    /// Generates a realitic frame model for testing purpose
-    #[cfg(test)]
-    pub fn model(frame_id: GpsQzssFrameId) -> Self {
-        Self::default()
-            .with_frame_id(frame_id)
-            .with_tow_seconds(15_000)
-            .with_alert_bit()
-            .with_anti_spoofing()
-    }
-
     /// Copies and returns [GpsQzssHow] with updated TOW in seconds.
     /// This value should be aligned to midnight and always a multiple of 6 seconds,
     /// the message transmission rate.
@@ -162,20 +177,24 @@ impl GpsQzssHow {
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsBuffer, GpsQzssFrameId, GpsQzssHow},
-        Buffering,
+        gps::{GpsQzssFrameId, GpsQzssHow},
+        Buffer, Message, StaticBuffer,
     };
+
+    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn default_reciprocal() {
         let default = GpsQzssHow::default();
 
-        let mut buffer = GpsBuffer::default();
-        let mut writer = buffer.bit_write_stream();
-        assert!(writer.write(&default).is_ok(), "failed to encode frame");
+        let mut buffer = [0; 1024];
 
-        let mut reader = buffer.bit_read_stream();
-        let decoded = reader.read::<GpsQzssHow>().unwrap_or_else(|e| {
+        assert!(
+            default.encode(&mut buffer).is_ok(),
+            "failed to encode frame"
+        );
+
+        let decoded = GpsQzssHow::decode(&buffer).unwrap_or_else(|e| {
             panic!("failed to decode HOW: {}", e);
         });
 
@@ -198,14 +217,11 @@ mod test {
                 alert,
             };
 
-            let mut tx = GpsBuffer::default();
+            let mut buffer = [0; 1024];
 
-            let mut writer = tx.bit_write_stream();
-            assert!(writer.write(&how).is_ok(), "failed to encode frame");
+            assert!(how.encode(&mut buffer).is_ok(), "failed to encode frame");
 
-            let mut reader = tx.bit_read_stream();
-
-            let decoded = reader.read::<GpsQzssHow>().unwrap_or_else(|e| {
+            let decoded = GpsQzssHow::decode(&buffer).unwrap_or_else(|e| {
                 panic!("GPS HOW reciprocal failed: {}", e);
             });
 

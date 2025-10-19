@@ -36,9 +36,14 @@ impl State {
     }
 }
 
-/// [GpsQzssDecoder] can decode GPS (or QZSS) messages.
+/// [GpsQzssDecoder] can decode GPS and QZSS messages.
 /// By [Default], our [GpsQzssDecoder] does not verify parity,
 /// so does not invalid any message.
+/// The generic defines the size of the internal buffer.
+/// For sane operation, we recommend a minimum size of twice
+/// [GPS_FRAME_BYTES], which can store two entire frames.
+/// The larger the pre-allocation, the more efficient your I/O
+/// operations.
 ///
 /// ```
 /// use std::fs::File;
@@ -62,22 +67,22 @@ impl State {
 /// // TODO example
 /// ```
 #[derive(Copy, Clone)]
-pub struct GpsQzssDecoder {
+pub struct GpsQzssDecoder<const N: usize> {
     /// Current [State]
     state: State,
 
     /// Pending frame
     frame: GpsQzssFrame,
 
-    /// Enough bytes to store everything +1
-    /// so we can manipulate and realign everything.
-    buffer: StaticBuffer<2048>,
+    /// Pre-allocated static buffer,
+    /// that implements the [Buffer] trait.
+    pub buffer: StaticBuffer<N>,
 
     /// True when parity verification is requested
     parity_verification: bool,
 }
 
-impl Default for GpsQzssDecoder {
+impl<const N: usize> Default for GpsQzssDecoder<N> {
     /// Creates a default [GpsQzssDecoder] that does not verify parity.
     fn default() -> Self {
         Self {
@@ -89,7 +94,7 @@ impl Default for GpsQzssDecoder {
     }
 }
 
-impl GpsQzssDecoder {
+impl<const M: usize> GpsQzssDecoder<M> {
     /// Creates a new [GpsQzssDecoder] with parity verification.
     /// Our [Default] [GpsQzssDecoder] does not verify the parity bits at the moment,
     /// you have to specifically turn it on.
@@ -108,12 +113,8 @@ impl GpsQzssDecoder {
     }
 }
 
-impl Decoder for GpsQzssDecoder {
+impl<const N: usize> Decoder for GpsQzssDecoder<N> {
     type M = GpsQzssFrame;
-
-    fn fill(&mut self, src: &[u8]) -> Result<usize, BufferingError> {
-        self.buffer.fill(src)
-    }
 
     fn decode(&mut self) -> Option<Self::M> {
         // #[cfg(feature = "log")]
@@ -230,6 +231,24 @@ impl Decoder for GpsQzssDecoder {
                 return Some(ret);
             }
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<const N: usize> std::io::Read for GpsQzssDecoder<N> {
+    fn read(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<const N: usize> std::io::Write for GpsQzssDecoder<N> {
+    fn write(&mut self, src: &[u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

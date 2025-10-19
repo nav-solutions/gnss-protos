@@ -68,10 +68,7 @@ impl GpsQzssFrameId {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        gps::{GpsBuffer, GpsQzssFrameId},
-        Buffering,
-    };
+    use crate::gps::GpsQzssFrameId;
 
     #[test]
     fn reciprocal() {
