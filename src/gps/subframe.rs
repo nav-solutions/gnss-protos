@@ -19,7 +19,7 @@ pub enum GpsQzssSubframe {
 
     /// GPS Almanach Frame #4 not supported yet
     Almanach4,
-    
+
     /// GPS Almanach Frame #5
     Almanach5(GpsQzssFrame5),
 }
@@ -103,7 +103,7 @@ impl GpsQzssSubframe {
             _ => None,
         }
     }
-    
+
     /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
     pub fn as_alm5(&self) -> Option<GpsQzssFrame5> {
         match self {

@@ -1,7 +1,7 @@
 use crate::{
     gps::{
-        GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-        GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame5, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
     },
     Message,
 };
@@ -51,11 +51,13 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame {
                 let eph = stream.read::<GpsQzssFrame3>()?;
                 GpsQzssSubframe::Ephemeris3(eph)
             },
+            GpsQzssFrameId::Almanach4 => {
+                unimplemented!("almanach-4");
+            },
             GpsQzssFrameId::Almanach5 => {
                 let alm = stream.read::<GpsQzssFrame5>()?;
-                GpsQzssSubframe::Almaach5(alm)
+                GpsQzssSubframe::Almanach5(alm)
             },
-            _ => unimplemented!("almanach-4"),
         };
 
         Ok(Self {
@@ -104,6 +106,7 @@ impl GpsQzssFrame {
             GpsQzssSubframe::Ephemeris1(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris1,
             GpsQzssSubframe::Ephemeris2(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris2,
             GpsQzssSubframe::Ephemeris3(_) => self.how.frame_id = GpsQzssFrameId::Ephemeris3,
+            GpsQzssSubframe::Almanach4 => self.how.frame_id = GpsQzssFrameId::Almanach4,
             GpsQzssSubframe::Almanach5(_) => self.how.frame_id = GpsQzssFrameId::Almanach5,
         }
 

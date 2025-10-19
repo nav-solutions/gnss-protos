@@ -1,12 +1,10 @@
-use crate::{
-    gps::{GPS_WORD_BITS, GPS_WORD_BYTES, GpsQzssSatelliteHealth},
-};
+use crate::gps::{GpsQzssSatelliteHealth, GPS_WORD_BITS, GPS_WORD_BYTES};
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub struct GpsQzssAlmanach5Page25 {
-    /// TOA 
+pub struct GpsQzssFrame5Page25 {
+    /// TOA
     pub toa: u8,
 
     /// WNa
@@ -14,18 +12,18 @@ pub struct GpsQzssAlmanach5Page25 {
 
     /// reserved (3 bits)
     pub reserved: u8,
-    
+
     /// Spare (19 bits)
     pub spare: u32,
 
     /// [GpsQzssSatelliteHealth] array for satellites #1 through #24
     /// (both included).
-    pub sat_healths: [GpsQzssSatelliteHealth; 24]
+    pub sat_healths: [GpsQzssSatelliteHealth; 24],
 }
 
-impl GpsQzssAlmanachPage25 {
+impl GpsQzssFrame5Page25 {
     pub fn with_toa_seconds(mut self, toa_sec: u8) -> Self {
-        self.toa = toa;
+        self.toa = toa_sec;
         self
     }
 
@@ -39,13 +37,17 @@ impl GpsQzssAlmanachPage25 {
         self
     }
 
-    pub fn with_satellite_health(mut self, satellite: usize, health: GpsQzssSatelliteHealth) -> Self {
+    pub fn with_satellite_health(
+        mut self,
+        satellite: usize,
+        health: GpsQzssSatelliteHealth,
+    ) -> Self {
         if satellite < 24 {
             self.sat_healths[satellite] = health;
         }
         self
     }
-    
+
     pub fn with_satellites_health(mut self, healths: [GpsQzssSatelliteHealth; 24]) -> Self {
         self.sat_healths = healths;
         self
@@ -56,7 +58,7 @@ impl GpsQzssAlmanachPage25 {
         self
     }
 
-    #[cfg(test)] 
+    #[cfg(test)]
     pub fn model() -> Self {
         Self {
             toa: 10,

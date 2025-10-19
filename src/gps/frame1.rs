@@ -1,5 +1,5 @@
 use crate::{
-    gps::{GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{GpsQzssSatelliteHealth, GPS_WORD_BITS, GPS_WORD_BYTES},
     Message,
 };
 
@@ -157,7 +157,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame1 {
         stream.write_int(self.week, 10)?;
         stream.write_int(self.ca_or_p_l2, 2)?;
         stream.write_int(self.ura, 4)?;
-        stream.write_int(self.health, 6)?;
+        stream.write(&self.health)?;
         stream.write_int(self.iodc_msb, 2)?;
         stream.write_int(0, 6)?; // TODO (parity)
 
@@ -199,7 +199,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
         let week = stream.read_int::<u16>(10)?;
         let ca_or_p_l2 = stream.read_int::<u8>(2)?;
         let ura = stream.read_int::<u8>(4)?;
-        let health = stream.read_int::<u8>(6)?;
+        let health = stream.read::<GpsQzssSatelliteHealth>()?;
         let iodc_msb = stream.read_int::<u8>(2)?;
         let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 

@@ -1,9 +1,10 @@
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
+
 /// Health mask for a single satellite
-#[derive(Debug, Default, Copy, Clone, PartialEq, BitWrite, BitRead)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GpsQzssSatelliteHealth {
     /// 6-bit mask
-    #[size = 6]
-    inner: u8,   
+    inner: u8,
 }
 
 impl From<u8> for GpsQzssSatelliteHealth {
@@ -14,12 +15,25 @@ impl From<u8> for GpsQzssSatelliteHealth {
     }
 }
 
-impl GpsQzssSateliteHealth {
+impl BitWrite<BigEndian> for GpsQzssSatelliteHealth {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(self.inner & 0x3f, 6)
+    }
+}
+
+impl BitRead<'_, BigEndian> for GpsQzssSatelliteHealth {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let value = stream.read_int::<u8>(6)?;
+        Ok(Self::from(value))
+    }
+}
+
+impl GpsQzssSatelliteHealth {
     /// True if this mask marks a healthy satellite.
     pub fn is_healthy(&self) -> bool {
         self.inner == 0
     }
-    
+
     pub fn is_unavailable(&self) -> bool {
         self.inner == 0x1C
     }
@@ -27,13 +41,13 @@ impl GpsQzssSateliteHealth {
     pub fn under_maintenance(&self) -> bool {
         self.inner == 0x1D
     }
-    
+
     pub fn has_transmission_issues(&self) -> bool {
         !self.is_healthy()
-        && !self.pending_maintenance()
-        && !self.is_unavailable()
-        && self.inner != 0x1E
-        && self.inner != 0x1F
+            && !self.is_unavailable()
+            && !self.under_maintenance()
+            && self.inner != 0x1E
+            && self.inner != 0x1F
     }
 
     /// Returns a healthy [GpsQzssSatelliteHealth] mask.
@@ -41,18 +55,18 @@ impl GpsQzssSateliteHealth {
         Self::from(0u8)
     }
 
-    /// Returns a [GpsQzssSatelliteHealth] mask marking satellite 
+    /// Returns a [GpsQzssSatelliteHealth] mask marking satellite
     /// unavailability.
     pub fn unavailable() -> Self {
         Self::from(0x1C)
     }
 
-    /// Returns a [GpsQzssSatelliteHealth] mask marking pending satellite 
+    /// Returns a [GpsQzssSatelliteHealth] mask marking pending satellite
     /// maintenance operations.
     pub fn maintenance() -> Self {
         Self::from(0x1D)
     }
-    
+
     /// Returns a [GpsQzssSatelliteHealth] mask marking satellite transmission issues.
     pub fn transmission_issues() -> Self {
         Self::from(0x0C)

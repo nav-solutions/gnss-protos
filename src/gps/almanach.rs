@@ -7,7 +7,7 @@ use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteS
 
 /// [GpsQzssAlmanach] frame found in some reconfigured Frame-4 pages (when reconfigured),
 /// or Frame-5 page 1 to 24.
-#[derive(Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GpsQzssAlmanach {
     /// Eccentricity (16 bit)
     pub eccentricity: f32,
