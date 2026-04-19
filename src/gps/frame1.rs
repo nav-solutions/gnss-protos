@@ -466,7 +466,10 @@ impl GpsQzssFrame1 {
 
 #[cfg(test)]
 mod test {
-    use crate::{gps::GpsQzssFrame1, Buffer, Message, StaticBuffer};
+    use crate::{
+        gps::{GpsQzssFrame1, GpsQzssSatelliteHealth},
+        Buffer, Message, StaticBuffer,
+    };
 
     use bitbuffer::{BigEndian, BitReadStream};
 
@@ -503,7 +506,7 @@ mod test {
                 week,
                 ca_or_p_l2,
                 ura,
-                health,
+                health: GpsQzssSatelliteHealth::from(health),
                 iodc_lsb,
                 iodc_msb,
                 toc,

@@ -36,9 +36,9 @@ fn test1() {
         )
         .with_subframe(GpsQzssSubframe::Ephemeris1(
             GpsQzssFrame1::default()
+                .healthy()
                 .with_week(0x123)
                 .with_iodc(0x123)
-                .with_all_signals_ok()
                 .with_time_of_clock_seconds(12_000)
                 .with_l2p_flag()
                 .with_clock_offset_nanoseconds(1.0)
@@ -128,9 +128,9 @@ fn test2() {
         )
         .with_subframe(GpsQzssSubframe::Ephemeris1(
             GpsQzssFrame1::default()
+                .healthy()
                 .with_week(0x123)
                 .with_iodc(0x345)
-                .with_all_signals_ok()
                 .with_ca_or_p_l2_mask(0x1)
                 .with_user_range_accuracy_m(24.0)
                 .with_clock_offset_nanoseconds(2.0)
@@ -211,9 +211,9 @@ fn test3() {
         )
         .with_subframe(GpsQzssSubframe::Ephemeris1(
             GpsQzssFrame1::default()
+                .healthy()
                 .with_week(0x321)
                 .with_iodc(0x321)
-                .with_all_signals_ok()
                 .with_time_of_clock_seconds(24_000)
                 .with_clock_offset_nanoseconds(2.0)
                 .with_clock_drift_seconds_s(2E-12)
@@ -459,7 +459,7 @@ fn reciprocal() {
         let mut subframe = GpsQzssFrame1::default()
             .with_week(*week)
             .with_iodc(*iodc)
-            .with_health_mask(*health)
+            // .with_health_mask(*health)
             .with_time_of_clock_seconds(*toc)
             .with_total_group_delay_nanos(*tgd)
             .with_ca_or_p_l2_mask(*ca_or_p_l2)
@@ -542,7 +542,7 @@ fn generate_bin_file() {
 
         *subframe = subframe.with_iodc(subframe.iodc() + 1);
 
-        subframe.health += 1;
+        // subframe.health += 1;
         subframe.toc += 1;
 
         subframe.af0 += 1.0E-9;
