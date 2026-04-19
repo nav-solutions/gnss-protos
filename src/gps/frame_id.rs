@@ -17,9 +17,8 @@ pub enum GpsQzssFrameId {
 
     /// GPS / QZSS Almanach / Status subframe #4
     Almanach4,
-
-    /// GPS / QZSS Almanach / Status subframe #5
-    Almanach5,
+    // /// GPS / QZSS Almanach / Status subframe #5
+    // Almanach5,
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrameId {
@@ -36,7 +35,7 @@ impl std::fmt::Display for GpsQzssFrameId {
             Self::Ephemeris2 => write!(f, "EPH-2"),
             Self::Ephemeris3 => write!(f, "EPH-3"),
             Self::Almanach4 => write!(f, "ALM-4"),
-            Self::Almanach5 => write!(f, "ALM-5"),
+            // Self::Almanach5 => write!(f, "ALM-5"),
         }
     }
 }
@@ -49,7 +48,7 @@ impl GpsQzssFrameId {
             2 => Ok(Self::Ephemeris2),
             3 => Ok(Self::Ephemeris3),
             4 => Ok(Self::Almanach4),
-            5 => Ok(Self::Almanach5),
+            // 5 => Ok(Self::Almanach5),
             _ => Err(GpsError::UnknownFrameType),
         }
     }
@@ -61,7 +60,7 @@ impl GpsQzssFrameId {
             Self::Ephemeris2 => 2,
             Self::Ephemeris3 => 3,
             Self::Almanach4 => 4,
-            Self::Almanach5 => 5,
+            // Self::Almanach5 => 5,
         }
     }
 }
@@ -77,7 +76,7 @@ mod test {
             (2, GpsQzssFrameId::Ephemeris2),
             (3, GpsQzssFrameId::Ephemeris3),
             (4, GpsQzssFrameId::Almanach4),
-            (5, GpsQzssFrameId::Almanach5),
+            // (5, GpsQzssFrameId::Almanach5),
         ] {
             let frame_id = GpsQzssFrameId::decode(value).unwrap();
             assert_eq!(frame_id, expected);

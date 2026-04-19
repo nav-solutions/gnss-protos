@@ -1,4 +1,9 @@
-use crate::gps::{GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame5};
+use crate::gps::{
+    GpsQzssFrame1,
+    GpsQzssFrame2,
+    GpsQzssFrame3,
+    // GpsQzssFrame5
+};
 
 #[cfg(test)]
 use crate::gps::GpsQzssFrameId;
@@ -19,9 +24,8 @@ pub enum GpsQzssSubframe {
 
     /// GPS Almanach Frame #4 not supported yet
     Almanach4,
-
-    /// GPS Almanach Frame #5
-    Almanach5(GpsQzssFrame5),
+    // /// GPS Almanach Frame #5
+    // Almanach5(GpsQzssFrame5),
 }
 
 impl BitWrite<BigEndian> for GpsQzssSubframe {
@@ -31,7 +35,7 @@ impl BitWrite<BigEndian> for GpsQzssSubframe {
             Self::Ephemeris2(eph) => stream.write(eph),
             Self::Ephemeris3(eph) => stream.write(eph),
             Self::Almanach4 => Ok(()), // TODO (almanach-4)
-            Self::Almanach5(alm) => stream.write(alm),
+                                       // Self::Almanach5(alm) => stream.write(alm),
         }
     }
 }
@@ -51,8 +55,8 @@ impl GpsQzssSubframe {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
             GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
             GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
-            GpsQzssFrameId::Almanach5 => Self::Almanach5(GpsQzssFrame5::model()),
-            _ => unimplemented!("almanach-4"),
+            // GpsQzssFrameId::Almanach5 => Self::Almanach5(GpsQzssFrame5::model()),
+            _ => unimplemented!(""),
         }
     }
 
@@ -104,19 +108,19 @@ impl GpsQzssSubframe {
         }
     }
 
-    /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
-    pub fn as_alm5(&self) -> Option<GpsQzssFrame5> {
-        match self {
-            Self::Almanach5(frame) => Some(*frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
+    // pub fn as_alm5(&self) -> Option<GpsQzssFrame5> {
+    //     match self {
+    //         Self::Almanach5(frame) => Some(*frame),
+    //         _ => None,
+    //     }
+    // }
 
-    /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
-    pub fn as_mut_alm5(&mut self) -> Option<&mut GpsQzssFrame5> {
-        match self {
-            Self::Almanach5(frame) => Some(frame),
-            _ => None,
-        }
-    }
+    // /// Unwraps self as [GpsQzssFrame5] reference (if feasible)
+    // pub fn as_mut_alm5(&mut self) -> Option<&mut GpsQzssFrame5> {
+    //     match self {
+    //         Self::Almanach5(frame) => Some(frame),
+    //         _ => None,
+    //     }
+    // }
 }

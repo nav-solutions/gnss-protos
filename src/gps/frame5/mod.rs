@@ -133,7 +133,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame5 {
                 }
 
                 let reserved = stream.read_int::<u8>(3)?;
-                let spare = stream.read_int::<u32>(19);
+                let spare = stream.read_int::<u32>(19)?;
                 let nib = stream.read_int::<u8>(2)?; // TODO (parity)
                 let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 

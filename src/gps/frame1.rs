@@ -260,7 +260,7 @@ impl GpsQzssFrame1 {
         Self::default()
             .with_week(0x123)
             .with_iodc(0x1)
-            .with_all_signals_ok()
+            .healthy()
             .with_l2p_flag()
             .with_clock_offset_nanoseconds(1.0)
             .with_clock_drift_seconds_s(1E-12)
@@ -376,6 +376,12 @@ impl GpsQzssFrame1 {
     /// Copies and returns [GpsQzssFrame1] with updated 16-bit reserved word
     pub fn with_reserved16_word(mut self, reserved: u16) -> Self {
         self.reserved_word7 = reserved;
+        self
+    }
+
+    /// Copies and returns [GpsQzssFrame1] with updated Healthy flags
+    pub fn healthy(mut self) -> Self {
+        self.health = GpsQzssSatelliteHealth::healthy();
         self
     }
 
@@ -501,10 +507,10 @@ mod test {
                 iodc_lsb,
                 iodc_msb,
                 toc,
-                tgd: tgd,
-                af0: af0,
-                af1: af1,
-                af2: af2,
+                tgd,
+                af0,
+                af1,
+                af2,
                 l2_p_data_flag,
                 reserved_word4,
                 reserved_word5,
