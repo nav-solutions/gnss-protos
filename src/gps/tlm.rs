@@ -1,15 +1,14 @@
-use crate::gps::{GpsDataWord, GpsError};
+use crate::{
+    gps::{link::GPS_WORD_DATA_BITS, GPS_PREAMBLE_BYTE},
+    Message,
+};
 
-const PREAMBLE_MASK: u32 = 0x22C0_0000;
-const MESSAGE_SHIFT: u32 = 8;
-const MESSAGE_MASK: u32 = 0x003f_ff00;
-const INTEGRITY_BIT_MASK: u32 = 0x0000_0080;
-const RESERVED_BIT_MASK: u32 = 0x0000_0040;
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// [GpsQzssTelemetry] marks the beginning of each frame
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct GpsQzssTelemetry {
-    /// 14-bit TLM Message
+    /// TLM Message
     pub message: u16,
 
     /// Integrity bit is asserted means the conveying signal is provided
@@ -18,6 +17,61 @@ pub struct GpsQzssTelemetry {
 
     /// Reserved bit
     pub reserved_bit: bool,
+}
+
+impl Message<BigEndian> for GpsQzssTelemetry {
+    fn encoding_size(&self) -> usize {
+        GPS_WORD_DATA_BITS / 8
+    }
+
+    fn encoding_bits(&self) -> usize {
+        GPS_WORD_DATA_BITS
+    }
+}
+
+impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
+    /// Reads the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let preamble = stream.read_int::<u8>(8)?;
+        let message = stream.read_int::<u16>(14)?;
+        let integrity = stream.read_bool()?;
+        let reserved_bit = stream.read_bool()?;
+
+        if preamble == GPS_PREAMBLE_BYTE {
+            Ok(Self {
+                message,
+                integrity,
+                reserved_bit,
+            })
+        } else {
+            Err(BitError::UnmatchedDiscriminant {
+                discriminant: preamble as usize,
+                enum_name: "preamble".to_string(),
+            })
+        }
+    }
+}
+
+impl BitWrite<BigEndian> for GpsQzssTelemetry {
+    /// Writes the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(GPS_PREAMBLE_BYTE, 8)?;
+        stream.write_int(self.message & 0x3fff, 14)?;
+        stream.write_bool(self.integrity)?;
+        stream.write_bool(self.reserved_bit)?;
+        Ok(())
+    }
+}
+
+impl Default for GpsQzssTelemetry {
+    /// Generates a default (null) [GpsQzssTelemetry].
+    fn default() -> Self {
+        Self {
+            message: Default::default(),
+            integrity: Default::default(),
+            reserved_bit: Default::default(),
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -32,7 +86,6 @@ impl std::fmt::Display for GpsQzssTelemetry {
 }
 
 impl GpsQzssTelemetry {
-    /// Generates a realistic frame model for testing purposes
     #[cfg(test)]
     pub fn model() -> Self {
         Self::default()
@@ -70,72 +123,41 @@ impl GpsQzssTelemetry {
         self.reserved_bit = false;
         self
     }
-
-    /// [GpsQzssTelemetry] decoding attempt from a [GpsDataWord].
-    /// The special GPS marker must be present (MSB) for this to pass.
-    pub(crate) fn from_word(word: GpsDataWord) -> Result<Self, GpsError> {
-        let value = word.value();
-
-        if value & PREAMBLE_MASK != PREAMBLE_MASK {
-            return Err(GpsError::InvalidPreamble);
-        };
-
-        let message = ((value & MESSAGE_MASK) >> MESSAGE_SHIFT) as u16;
-        let integrity = (value & INTEGRITY_BIT_MASK) > 0;
-        let reserved_bit = (value & RESERVED_BIT_MASK) > 0;
-
-        Ok(Self {
-            message,
-            integrity,
-            reserved_bit,
-        })
-    }
-
-    /// Encodes this [GpsQzssTelemetry] as [GpsDataWord].
-    pub(crate) fn to_word(&self) -> GpsDataWord {
-        let mut value = PREAMBLE_MASK;
-
-        value |= (self.message as u32) << MESSAGE_SHIFT;
-
-        if self.integrity {
-            value |= INTEGRITY_BIT_MASK;
-        }
-
-        if self.reserved_bit {
-            value |= RESERVED_BIT_MASK;
-        }
-
-        // TODO parity
-
-        value <<= 2;
-
-        GpsDataWord::from(value)
-    }
 }
 
 #[cfg(test)]
-mod tlm {
-    use crate::gps::{GpsDataWord, GpsQzssTelemetry};
+mod telemetry {
+    use crate::{gps::GpsQzssTelemetry, Buffer, Message, StaticBuffer};
 
     #[test]
-    fn encoding() {
+    fn reciprocal() {
         for (dword, message, integrity, reserved_bit) in [
-            (0x8B000000, 0x0000, false, false),
-            (0x8B123400, 0x048D, false, false),
-            (0x8B123600, 0x048D, true, false),
-            (0x8B123700, 0x048D, true, true),
-            (0x8B123500, 0x048D, false, true),
+            (0x8B000000u32, 0x0000, false, false),
+            (0x8B04F86Cu32, 0x04F8 >> 2, false, false),
+            (0x8B123400u32, 0x1234 >> 2, false, false),
+            (0x8B123600u32, 0x1236 >> 2, true, false),
+            (0x8B123700u32, 0x048D, true, true),
+            (0x8B123500u32, 0x048D, false, true),
         ] {
-            let gps_word = GpsDataWord::from(dword);
+            let buffer = dword.to_be_bytes().to_vec();
 
-            let tlm = GpsQzssTelemetry::from_word(gps_word).unwrap_or_else(|e| {
-                panic!("failed to decode gps-tlm from 0x{:08X} - {}", dword, e);
+            let tlm = GpsQzssTelemetry::decode(&buffer).unwrap_or_else(|e| {
+                panic!("failed to decode GPS TLM from 0x{:08X} - {}", dword, e);
             });
 
             assert_eq!(tlm.message, message);
             assert_eq!(tlm.integrity, integrity);
             assert_eq!(tlm.reserved_bit, reserved_bit);
-            assert_eq!(tlm.to_word(), gps_word, "Reciprocal issue");
+
+            let mut buffer = [0; 1024];
+
+            assert!(tlm.encode(&mut buffer).is_ok(), "failed to encode frame");
+
+            let decoded = GpsQzssTelemetry::decode(&buffer).unwrap_or_else(|e| {
+                panic!("GPS TLM reciprocal failed: {}", e);
+            });
+
+            assert_eq!(decoded, tlm, "GPS TLM reciprocal failed");
         }
     }
 }
