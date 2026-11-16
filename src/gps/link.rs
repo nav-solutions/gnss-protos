@@ -230,58 +230,7 @@ pub fn to_polarity_corrected(words: &[u32; GPS_WORDS_PER_FRAME]) -> [u32; GPS_WO
     ret
 }
 
-/// Reads `count` (<= 32) bits, MSB first, starting at absolute bit position `bit_pos`.
-/// Returns None if the slice is too short.
-pub fn read_bits(slice: &[u8], bit_pos: usize, count: usize) -> Option<u32> {
-    debug_assert!(count <= 32);
-
-    if bit_pos + count > slice.len() * 8 {
-        return None;
-    }
-
-    let mut value = 0u64;
-    let first = bit_pos / 8;
-    let last = (bit_pos + count + 7) / 8;
-
-    for byte in slice[first..last].iter() {
-        value = (value << 8) | (*byte as u64);
-    }
-
-    let total = (last - first) * 8;
-    let shift = total - (bit_pos % 8) - count;
-
-    Some(((value >> shift) & ((1u64 << count) - 1)) as u32)
-}
-
-/// Writes the `count` (<= 32) LSB of `value`, MSB first, at absolute bit position
-/// `bit_pos`. Surrounding bits are preserved. Returns None if the slice is too short.
-pub fn write_bits(slice: &mut [u8], bit_pos: usize, value: u32, count: usize) -> Option<()> {
-    debug_assert!(count <= 32);
-
-    if bit_pos + count > slice.len() * 8 {
-        return None;
-    }
-
-    let mut pos = bit_pos;
-    let mut remaining = count;
-
-    while remaining > 0 {
-        let byte = pos / 8;
-        let avail = 8 - pos % 8;
-        let take = avail.min(remaining);
-
-        let chunk = ((value >> (remaining - take)) & ((1u32 << take) - 1)) as u8;
-        let shift = avail - take;
-        let mask = (((1u16 << take) - 1) as u8) << shift;
-
-        slice[byte] = (slice[byte] & !mask) | (chunk << shift);
-
-        pos += take;
-        remaining -= take;
-    }
-
-    Some(())
-}
+pub use crate::bits::{read_bits, write_bits};
 
 /// Reads 10 consecutive 30-bit words starting at absolute bit position `bit_pos`.
 pub fn read_words(slice: &[u8], bit_pos: usize) -> Option<[u32; GPS_WORDS_PER_FRAME]> {

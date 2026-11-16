@@ -11,6 +11,8 @@
  * This framework is shipped under Mozilla Public V2 license.
  */
 
+pub mod bits;
+
 mod buffer;
 pub use buffer::{Buffer, StaticBuffer};
 
@@ -22,10 +24,24 @@ mod tests;
 #[cfg(feature = "gps")]
 mod gps;
 
+#[cfg(feature = "galileo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "galileo")))]
+pub mod galileo;
+
 pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
 pub use gps::*;
+
+#[cfg(feature = "galileo")]
+pub use galileo::{
+    GalileoError, GalileoInavDecoder, GalileoInavPage, GalileoInavPageType, GalileoInavWord,
+    GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3, GalileoInavWord4,
+    GalileoInavWord5, GalileoInavWord6, GalileoSignalHealth, GalileoSisa,
+    GALILEO_INAV_DEFAULT_MAX_SYMBOL_ERRORS, GALILEO_INAV_PAGE_BYTES, GALILEO_INAV_PAGE_SYMBOLS,
+    GALILEO_INAV_SYMBOL_RATE, GALILEO_INAV_WORD0_SPARE_BYTES, GALILEO_INAV_WORD_BITS,
+    GALILEO_INAV_WORD_BYTES, GALILEO_IONO_REGIONS,
+};
 
 pub use bitbuffer::{BigEndian, BitError, BitRead, BitWrite, Endianness, LittleEndian};
 

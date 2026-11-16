@@ -28,53 +28,9 @@ pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 // /// L1 C/A code length
 // pub const GPS_L1_CA_CODE_LEN: usize = 1023;
 
-pub(crate) fn rad_to_semicircles(rad: f64) -> f64 {
-    rad.to_degrees() * (2.0_f64.powi(31) / 90.0)
-}
-
-/// Writes a signed integer on `bits` bits (two's complement), clamped
-/// to the range that this field can represent.
-pub(crate) fn write_signed(
-    stream: &mut bitbuffer::BitWriteStream<'_, bitbuffer::BigEndian>,
-    value: i64,
-    bits: usize,
-) -> Result<(), bitbuffer::BitError> {
-    let max = (1i64 << (bits - 1)) - 1;
-    let min = -(1i64 << (bits - 1));
-    let value = value.clamp(min, max);
-    let mask = if bits == 32 {
-        u32::MAX
-    } else {
-        (1u32 << bits) - 1
-    };
-    stream.write_int((value as u32) & mask, bits)
-}
-
-/// Writes an unsigned integer on `bits` bits, clamped
-/// to the range that this field can represent.
-pub(crate) fn write_unsigned(
-    stream: &mut bitbuffer::BitWriteStream<'_, bitbuffer::BigEndian>,
-    value: i64,
-    bits: usize,
-) -> Result<(), bitbuffer::BitError> {
-    let max = if bits == 32 {
-        u32::MAX as i64
-    } else {
-        (1i64 << bits) - 1
-    };
-    let value = value.clamp(0, max);
-    stream.write_int(value as u32, bits)
-}
-
-/// Converts a physical value to its binary representation, using a 2^`pow2` scale factor.
-pub(crate) fn to_scaled(value: f64, pow2: i32) -> i64 {
-    (value * 2.0_f64.powi(-pow2)).round() as i64
-}
-
-/// Converts a binary value to its physical representation, using a 2^`pow2` scale factor.
-pub(crate) fn from_scaled<T: Into<f64>>(value: T, pow2: i32) -> f64 {
-    value.into() * 2.0_f64.powi(pow2)
-}
+pub(crate) use crate::bits::{
+    from_scaled, rad_to_semicircles, to_scaled, write_signed, write_unsigned,
+};
 
 // mod cdma;
 // pub use cdma::GpsQzssModulator;
