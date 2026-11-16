@@ -12,6 +12,7 @@ use log::LevelFilter;
 // GPS_WORDS_PER_FRAME,
 // };
 
+#[cfg(feature = "gps")]
 mod gps;
 
 static INIT: Once = Once::new();

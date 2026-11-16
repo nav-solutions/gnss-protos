@@ -1,6 +1,6 @@
 [package]
 name = "gnss-protos"
-version = "0.1.0-beta"
+version = "0.1.0"
 license = "MPL-2.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS protos encoder and decoder"
@@ -19,13 +19,19 @@ exclude = [
 msrv = "1.89"
 
 [features]
-default = ["gps"]
+default = ["gps", "galileo"]
 
 # STD support. Currently only used in test mode.
 std = []
 
 # Unlock GPS (+QZSS) protocol
 gps = []
+
+# Unlock Galileo (I/NAV) protocol
+galileo = []
+
+# Unlock all protocols at once
+all = ["gps", "galileo"]
 
 [package.metadata.docs.rs]
 all-features = true

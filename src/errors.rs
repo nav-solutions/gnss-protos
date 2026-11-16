@@ -3,6 +3,9 @@ use thiserror::Error;
 #[cfg(feature = "gps")]
 use crate::gps::GpsError;
 
+#[cfg(feature = "galileo")]
+use crate::galileo::GalileoError;
+
 #[derive(Error, Debug, Copy, Clone)]
 pub enum BufferingError {
     /// std-io WouldBlock equivalent
@@ -29,4 +32,7 @@ impl Into<std::io::Error> for BufferingError {
 pub enum Error {
     #[cfg(feature = "gps")]
     Gps(GpsError),
+
+    #[cfg(feature = "galileo")]
+    Galileo(GalileoError),
 }
