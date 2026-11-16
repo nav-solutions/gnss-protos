@@ -1,5 +1,5 @@
 use crate::{
-    gps::{rad_to_semicircles, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{from_scaled, link::GPS_WORD_DATA_BITS, rad_to_semicircles, to_scaled, write_signed},
     Message,
 };
 
@@ -125,9 +125,9 @@ impl GpsQzssFrame3 {
             .with_crc_meters(122.0)
             .with_iode(0x12)
             .with_omega_semicircles(4e-1)
-            .with_omega_dot_semicircles_s(1e-3)
-            .with_inclination_semicircles(1e-3)
-            .with_inclination_rate_semicircles_s(1e-9)
+            .with_omega_dot_semicircles_s(-2.5e-9)
+            .with_inclination_semicircles(3e-1)
+            .with_inclination_rate_semicircles_s(1.5e-10)
             .with_longitude_ascending_node_semicircles(3e-1)
     }
 }
@@ -176,121 +176,65 @@ impl PartialEq for GpsQzssFrame3 {
 
 impl Message<BigEndian> for GpsQzssFrame3 {
     fn encoding_size(&self) -> usize {
-        8 * GPS_WORD_BYTES
+        8 * GPS_WORD_DATA_BITS / 8
     }
 
     fn encoding_bits(&self) -> usize {
-        8 * GPS_WORD_BITS
+        8 * GPS_WORD_DATA_BITS
     }
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame3 {
+    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        let omega0 = (self.omega0 * 2.0_f64.powi(31)).round() as u32;
-        let omega0_msb = ((omega0 & 0xff00_0000) >> 24) as u8;
-        let omega0_lsb = omega0 & 0x00ff_ffff;
+        // words 3 & 4
+        write_signed(stream, to_scaled(self.cic, -29), 16)?;
+        write_signed(stream, to_scaled(self.omega0, -31), 32)?;
 
-        let cic = (self.cic * 2.0_f64.powi(29)).round() as i16;
+        // words 5 & 6
+        write_signed(stream, to_scaled(self.cis, -29), 16)?;
+        write_signed(stream, to_scaled(self.i0, -31), 32)?;
 
-        stream.write_int(cic, 16)?;
-        stream.write_int(omega0_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // words 7 & 8
+        write_signed(stream, to_scaled(self.crc, -5), 16)?;
+        write_signed(stream, to_scaled(self.omega, -31), 32)?;
 
-        stream.write_int(omega0_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // word 9
+        write_signed(stream, to_scaled(self.omega_dot, -43), 24)?;
 
-        let cis = (self.cis * 2.0_f64.powi(29)).round() as i16;
-        let i0 = (self.i0 * 2.0_f64.powi(31)).round() as u32;
-        let i0_msb = ((i0 & 0xff00_0000) >> 24) as u8;
-        let i0_lsb = i0 & 0x00ff_ffff;
-
-        stream.write_int(cis, 16)?;
-        stream.write_int(i0_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        stream.write_int(i0_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let crc = (self.crc * 2.0_f64.powi(5)).round() as i16;
-        let omega = (self.omega * 2.0_f64.powi(31)).round() as u32;
-        let omega_msb = ((omega & 0xff00_0000) >> 24) as u8;
-        let omega_lsb = omega & 0x00ff_ffff;
-
-        stream.write_int(crc, 16)?;
-        stream.write_int(omega_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        stream.write_int(omega_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let omega_dot = (self.omega_dot * 2.0_f64.powi(43)).round() as i32;
-        stream.write_int(omega_dot, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let idot = (self.idot * 2.0_f64.powi(43)).round() as i16;
+        // word 10 (last 2 bits are solved by the link layer)
         stream.write_int(self.iode, 8)?;
-        stream.write_int(idot, 14)?;
-        stream.write_int(0, 2)?; // TODO (parity)
-        stream.write_int(0, 6)?; // TODO (parity)
+        write_signed(stream, to_scaled(self.idot, -43), 14)?;
+        stream.write_int(0u8, 2)?;
 
         Ok(())
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
+    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let cic = stream.read_int::<i16>(16)?;
-        let cic = (cic as f64) * 2.0_f64.powi(-29);
+        // words 3 & 4
+        let cic = from_scaled(stream.read_int::<i16>(16)?, -29);
+        let omega0 = from_scaled(stream.read_int::<i32>(32)?, -31);
 
-        let omega0_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        // words 5 & 6
+        let cis = from_scaled(stream.read_int::<i16>(16)?, -29);
+        let i0 = from_scaled(stream.read_int::<i32>(32)?, -31);
 
-        let omega0_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        // words 7 & 8
+        let crc = from_scaled(stream.read_int::<i16>(16)?, -5);
+        let omega = from_scaled(stream.read_int::<i32>(32)?, -31);
 
-        let mut omega0 = omega0_msb as u32;
-        omega0 <<= 24;
-        omega0 |= omega0_lsb;
-        let omega0 = (omega0 as f64) * 2.0_f64.powi(-31);
+        // word 9
+        let omega_dot = from_scaled(stream.read_int::<i32>(24)?, -43);
 
-        let cis = stream.read_int::<i16>(16)?;
-        let cis = (cis as f64) * 2.0_f64.powi(-29);
-
-        let i0_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let i0_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let mut i0 = i0_msb as u32;
-        i0 <<= 24;
-        i0 |= i0_lsb;
-        let i0 = (i0 as f64) * 2.0_f64.powi(-31);
-
-        let crc = stream.read_int::<i16>(16)?;
-        let crc = (crc as f64) * 2.0_f64.powi(-5);
-
-        let omega_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let omega_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let mut omega = omega_msb as u32;
-        omega <<= 24;
-        omega |= omega_lsb;
-        let omega = (omega as f64) * 2.0_f64.powi(-31);
-
-        let omega_dot = stream.read_int::<u32>(24)?;
-        let omega_dot = (omega_dot as f64) * 2.0_f64.powi(-43);
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
+        // word 10
         let iode = stream.read_int::<u8>(8)?;
-        let idot = stream.read_int::<i16>(14)?;
-        let idot = (idot as f64) * 2.0_f64.powi(-43);
-
-        let nib = stream.read_int::<u8>(2)?; // TODO (parity)
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        let idot = from_scaled(stream.read_int::<i16>(14)?, -43);
+        let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
         Ok(Self {
             cic,

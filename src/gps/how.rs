@@ -1,7 +1,7 @@
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::{
-    gps::{GpsQzssFrameId, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{link::GPS_WORD_DATA_BITS, GpsQzssFrameId},
     Message,
 };
 
@@ -36,50 +36,47 @@ pub struct GpsQzssHow {
 
 impl Message<BigEndian> for GpsQzssHow {
     fn encoding_size(&self) -> usize {
-        GPS_WORD_BYTES
+        GPS_WORD_DATA_BITS / 8
     }
 
     fn encoding_bits(&self) -> usize {
-        GPS_WORD_BITS
+        GPS_WORD_DATA_BITS
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssHow {
+    /// Reads the 24 data bits of the HOW (parity free, see [crate::gps::link]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let zcount = stream.read_int::<u32>(17)?;
+        let tow_count = stream.read_int::<u32>(17)?;
         let alert = stream.read_bool()?;
         let anti_spoofing = stream.read_bool()?;
         let frame_id = stream.read_int::<u8>(3)?;
+        let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
-        if let Ok(frame_id) = GpsQzssFrameId::decode(frame_id) {
-            let nib = stream.read_int::<u8>(2)?; // TODO (parity)
-            let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-            Ok(Self {
+        match GpsQzssFrameId::decode(frame_id) {
+            Ok(frame_id) => Ok(Self {
                 alert,
                 frame_id,
                 anti_spoofing,
-                tow: zcount * 3 / 2,
-            })
-        } else {
-            Err(BitError::UnmatchedDiscriminant {
+                tow: tow_count * 6,
+            }),
+            Err(_) => Err(BitError::UnmatchedDiscriminant {
                 discriminant: frame_id as usize,
                 enum_name: "frame-id".to_string(),
-            })
+            }),
         }
     }
 }
 
 impl BitWrite<BigEndian> for GpsQzssHow {
+    /// Writes the 24 data bits of the HOW (parity free, see [crate::gps::link]).
+    /// The two last bits are solved by the link layer.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        stream.write_int(self.tow * 2 / 3, 17)?;
+        stream.write_int((self.tow / 6) & 0x1ffff, 17)?;
         stream.write_bool(self.alert)?;
         stream.write_bool(self.anti_spoofing)?;
         stream.write_int(self.frame_id.encode() & 0x07, 3)?;
-
-        stream.write_int(0, 2)?; // TODO (parity)
-        stream.write_int(0, 6)?; // TODO (parity)
-
+        stream.write_int(0u8, 2)?;
         Ok(())
     }
 }

@@ -1,5 +1,8 @@
 use crate::{
-    gps::{GpsQzssSatelliteHealth, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{
+        from_scaled, link::GPS_WORD_DATA_BITS, to_scaled, write_signed, write_unsigned,
+        GpsQzssSatelliteHealth,
+    },
     Message,
 };
 
@@ -144,94 +147,85 @@ impl PartialEq for GpsQzssFrame1 {
 
 impl Message<BigEndian> for GpsQzssFrame1 {
     fn encoding_size(&self) -> usize {
-        8 * GPS_WORD_BYTES
+        8 * GPS_WORD_DATA_BITS / 8
     }
 
     fn encoding_bits(&self) -> usize {
-        8 * GPS_WORD_BITS
+        8 * GPS_WORD_DATA_BITS
     }
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame1 {
+    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        stream.write_int(self.week, 10)?;
-        stream.write_int(self.ca_or_p_l2, 2)?;
-        stream.write_int(self.ura, 4)?;
+        // word 3
+        stream.write_int(self.week & 0x3ff, 10)?;
+        stream.write_int(self.ca_or_p_l2 & 0x3, 2)?;
+        stream.write_int(self.ura & 0xf, 4)?;
         stream.write(&self.health)?;
-        stream.write_int(self.iodc_msb, 2)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        stream.write_int(self.iodc_msb & 0x3, 2)?;
 
+        // word 4
         stream.write_bool(self.l2_p_data_flag)?;
-        stream.write_int(self.reserved_word4, 23)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        stream.write_int(self.reserved_word4 & 0x7f_ffff, 23)?;
 
-        stream.write_int(self.reserved_word5, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // words 5 & 6
+        stream.write_int(self.reserved_word5 & 0xff_ffff, 24)?;
+        stream.write_int(self.reserved_word6 & 0xff_ffff, 24)?;
 
-        stream.write_int(self.reserved_word6, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let tgd = (self.tgd * 2.0_f64.powi(31)).round() as i8;
+        // word 7
         stream.write_int(self.reserved_word7, 16)?;
-        stream.write_int(tgd, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        write_signed(stream, to_scaled(self.tgd, -31), 8)?;
 
-        let toc = (self.toc / 16) as u16;
+        // word 8
         stream.write_int(self.iodc_lsb, 8)?;
-        stream.write_int(toc, 16)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        write_unsigned(stream, (self.toc / 16) as i64, 16)?;
 
-        let af1 = (self.af1 * 2.0_f64.powi(43)).round() as i16;
-        let af2 = (self.af2 * 2.0_f64.powi(55)).round() as i8;
-        stream.write_int(af2, 8)?;
-        stream.write_int(af1, 16)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // word 9
+        write_signed(stream, to_scaled(self.af2, -55), 8)?;
+        write_signed(stream, to_scaled(self.af1, -43), 16)?;
 
-        let af0 = (self.af0 * 2.0_f64.powi(31)).round() as i32;
-        stream.write_int(af0 & 0x3f_ffff, 22)?;
-        stream.write_int(0, 2)?; // TODO (parity)
-        stream.write_int(0, 6) // TODO (parity)
+        // word 10 (last 2 bits are solved by the link layer)
+        write_signed(stream, to_scaled(self.af0, -31), 22)?;
+        stream.write_int(0u8, 2)?;
+
+        Ok(())
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
+    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        // word 3
         let week = stream.read_int::<u16>(10)?;
         let ca_or_p_l2 = stream.read_int::<u8>(2)?;
         let ura = stream.read_int::<u8>(4)?;
         let health = stream.read::<GpsQzssSatelliteHealth>()?;
         let iodc_msb = stream.read_int::<u8>(2)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
+        // word 4
         let l2_p_data_flag = stream.read_bool()?;
         let reserved_word4 = stream.read_int::<u32>(23)?;
-        let parity = stream.read_int::<u8>(6)?;
 
+        // words 5 & 6
         let reserved_word5 = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?;
-
         let reserved_word6 = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?;
 
+        // word 7
         let reserved_word7 = stream.read_int::<u16>(16)?;
-        let tgd = stream.read_int::<i8>(8)?;
-        let tgd = (tgd as f64) * 2.0_f64.powi(-31);
-        let parity = stream.read_int::<u8>(6)?;
+        let tgd = from_scaled(stream.read_int::<i8>(8)?, -31);
 
+        // word 8
         let iodc_lsb = stream.read_int::<u8>(8)?;
         let toc = stream.read_int::<u32>(16)? * 16;
-        let parity = stream.read_int::<u8>(6)?;
 
-        let af2 = stream.read_int::<i8>(8)?;
-        let af2 = (af2 as f64) * 2.0_f64.powi(-55);
-        let af1 = stream.read_int::<i16>(16)?;
-        let af1 = (af1 as f64) * 2.0_f64.powi(-43);
-        let parity = stream.read_int::<u8>(6)?;
+        // word 9
+        let af2 = from_scaled(stream.read_int::<i8>(8)?, -55);
+        let af1 = from_scaled(stream.read_int::<i16>(16)?, -43);
 
-        let af0 = stream.read_int::<i32>(22)?;
-        let af0 = (af0 as f64) * 2.0_f64.powi(-31);
-        let bits = stream.read_int::<u8>(2)?;
-        let parity = stream.read_int::<u8>(6)?;
+        // word 10
+        let af0 = from_scaled(stream.read_int::<i32>(22)?, -31);
+        let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
         Ok(Self {
             week,

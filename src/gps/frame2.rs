@@ -1,5 +1,8 @@
 use crate::{
-    gps::{rad_to_semicircles, GPS_WORD_BITS, GPS_WORD_BYTES},
+    gps::{
+        from_scaled, link::GPS_WORD_DATA_BITS, rad_to_semicircles, to_scaled, write_signed,
+        write_unsigned,
+    },
     Message,
 };
 
@@ -96,124 +99,69 @@ impl PartialEq for GpsQzssFrame2 {
 
 impl Message<BigEndian> for GpsQzssFrame2 {
     fn encoding_size(&self) -> usize {
-        8 * GPS_WORD_BYTES
+        8 * GPS_WORD_DATA_BITS / 8
     }
 
     fn encoding_bits(&self) -> usize {
-        8 * GPS_WORD_BITS
+        8 * GPS_WORD_DATA_BITS
     }
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame2 {
+    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
-        let crs = (self.crs * 2.0_f64.powi(5)).round() as i16;
+        // word 3
         stream.write_int(self.iode, 8)?;
-        stream.write_int(crs, 16)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        write_signed(stream, to_scaled(self.crs, -5), 16)?;
 
-        let m0 = (self.m0 * 2.0_f64.powi(31)).round() as u32;
-        let m0_msb = (m0 & 0xff00_0000) >> 24;
-        let m0_lsb = m0 & 0x00ff_ffff;
-        let dn = (self.dn * 2.0_f64.powi(43)).round() as i16;
+        // words 4 & 5
+        write_signed(stream, to_scaled(self.dn, -43), 16)?;
+        write_signed(stream, to_scaled(self.m0, -31), 32)?;
 
-        stream.write_int(dn, 16)?;
-        stream.write_int(m0_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // words 6 & 7
+        write_signed(stream, to_scaled(self.cuc, -29), 16)?;
+        write_unsigned(stream, to_scaled(self.e, -33), 32)?;
 
-        stream.write_int(m0_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
+        // words 8 & 9
+        write_signed(stream, to_scaled(self.cus, -29), 16)?;
+        write_unsigned(stream, to_scaled(self.sqrt_a, -19), 32)?;
 
-        let e = (self.e * 2.0_f64.powi(33)).round() as u32;
-        let e_msb = (e & 0xff00_0000) >> 24;
-        let e_lsb = e & 0x00ff_ffff;
-
-        let cuc = (self.cuc * 2.0_f64.powi(29)).round() as i16;
-
-        stream.write_int(cuc, 16)?;
-        stream.write_int(e_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let e = (self.e * 2.0_f64.powi(33)).round() as i32;
-        stream.write_int(e_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        let sqrt_a = (self.sqrt_a * 2.0_f64.powi(19)).round() as u32;
-        let sqrt_a_msb = (sqrt_a & 0xff00_0000) >> 24;
-        let sqrt_a_lsb = sqrt_a & 0x00ff_ffff;
-
-        let cus = (self.cus * 2.0_f64.powi(29)).round() as i32;
-
-        stream.write_int(cus, 16)?;
-        stream.write_int(sqrt_a_msb, 8)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        stream.write_int(sqrt_a_lsb, 24)?;
-        stream.write_int(0, 6)?; // TODO (parity)
-
-        stream.write_int((self.toe / 16) as u16, 16)?;
+        // word 10 (last 2 bits are solved by the link layer)
+        write_unsigned(stream, (self.toe / 16) as i64, 16)?;
         stream.write_bool(self.fit_int_flag)?;
         stream.write_int(self.aodo & 0x1f, 5)?;
-        stream.write_int(0, 2)?; // TODO (parity)
-        stream.write_int(0, 6)?; // TODO (parity)
+        stream.write_int(0u8, 2)?;
 
         Ok(())
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
+    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        // word 3
         let iode = stream.read_int::<u8>(8)?;
-        let crs = stream.read_int::<i16>(16)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        let crs = from_scaled(stream.read_int::<i16>(16)?, -5);
 
-        let dn = stream.read_int::<i16>(16)?;
-        let m0_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        // words 4 & 5
+        let dn = from_scaled(stream.read_int::<i16>(16)?, -43);
+        let m0 = from_scaled(stream.read_int::<i32>(32)?, -31);
 
-        let m0_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        // words 6 & 7
+        let cuc = from_scaled(stream.read_int::<i16>(16)?, -29);
+        let e = from_scaled(stream.read_int::<u32>(32)?, -33);
 
-        let cuc = stream.read_int::<i16>(16)?;
-        let e_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
+        // words 8 & 9
+        let cus = from_scaled(stream.read_int::<i16>(16)?, -29);
+        let sqrt_a = from_scaled(stream.read_int::<u32>(32)?, -19);
 
-        let e_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let cus = stream.read_int::<i16>(16)?;
-        let sqrt_a_msb = stream.read_int::<u8>(8)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let sqrt_a_lsb = stream.read_int::<u32>(24)?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let toe = stream.read_int::<u16>(16)?;
+        // word 10
+        let toe = stream.read_int::<u32>(16)? * 16;
         let fit_int_flag = stream.read_bool()?;
         let aodo = stream.read_int::<u8>(5)?;
-        let parity = stream.read_int::<u8>(2)?; // TODO (parity)
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
-
-        let cuc = (cuc as f64) * 2.0_f64.powi(-29);
-        let cus = (cus as f64) * 2.0_f64.powi(-29);
-        let crs = (crs as f64) * 2.0_f64.powi(-5);
-        let dn = (dn as f64) * 2.0_f64.powi(-43);
-
-        let toe = (toe as u32) * 16;
-
-        let mut m0 = m0_msb as u32;
-        m0 <<= 24;
-        m0 |= m0_lsb;
-        let m0 = (m0 as f64) * 2.0_f64.powi(-31);
-
-        let mut e = e_msb as u32;
-        e <<= 24;
-        e |= e_lsb;
-        let e = (e as f64) * 2.0_f64.powi(-33);
-
-        let mut sqrt_a = sqrt_a_msb as u32;
-        sqrt_a <<= 24;
-        sqrt_a |= sqrt_a_lsb;
-        let sqrt_a = (sqrt_a as f64) * 2.0_f64.powi(-19);
+        let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
         Ok(Self {
             iode,
@@ -238,9 +186,9 @@ impl GpsQzssFrame2 {
             .with_toe_seconds(54_320)
             .with_iode(0x01)
             .with_mean_anomaly_semicircles(1.0e-1)
-            .with_mean_motion_difference_semicircles(2.0e-1)
+            .with_mean_motion_difference_semicircles(1.5e-9)
             .with_square_root_semi_major_axis(5353.0)
-            .with_eccentricity(1.0e-1)
+            .with_eccentricity(1.0e-2)
             .with_aodo(0x12)
             .with_cuc_radians(1e-6)
             .with_cus_radians(2e-6)

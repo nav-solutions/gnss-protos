@@ -31,85 +31,87 @@ GPS / QZSS
 The `gps` compilation option (enabled by default) activates support
 for the GPS (US) and QZSS (Jap) protocol.
 
-The framework is currently limited to EPH-1, 2 and 3 frames, which is enough for real-time applications,
+The framework interprets the EPH-1, 2 and 3 subframes, which is enough for real-time applications,
 as demonstrated by our [rt-navi (Real Time navigation)](https://github.com/nav-solutions/rt-navi) appplication.
+Subframes 4 and 5 (almanac and status pages) are decoded and encoded as raw data bits,
+their interpretation is work in progress.
 
-We hope to unlock the Almanach and status frames soon.
+GPS is not aligned to bytes: a subframe is 300 bits long (10 words of 30 bits),
+each word carrying 24 data bits and 6 parity bits. The library is organized in two layers:
 
-We provide methods to both encode and decode GPS frames, and methods
-(1) that may apply to raw stream (like in typical real-time decoding working with a stream of bits),
-or bytes that were inveavitably aligned to bytes (GPS is not aligned to bytes):
+- the `gps::link` layer is the only place that deals with the transmitted bits: parity (IS-GPS-200 §20.3.5.2),
+data inversion (D30*), bits 23-24 of words 2 and 10, inverted streams (180° carrier phase ambiguity).
+It converts 10 words of 30 bits into 240 contiguous, parity free, data bits (and back).
+- messages (`GpsQzssTelemetry`, `GpsQzssHow`, `GpsQzssFrame1`..) are read and written on those
+240 data bits. Parameters that the ICD splits over two words (M0, e, sqrt(A)...) are contiguous there.
 
-1. The `GpsQzssDecoder` is the solution when working with real-time GPS/QZSS streams.
-It will synchronize itself to the synchronization bit and start the decoding process.
-When working with a stream of bits, you need to think in terms of bits not bytes.
-Each frame is 300-bit long, the API returns the number of processed and encoded bits (not like
-in standard `std::io` interfaces), which allows you to create an efficient interface that can
-operate on every single bit. But obviously, this will require accurate and correct buffer management.
-
-In this example, we simulate the real-time decoder example, and we apply a "lazy" buffer management technique,
-where we remove all the entire bytes that were processed. Because the frame is 37.5 byte long, 0.5 bytes
-get processed twice the next time we decode the next frame, so it's a little bit "inefficient", but still
-very simple buffer management.
+1. The `GpsQzssDecoder` is the solution when working with GPS/QZSS bit streams.
+It synchronizes itself on the preamble at any bit position (normal or inverted),
+verifies the parity and interprets the frame. It can be fed one bit at a time (`push_bit`, typically
+from a tracking loop) or from a byte slice at any bit offset (`decode`). The decoder state is preserved
+between calls, so a frame may span several buffers. Positions are expressed in bits, not bytes.
 
 ```rust
-use gnss_protos::GpsQzssDecoder;
+use gnss_protos::{GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GPS_FRAME_BITS};
 
-let mut buffer = [0; 2048]; 
+// Encode 3 frames, contiguously, 5 bits after the start of the buffer
+let frame = GpsQzssFrame::default()
+    .with_hand_over_word(GpsQzssHow::default().with_tow_seconds(259_956));
 
-// 128 messages example, as provided by a real-time decoder
-let mut file = File::open("data/GPS/burst.bin")
-    .unwrap();
+let mut buffer = [0u8; 128];
 
-// Grab a few frames
-let size = file.read(&mut buffer)
-    .unwrap();
+for i in 0..3 {
+    frame.encode_at(&mut buffer, 5 + i * GPS_FRAME_BITS)
+        .unwrap();
+}
 
-// The decoder verifies the parity of each frame by default,
-// but you can easily turn that off if you need to.
+// The decoder verifies the parity of each frame by default
 let mut decoder = GpsQzssDecoder::default();
+let mut position = 0; // in bits!
+let mut count = 0;
 
-let (processed_size, decoded) = decoder.decode(&buffer, size);
+loop {
+    let (consumed, decoded) = decoder.decode(&buffer, position);
+    position += consumed;
 
-assert_eq!(processed_size, 300); // !!bits not bytes!!
+    match decoded {
+        Some(decoded) => {
+            // the frame started at position - GPS_FRAME_BITS
+            assert_eq!(position - GPS_FRAME_BITS, 5 + count * GPS_FRAME_BITS);
+            assert_eq!(decoded.how.tow, 259_956);
+            assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
+            count += 1;
+        },
+        None => break, // buffer exhausted
+    }
+}
 
-let decoded = decoded
-    .unwrap(); // we have 128 frames
-
-let subf = subf.subframe.as_eph1()
-    .unwrap(); // our burst pattern is EPH-1..2..3
-
-assert_eq!(decoded.telemetry.message, 0x1234); // test pattern
-assert_eq!(decoded.telemetry.integriry, true); // test pattern
-
-// lazy management
-let ptr = processed_size / 8 -1; // !bytes! -1 so we do not lose data
-
-let (processed_size, decoded) = decoder.decode(&buffer[ptr..], size);
-
-assert_eq!(processed_size, 316); // !!bits not bytes!!
-
-let decoded = decoded
-    .unwrap(); // we have 128 frames
-
-let subf = subf.subframe.as_eph2()
-    .unwrap(); // our burst pattern is EPH-1..2..3
-
-assert_eq!(decoded.telemetry.message, 0x1234); // test pattern
-assert_eq!(decoded.telemetry.integriry, true); // test pattern
+assert_eq!(count, 3);
 ```
 
-2. `GpsQzssFrame` supports a `decode()` that works with a possibly padded Byte.
-This is the prefered option when working with a stream that was already manipulated by a machine
-and therefore, re-aligned to bytes. Each byte may have padding (or not). The stream must
-start with the sync byte.
-We used this approach to interface correctly to U-Blox receivers for example
-(that pad and align the frames internally).
+2. `GpsQzssFrame` can be decoded from / encoded to 10 words of 30 bits (`decode_words`, `encode_words`),
+from / to any bit position of a buffer (`decode_at`, `encode_at`), or using the `bitbuffer`
+`BitRead` / `BitWrite` traits. Some receivers report words whose polarity was already corrected
+(u-blox UBX-RXM-SFRBX for example): use `decode_polarity_corrected_words` for those.
 
 ```rust
-use gnss_protos::GpsQzssDecoder;
+use gnss_protos::{GpsQzssFrame, GpsQzssFrameId};
 
-// TODO
+// EPH-1 subframe, as reported by a u-blox receiver (UBX-RXM-SFRBX)
+let words = [
+    0x22C13E1B, 0x1527C973, 0x13E40004, 0x104F5D31, 0x1744E6D7,
+    0x07755783, 0x330C80B5, 0x125042A1, 0x00001684, 0x312C3033,
+];
+
+let frame = GpsQzssFrame::decode_polarity_corrected_words(&words, true)
+    .unwrap();
+
+assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris1);
+assert_eq!(frame.how.tow, 259_956);
+
+let eph1 = frame.subframe.as_eph1().unwrap();
+assert_eq!(eph1.week, 318);
+assert_eq!(eph1.toc, 266_400);
 ```
 
 License

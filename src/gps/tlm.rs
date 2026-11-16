@@ -1,4 +1,7 @@
-use crate::{gps::GPS_PREAMBLE_BYTE, Message, GPS_WORD_BITS, GPS_WORD_BYTES};
+use crate::{
+    gps::{link::GPS_WORD_DATA_BITS, GPS_PREAMBLE_BYTE},
+    Message,
+};
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
@@ -18,21 +21,21 @@ pub struct GpsQzssTelemetry {
 
 impl Message<BigEndian> for GpsQzssTelemetry {
     fn encoding_size(&self) -> usize {
-        GPS_WORD_BYTES
+        GPS_WORD_DATA_BITS / 8
     }
 
     fn encoding_bits(&self) -> usize {
-        GPS_WORD_BITS
+        GPS_WORD_DATA_BITS
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
+    /// Reads the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let preamble = stream.read_int::<u8>(8)?;
         let message = stream.read_int::<u16>(14)?;
         let integrity = stream.read_bool()?;
         let reserved_bit = stream.read_bool()?;
-        let parity = stream.read_int::<u8>(6)?; // TODO (parity)
 
         if preamble == GPS_PREAMBLE_BYTE {
             Ok(Self {
@@ -50,15 +53,12 @@ impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
 }
 
 impl BitWrite<BigEndian> for GpsQzssTelemetry {
+    /// Writes the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         stream.write_int(GPS_PREAMBLE_BYTE, 8)?;
         stream.write_int(self.message & 0x3fff, 14)?;
         stream.write_bool(self.integrity)?;
         stream.write_bool(self.reserved_bit)?;
-
-        stream.write_int(0, 2)?; // TODO (parity)
-        stream.write_int(0, 6)?; // TODO (parity)
-
         Ok(())
     }
 }

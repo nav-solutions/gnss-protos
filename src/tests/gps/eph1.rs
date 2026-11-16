@@ -4,14 +4,8 @@ use std::{fs::File, io::Write};
 
 use crate::{
     gps::{
-        // GpsQzssDecoder,
-        GpsQzssFrame,
-        GpsQzssFrame1,
-        GpsQzssFrameId,
-        GpsQzssHow,
-        GpsQzssSubframe,
-        GpsQzssTelemetry,
-        GPS_FRAME_BYTES,
+        link, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow,
+        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
     },
     tests::init_logger,
     Buffer, Decoder, Message, StaticBuffer,
@@ -30,7 +24,7 @@ fn test1() {
         )
         .with_hand_over_word(
             GpsQzssHow::default()
-                .with_tow_seconds(18_510 * 3 / 2)
+                .with_tow_seconds(18_510 * 6)
                 .with_alert_bit()
                 .with_anti_spoofing(),
         )
@@ -62,11 +56,14 @@ fn test1() {
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x48);
     assert_eq!(encoded[2], 0xD0 | 0x02 | 0x01);
-    assert_eq!(encoded[3], 0x00); // TODO (parity)
+    // the 300 bits form a valid GPS subframe (parity, t-bits)
+    let words = link::read_words(&encoded, 0).unwrap();
+    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
+    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
+    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0x60);
-    assert_eq!(encoded[5], 0x27);
     // assert_eq!(encoded[6], 0x90);
     // assert_eq!(encoded[7], 0x04);
 
@@ -122,7 +119,7 @@ fn test2() {
         )
         .with_hand_over_word(
             GpsQzssHow::default()
-                .with_tow_seconds(0x4_6789)
+                .with_tow_seconds(0x4_6788)
                 .with_alert_bit()
                 .without_anti_spoofing(),
         )
@@ -147,7 +144,11 @@ fn test2() {
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x48);
     assert_eq!(encoded[2], 0x34 << 2 | 0x01);
-    assert_eq!(encoded[3], 0x00); // TODO (parity)
+    // the 300 bits form a valid GPS subframe (parity, t-bits)
+    let words = link::read_words(&encoded, 0).unwrap();
+    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
+    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
+    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0xDF);
@@ -236,7 +237,11 @@ fn test3() {
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_eq!(encoded[1], 0x04);
     assert_eq!(encoded[2], 0x23 << 2);
-    assert_eq!(encoded[3], 0x00); // TODO (parity)
+    // the 300 bits form a valid GPS subframe (parity, t-bits)
+    let words = link::read_words(&encoded, 0).unwrap();
+    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
+    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
+    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0x4E);
@@ -506,50 +511,42 @@ fn reciprocal() {
 
 #[test]
 fn generate_bin_file() {
-    let mut fd = File::create("data/GPS/eph1.bin").unwrap_or_else(|e| {
-        panic!("Failed to create file: {}", e);
-    });
+    // 128 consecutive frames, forming a continuous GPS bit stream
+    // (300-bit frames, not aligned to bytes), as a receiver would output it.
+    const NUM_FRAMES: usize = 128;
 
-    let mut buffer = [0; 1024];
+    let mut frames = Vec::with_capacity(NUM_FRAMES);
 
     let mut frame = GpsQzssFrame::default()
         .with_telemetry(GpsQzssTelemetry::model())
         .with_hand_over_word(GpsQzssHow::model(GpsQzssFrameId::Ephemeris1))
         .with_subframe(GpsQzssSubframe::model(GpsQzssFrameId::Ephemeris1));
 
-    for i in 0..128 {
-        frame.encode(&mut buffer).unwrap_or_else(|e| {
-            panic!("Failed to encode frame #{}: {}", i, e);
-        });
-
-        fd.write(&buffer[..GPS_FRAME_BYTES]).unwrap_or_else(|e| {
-            panic!("Failed to write encoded frame #{}: {}", i, e);
-        });
+    for _ in 0..NUM_FRAMES {
+        frames.push(frame);
 
         frame.telemetry.message += 1;
         frame.telemetry.integrity = !frame.telemetry.integrity;
         frame.telemetry.reserved_bit = !frame.telemetry.reserved_bit;
 
-        frame.how.tow += 1;
+        frame.how.tow += 6;
         frame.how.alert = !frame.how.alert;
         frame.how.anti_spoofing = !frame.how.anti_spoofing;
 
         let subframe = frame.subframe.as_mut_eph1().unwrap();
 
         subframe.week += 1;
-        subframe.ura += 1;
-        subframe.ca_or_p_l2 = subframe.ca_or_p_l2 ^ 0x3;
+        subframe.ura = (subframe.ura + 1) & 0xf;
+        subframe.ca_or_p_l2 ^= 0x3;
 
         *subframe = subframe.with_iodc(subframe.iodc() + 1);
 
-        // subframe.health += 1;
-        subframe.toc += 1;
+        subframe.toc += 16;
 
         subframe.af0 += 1.0E-9;
         subframe.af1 += 1.0E-12;
-        subframe.af2 += 1.0E-15;
-
-        subframe.tgd += 1.0E-9;
+        // stay within the range of each field (TGD: 8 bits, 2^-31 s)
+        subframe.tgd += 1.0E-10;
 
         subframe.reserved_word4 += 1;
         subframe.reserved_word5 += 1;
@@ -557,6 +554,41 @@ fn generate_bin_file() {
         subframe.reserved_word7 += 1;
 
         subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
+    }
+
+    let mut buffer = vec![0u8; (NUM_FRAMES * GPS_FRAME_BITS + 7) / 8];
+
+    for (i, frame) in frames.iter().enumerate() {
+        frame.encode_at(&mut buffer, i * GPS_FRAME_BITS).unwrap();
+    }
+
+    std::fs::create_dir_all("data/GPS").unwrap();
+
+    let mut fd = File::create("data/GPS/eph1.bin").unwrap_or_else(|e| {
+        panic!("Failed to create file: {}", e);
+    });
+
+    fd.write_all(&buffer).unwrap();
+
+    // verify: the decoder retrieves every frame
+    let mut decoder = GpsQzssDecoder::default();
+    let mut position = 0;
+    let mut decoded = Vec::new();
+
+    loop {
+        let (consumed, frame) = decoder.decode(&buffer, position);
+        position += consumed;
+
+        match frame {
+            Some(frame) => decoded.push(frame),
+            None => break,
+        }
+    }
+
+    assert_eq!(decoded.len(), frames.len(), "missing frames");
+
+    for (i, (decoded, frame)) in decoded.iter().zip(frames.iter()).enumerate() {
+        assert_eq!(decoded, frame, "frame #{} differs", i);
     }
 }
 
