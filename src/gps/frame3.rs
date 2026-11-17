@@ -62,7 +62,7 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated inclination angle (in radians) at reference time.
-    pub fn with_inclination_radians(mut self, angle_rad: f64) -> Self {
+    pub fn with_inclination_radians(self, angle_rad: f64) -> Self {
         self.with_inclination_semicircles(rad_to_semicircles(angle_rad))
     }
 
@@ -91,7 +91,7 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in radians) at reference time.
-    pub fn with_longitude_ascending_node_radians(mut self, angle_rad: f64) -> Self {
+    pub fn with_longitude_ascending_node_radians(self, angle_rad: f64) -> Self {
         self.with_longitude_ascending_node_semicircles(rad_to_semicircles(angle_rad))
     }
 
@@ -102,7 +102,7 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated omega (in radians)
-    pub fn with_omega_radians(mut self, angle_rad: f64) -> Self {
+    pub fn with_omega_radians(self, angle_rad: f64) -> Self {
         self.with_omega_semicircles(rad_to_semicircles(angle_rad))
     }
 
@@ -113,7 +113,7 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in radians.s⁻¹)
-    pub fn with_omega_dot_rad_s(mut self, omega_dot_rad: f64) -> Self {
+    pub fn with_omega_dot_rad_s(self, omega_dot_rad: f64) -> Self {
         self.with_omega_dot_semicircles_s(rad_to_semicircles(omega_dot_rad))
     }
 
