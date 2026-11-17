@@ -23,6 +23,11 @@ The framework currently supports GPS / QZSS (unlocked on `gps` option) and Galil
 Supported protocols
 ===================
 
+This library works both ways and supports protocol encoding & decoding.
+
+The library does not support bitstream demodulation, you must first demodulate the radio stream
+and provide the bits to one of our decoders.
+
 - GPS / QZSS protocol (on `gps` crate feature), note that this feature is activated by default.
 - Galileo I/NAV protocol, E1-B and E5b-I (on `galileo` crate feature), note that this feature is activated by default.
 
@@ -217,6 +222,31 @@ assert!((eph4.af0 - -4.54849563539E-04).abs() < 1E-14);
 // bit exact re-encoding (CRC included)
 assert_eq!(page.encode_ublox_words().unwrap(), words);
 ```
+
+Demodulation
+============
+
+Bitstream demodulation is not supported by this library, because it requires tight synchronization
+usually gated by hardware. The user will have to demodulate the bitstream themselves then provide
+the stream to one of our decoders.
+
+This library may provide a generic decoder, which adapts automatically to each supported Protocol
+and outputs the first valid stream decoded, but that structure does not exist yet. That means you
+have to select which protocol you want to decode in advance, and select the related decoder.
+
+Modulation
+==========
+
+Encoding produces the bit (GPS, 50 bit/s) or symbol (Galileo, 250 sym/s) stream, which is not
+ready for transmission. Each protocol provides a `Modulator` that spreads this stream with the
+ranging code of one satellite, producing baseband chips (`+1` / `-1`):
+
+- `gps::Modulator`: L1 C/A, GPS PRN 1-32 and QZSS PRN 193-202 (20460 chips per data bit, 1.023 MHz).
+- `galileo::Modulator`: E5b-I, PRN 1-50 (generated primary codes + `1110` secondary code, 10.23 MHz),
+and E1-B from the ICD memory codes, with optional BOC(1,1) sub-carrier.
+
+All modulators implement the `Modulation` trait, so a transmitter can be generic over the protocol.
+They are stateless and also give access to the code itself, which is the local replica a receiver correlates against.
 
 License
 =======

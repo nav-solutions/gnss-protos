@@ -18,11 +18,15 @@ pub use buffer::{Buffer, StaticBuffer};
 
 mod errors;
 
+pub mod modulation;
+pub use modulation::{Modulation, ModulationError};
+
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "gps")]
-mod gps;
+#[cfg_attr(docsrs, doc(cfg(feature = "gps")))]
+pub mod gps;
 
 #[cfg(feature = "galileo")]
 #[cfg_attr(docsrs, doc(cfg(feature = "galileo")))]
@@ -30,8 +34,15 @@ pub mod galileo;
 
 pub use errors::{BufferingError, Error};
 
+// Explicit list, so each protocol `Modulator` remains scoped to its module
+// (gps::Modulator, galileo::Modulator).
 #[cfg(feature = "gps")]
-pub use gps::*;
+pub use gps::{
+    link, GpsError, GpsQzssAlmanach, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2,
+    GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssSubframe,
+    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+    GPS_WORD_BITS, GPS_WORD_BYTES,
+};
 
 #[cfg(feature = "galileo")]
 pub use galileo::{

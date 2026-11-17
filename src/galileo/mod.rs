@@ -12,7 +12,8 @@
 //!   ([GalileoInavWord1] to [GalileoInavWord4] for the ephemeris, [GalileoInavWord5]
 //!   for the ionosphere, BGD and health, ...).
 //!
-//! The [GalileoInavDecoder] synchronizes itself on a raw symbol stream.
+//! The [GalileoInavDecoder] synchronizes itself on a raw symbol stream, and the
+//! [Modulator] spreads an encoded symbol stream with the code of one satellite (E1-B or E5b-I).
 
 /// Number of bits of an I/NAV word.
 pub const GALILEO_INAV_WORD_BITS: usize = 128;
@@ -62,6 +63,13 @@ pub use page::{
 
 mod decoder;
 pub use decoder::{GalileoInavDecoder, GALILEO_INAV_DEFAULT_MAX_SYMBOL_ERRORS};
+
+mod modulator;
+pub use modulator::{
+    GalileoInavSignal, Modulator, GALILEO_E1B_CHIP_RATE, GALILEO_E1B_CODE_HEX_LEN,
+    GALILEO_E1B_CODE_LEN, GALILEO_E5BI_CHIP_RATE, GALILEO_E5BI_CODE_LEN,
+    GALILEO_E5BI_SECONDARY_CODE,
+};
 
 #[cfg(test)]
 pub(crate) mod test_vectors;

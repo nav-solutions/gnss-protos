@@ -1,3 +1,10 @@
+//! GPS / QZSS LNAV protocol (IS-GPS-200, IS-QZSS-PNT).
+//!
+//! - [link]: parity and polarity, converts 300 transmitted bits into 240 data bits, and back.
+//! - [GpsQzssFrame]: telemetry, hand-over word and subframe, read and written on the data bits.
+//! - [GpsQzssDecoder]: synchronizes itself on a bit stream.
+//! - [Modulator]: spreads the encoded bit stream with the L1 C/A code of one satellite.
+
 /// GPS preamble (SYNC) byte
 pub const GPS_PREAMBLE_BYTE: u8 = 0x8B;
 
@@ -25,15 +32,15 @@ pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 // /// Number of parity bits for each [GpsDataWord]
 // pub(crate) const GPS_PARITY_SIZE: usize = 6;
 
-// /// L1 C/A code length
-// pub const GPS_L1_CA_CODE_LEN: usize = 1023;
-
 pub(crate) use crate::bits::{
     from_scaled, rad_to_semicircles, to_scaled, write_signed, write_unsigned,
 };
 
-// mod cdma;
-// pub use cdma::GpsQzssModulator;
+mod modulator;
+pub use modulator::{
+    Modulator, GPS_DATA_RATE, GPS_L1_CA_CHIPS_PER_BIT, GPS_L1_CA_CHIP_RATE,
+    GPS_L1_CA_CODES_PER_BIT, GPS_L1_CA_CODE_LEN,
+};
 
 mod almanach;
 pub use almanach::GpsQzssAlmanach;
