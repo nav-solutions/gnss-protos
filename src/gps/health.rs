@@ -15,6 +15,12 @@ impl From<u8> for GpsQzssSatelliteHealth {
     }
 }
 
+impl Into<u8> for GpsQzssSatelliteHealth {
+    fn into(self) -> u8 {
+        self.inner
+    }
+}
+
 impl BitWrite<BigEndian> for GpsQzssSatelliteHealth {
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         stream.write_int(self.inner & 0x3f, 6)
