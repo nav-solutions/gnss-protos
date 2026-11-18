@@ -192,7 +192,10 @@ pub(crate) fn ublox_e08(word_type: u8) -> [u32; 8] {
 #[cfg(test)]
 mod test {
     use super::{parts_to_ublox, ublox_e08, ublox_page, ublox_to_parts, UBLOX_E08};
-    use crate::galileo::{GalileoInavPage, GalileoSignalHealth};
+    use crate::{
+        constants::SECONDS_PER_WEEK,
+        galileo::{GalileoInavPage, GalileoSignalHealth},
+    };
     use core::f64::consts::PI;
 
     fn decode(word_type: u8) -> GalileoInavPage {
@@ -222,7 +225,7 @@ mod test {
         let word = decode(0).word.as_word0().unwrap();
         assert!(word.has_valid_time());
         assert_eq!(word.wn, 1339);
-        assert!(word.tow < 604_800);
+        assert!(word.tow < SECONDS_PER_WEEK);
         assert_eq!(word.spare, [0x55; 11]);
     }
 
@@ -284,7 +287,7 @@ mod test {
         assert!(word.is_healthy());
         // RINEX GAL week 2363 is aligned to GPS weeks: GST = GPS - 1024
         assert_eq!(word.wn, 2363 - 1024);
-        assert!(word.tow < 604_800);
+        assert!(word.tow < SECONDS_PER_WEEK);
         assert!(word.ai0 > 0.0);
     }
 
