@@ -64,7 +64,7 @@ impl GpsQzssDecoder {
     }
 
     /// Pushes a new bit into the decoder.
-    /// Returns a [GpsQzssFrame] when this bit completed a valid frame.
+    /// Returns a [GpsQzssFrame] when this bit completes a valid frame.
     pub fn push_bit(&mut self, bit: bool) -> Option<GpsQzssFrame> {
         let mut carry = bit as u32;
 

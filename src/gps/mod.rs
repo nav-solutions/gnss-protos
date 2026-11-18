@@ -13,6 +13,10 @@
 //!   are read and written on the 240 parity free data bits. Parameters that the ICD splits over
 //!   two words (M0, e, sqrt(A)...) are contiguous there.
 //!
+//! We also provide [GpsQzssMessage] which describes the complete 25-page rotation,
+//! which is most useful to people interested in the constellation Almanach. The 25-page
+//! rotation is recorded in 12'30" and describes gives the entire almanach.
+//!
 //! The [GpsQzssDecoder] synchronizes itself on a raw bit stream.
 //!
 //! All messages implement the [Message] trait: they may be encoded / decoded
@@ -63,47 +67,48 @@ pub const GPS_TOC_TOE_LSB_S: u32 = 16;
 /// Number of data (parity free) bytes per GPS frame.
 pub(crate) const GPS_FRAME_DATA_BYTES: usize = GPS_WORDS_PER_FRAME * GPS_WORD_DATA_BITS / 8;
 
+/// Number of [GpsQzssFrame]s in a rotation: EPH-1,2,3 then ALM-4,5.
+pub const GPS_QZSS_ROTATION_ITEMS: usize = 5;
+
+/// Number of "pages" or complete EPH-1,2,3 ALM-4,5 rotation in a GPS/QZSS message.
+/// Which contains the complete Almanach information for the entire constellation.
+pub const GPS_QZSS_MESSAGE_ITEMS: usize = 25;
+
+/// Total size (in bytes) that must be allocated to fit a complete 25-page GPS message,
+/// including Almanach for the entire constellation. This is usually not enough for a true
+/// application that may require double/tripple buffering, but at least this defines your basis.
+pub const GPS_QZSS_MESSAGE_BYTES: usize = GPS_QZSS_MESSAGE_ITEMS * GPS_FRAME_BYTES;
+
+/// Total number of bits in a 25-page GPS message.
+pub const GPS_QZSS_MESSAGE_BITS: usize = GPS_QZSS_MESSAGE_ITEMS * GPS_FRAME_BITS;
+
 mod almanach;
-pub use almanach::GpsQzssAlmanach;
-
 mod decoder;
-pub use decoder::GpsQzssDecoder;
-
 mod errors;
-pub use errors::GpsError;
-
-mod health;
-pub use health::GpsQzssSatelliteHealth;
-
-mod frame1;
-pub use frame1::GpsQzssFrame1;
-
-mod frame2;
-pub use frame2::GpsQzssFrame2;
-
-mod frame3;
-pub use frame3::GpsQzssFrame3;
-
-// Work in progress: subframes 4 & 5 interpretation
-// mod frame4;
-// pub use frame4::GpsQzssFrame4;
-// mod frame5;
-// pub use frame5::GpsQzssFrame5;
-
-mod frame_id;
-pub use frame_id::GpsQzssFrameId;
-
-mod how;
-pub use how::GpsQzssHow;
-
-mod tlm;
-pub use tlm::GpsQzssTelemetry;
-
 mod frame;
-pub use frame::GpsQzssFrame;
-
+mod frame1;
+mod frame2;
+mod frame3;
+mod frame_id;
+mod health;
+mod how;
+mod message;
 mod subframe;
+mod tlm;
+
+pub use almanach::GpsQzssAlmanach;
+pub use decoder::GpsQzssDecoder;
+pub use errors::GpsError;
+pub use frame::GpsQzssFrame;
+pub use frame1::GpsQzssFrame1;
+pub use frame2::GpsQzssFrame2;
+pub use frame3::GpsQzssFrame3;
+pub use frame_id::GpsQzssFrameId;
+pub use health::GpsQzssSatelliteHealth;
+pub use how::GpsQzssHow;
+pub use message::GpsQzssMessage;
 pub use subframe::{GpsQzssSubframe, GPS_SUBFRAME_DATA_BYTES};
+pub use tlm::GpsQzssTelemetry;
 
 #[cfg(test)]
 pub(crate) mod test_vectors;

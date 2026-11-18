@@ -26,6 +26,22 @@ Supported protocols
 - GPS / QZSS protocol (on `gps` crate feature), note that this feature is activated by default.
 - Galileo I/NAV protocol, E1-B and E5b-I (on `galileo` crate feature), note that this feature is activated by default.
 
+Terminology
+===========
+
+- Encoder/Encoding: binary encoding into a buffer. Bit stream is not modulated.
+The buffer contains bits according to each protocol.
+To send over the air, you need a modulator and a mixer.
+
+- Decoder/Decoding: binary decoding from a buffer. Bit stream must be demodulated
+before this step, by a Demodulator, which works on a baseband signal.
+
+- Modulator: modulates any bitstream like a given satellite.
+The output is still a bitstream but ready to be transposed and transmitted over the air.
+
+- Demodulator: demodulates a baseband bitstream from a given satellite. Output may be forwarded 
+to a Decoder.
+
 Encoding & decoding
 ===================
 
