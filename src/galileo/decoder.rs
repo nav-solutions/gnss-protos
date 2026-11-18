@@ -1,13 +1,15 @@
 use crate::{
     bits::{get_bit, read_bits},
     galileo::{
-        link::{
-            self, GALILEO_INAV_INVERTED_SYNC_PATTERN, GALILEO_INAV_PART_BYTES,
-            GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYNC_PATTERN, GALILEO_INAV_SYNC_SYMBOLS,
-        },
-        GalileoInavPage,
+        fec::{self, GALILEO_INAV_INVERTED_SYNC_PATTERN, GALILEO_INAV_PART_BYTES},
+        page::read_part_symbols,
+        GalileoInavPage, GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYNC_PATTERN,
+        GALILEO_INAV_SYNC_SYMBOLS,
     },
+    BigEndian,
 };
+
+use bitbuffer::{BitReadBuffer, BitReadStream};
 
 #[cfg(feature = "log")]
 use log::trace;
@@ -142,8 +144,11 @@ impl GalileoInavDecoder {
             return None;
         }
 
-        let (encoded, _) = link::read_part_symbols(&self.symbols, WINDOW_START)?;
-        let (part, errors) = link::decode_part(&encoded);
+        let mut stream = BitReadStream::new(BitReadBuffer::new(&self.symbols, BigEndian));
+        stream.set_pos(WINDOW_START).ok()?;
+
+        let encoded = read_part_symbols(&mut stream).ok()?;
+        let (part, errors) = fec::decode_part(&encoded);
 
         if errors > self.max_symbol_errors {
             #[cfg(feature = "log")]
@@ -233,10 +238,14 @@ mod test {
     use crate::{
         bits::get_bit,
         galileo::{
-            link::test::lfsr, test_vectors::UBLOX_E08, GalileoInavDecoder, GalileoInavPage,
-            GalileoInavWord, GALILEO_INAV_PAGE_SYMBOLS,
+            fec::test::lfsr,
+            test_vectors::{ublox_page, UBLOX_E08},
+            GalileoInavDecoder, GalileoInavPage, GalileoInavWord, GALILEO_INAV_PAGE_SYMBOLS,
         },
+        BigEndian, Message,
     };
+
+    use bitbuffer::BitWriteStream;
 
     /// Builds a realistic sequence of pages, with evolving contents.
     fn stream_model(num_pages: usize) -> Vec<GalileoInavPage> {
@@ -257,23 +266,29 @@ mod test {
             .collect()
     }
 
-    /// Encodes the pages contiguously, after `offset` symbols of noise.
+    /// Streams the pages contiguously, after `offset` symbols of noise,
+    /// followed by a few symbols of noise.
     fn encode_stream(pages: &[GalileoInavPage], offset: usize) -> Vec<u8> {
-        let size = (offset + pages.len() * GALILEO_INAV_PAGE_SYMBOLS + 7) / 8 + 1;
-        let mut buffer = vec![0u8; size];
-
-        // pseudo random noise
         let mut seed = 0xACE1_2345;
-        for byte in buffer.iter_mut() {
-            *byte = lfsr(&mut seed) as u8;
+        let mut symbols = Vec::new();
+
+        {
+            let mut writer = BitWriteStream::new(&mut symbols, BigEndian);
+
+            for _ in 0..offset {
+                writer.write_bool(lfsr(&mut seed) & 0x1 > 0).unwrap();
+            }
+
+            for page in pages.iter() {
+                writer.write(page).unwrap();
+            }
+
+            for _ in 0..13 {
+                writer.write_bool(lfsr(&mut seed) & 0x1 > 0).unwrap();
+            }
         }
 
-        for (i, page) in pages.iter().enumerate() {
-            page.encode_at(&mut buffer, offset + i * GALILEO_INAV_PAGE_SYMBOLS)
-                .unwrap();
-        }
-
-        buffer
+        symbols
     }
 
     fn decode_all(
@@ -453,7 +468,7 @@ mod test {
     fn real_ublox_stream() {
         let pages: Vec<GalileoInavPage> = UBLOX_E08
             .iter()
-            .map(|(_, words)| GalileoInavPage::decode_ublox_words(words).unwrap())
+            .map(|(_, words)| ublox_page(words))
             .collect();
 
         let buffer = encode_stream(&pages, 13);
@@ -466,7 +481,14 @@ mod test {
 
         for (i, (_, page)) in decoded.iter().enumerate() {
             assert_eq!(*page, pages[i]);
-            assert_eq!(page.encode_ublox_words().unwrap(), UBLOX_E08[i].1);
+
+            // bit exact
+            let mut symbols = [0u8; 63];
+            page.encode(&mut symbols).unwrap();
+
+            let mut reference = [0u8; 63];
+            pages[i].encode(&mut reference).unwrap();
+            assert_eq!(symbols, reference);
         }
     }
 }

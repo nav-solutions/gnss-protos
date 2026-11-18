@@ -168,7 +168,7 @@ impl BitWrite<BigEndian> for GalileoInavWord4 {
     }
 }
 
-crate::galileo::word::impl_eq_by_encoding!(GalileoInavWord4);
+crate::bits::impl_eq_by_encoding!(GalileoInavWord4, crate::galileo::GALILEO_INAV_WORD_BYTES);
 
 #[cfg(test)]
 mod test {

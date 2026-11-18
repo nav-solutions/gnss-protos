@@ -3,12 +3,12 @@ use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteS
 use crate::{
     bits::{get_bit, read_bits, write_bits},
     galileo::{
-        link::{
-            self, GALILEO_INAV_PART_BYTES, GALILEO_INAV_PART_DATA_BITS,
-            GALILEO_INAV_PART_ENCODED_BYTES, GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYNC_PATTERN,
-            GALILEO_INAV_SYNC_SYMBOLS, GALILEO_INAV_TAIL_BITS,
+        fec::{
+            self, GALILEO_INAV_INVERTED_SYNC_PATTERN, GALILEO_INAV_PART_BYTES,
+            GALILEO_INAV_PART_DATA_BITS, GALILEO_INAV_PART_ENCODED_BYTES, GALILEO_INAV_TAIL_BITS,
         },
-        GalileoError, GalileoInavWord, GALILEO_INAV_WORD_BYTES,
+        GalileoError, GalileoInavWord, GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYNC_PATTERN,
+        GALILEO_INAV_SYNC_SYMBOLS, GALILEO_INAV_WORD_BYTES,
     },
     Message,
 };
@@ -64,16 +64,42 @@ pub enum GalileoInavPageType {
 /// On E5b-I, the OSNMA, SAR and Spare fields (64 bits) are "Reserved 1"
 /// and the SSP field is "Reserved 2": they are carried as is.
 ///
-/// A page exists under three representations:
-/// - the transmitted symbols: 2 x 250 symbols (synchronization pattern,
-///   FEC encoding and interleaving) ([Self::decode_at], [Self::encode_at], and the
-///   [BitRead] / [BitWrite] implementations);
-/// - the two 120-bit page parts ([Self::decode_parts], [Self::encode_parts]), as most receivers
-///   report them, for example u-blox UBX-RXM-SFRBX ([Self::decode_ublox_words],
-///   [Self::encode_ublox_words]);
-/// - this interpreted structure.
+/// [GalileoInavPage] implements [Message]: [Message::encode] and [Message::decode]
+/// work on the 500 transmitted symbols (2 x 250 symbols: synchronization pattern,
+/// FEC encoding and interleaving), packed MSB first (63 bytes, 4 padding bits).
+/// To work at any symbol position, or to stream consecutive pages,
+/// use the [BitRead] / [BitWrite] implementations with a [bitbuffer] stream:
+///
+/// ```
+/// use gnss_protos::{
+///     BigEndian, BitReadBuffer, BitReadStream, BitWriteStream, GalileoInavPage,
+///     GALILEO_INAV_PAGE_SYMBOLS,
+/// };
+///
+/// let page = GalileoInavPage::default()
+///     .with_ssp(0x2F);
+///
+/// // 2 consecutive pages, 3 symbols after the start of the stream
+/// let mut symbols = Vec::new();
+/// let mut writer = BitWriteStream::new(&mut symbols, BigEndian);
+/// writer.write_int(0u8, 3).unwrap();
+/// writer.write(&page).unwrap();
+/// writer.write(&page).unwrap();
+///
+/// let mut reader = BitReadStream::new(BitReadBuffer::new(&symbols, BigEndian));
+/// reader.set_pos(3).unwrap();
+///
+/// for _ in 0..2 {
+///     let decoded: GalileoInavPage = reader.read().unwrap();
+///     assert_eq!(decoded, page);
+/// }
+///
+/// assert_eq!(reader.pos(), 3 + 2 * GALILEO_INAV_PAGE_SYMBOLS);
+/// ```
 ///
 /// The CRC is always computed when encoding, and verified when decoding.
+/// Inverted symbols (180° carrier phase ambiguity) are decoded transparently,
+/// and symbol errors are corrected by the Viterbi decoder.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct GalileoInavPage {
     /// [GalileoInavPageType]
@@ -116,49 +142,50 @@ fn bit_error(e: GalileoError) -> BitError {
     }
 }
 
-/// Reads a page part (250 symbols) from the stream, at its current position.
-fn read_part(
+/// Reads the 250 symbols of a page part from the stream, at its current position,
+/// and returns its 240 encoded symbols (sync pattern excluded), in normal polarity:
+/// an inverted page part (inverted synchronization pattern) is inverted back.
+pub(crate) fn read_part_symbols(
     stream: &mut BitReadStream<'_, BigEndian>,
-) -> Result<[u8; GALILEO_INAV_PART_BYTES], BitError> {
-    let mut buffer = [0u8; 2 + GALILEO_INAV_PART_ENCODED_BYTES];
-    write_bits(
-        &mut buffer,
-        0,
-        stream.read_int::<u32>(GALILEO_INAV_SYNC_SYMBOLS)?,
-        GALILEO_INAV_SYNC_SYMBOLS,
-    );
+) -> Result<[u8; GALILEO_INAV_PART_ENCODED_BYTES], BitError> {
+    let sync = stream.read_int::<u32>(GALILEO_INAV_SYNC_SYMBOLS)?;
 
-    for i in 0..GALILEO_INAV_PART_ENCODED_BYTES {
-        let byte = stream.read_int::<u8>(8)?;
-        write_bits(
-            &mut buffer,
-            GALILEO_INAV_SYNC_SYMBOLS + 8 * i,
-            byte as u32,
-            8,
-        );
+    let inverted = if sync == GALILEO_INAV_SYNC_PATTERN {
+        false
+    } else if sync == GALILEO_INAV_INVERTED_SYNC_PATTERN {
+        true
+    } else {
+        return Err(bit_error(GalileoError::InvalidSyncPattern));
+    };
+
+    let mut symbols = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
+
+    for byte in symbols.iter_mut() {
+        *byte = stream.read_int::<u8>(8)?;
     }
 
-    let (symbols, _) =
-        link::read_part_symbols(&buffer, 0).ok_or(bit_error(GalileoError::InvalidSyncPattern))?;
+    if inverted {
+        symbols = fec::invert_symbols(&symbols);
+    }
 
-    Ok(link::decode_part(&symbols).0)
+    Ok(symbols)
 }
 
-/// Writes a page part (250 symbols) to the stream.
+/// Writes a page part (sync pattern and 240 encoded symbols) to the stream.
 fn write_part(
     stream: &mut BitWriteStream<'_, BigEndian>,
     part: &[u8; GALILEO_INAV_PART_BYTES],
 ) -> Result<(), BitError> {
     stream.write_int(GALILEO_INAV_SYNC_PATTERN, GALILEO_INAV_SYNC_SYMBOLS)?;
-    stream.write_bytes(&link::encode_part(part))
+    stream.write_bytes(&fec::encode_part(part))
 }
 
 impl BitRead<'_, BigEndian> for GalileoInavPage {
     /// Reads a complete page (500 symbols) from the stream, at its current position.
     /// Inverted symbols are supported, the CRC is always verified.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let even = read_part(stream)?;
-        let odd = read_part(stream)?;
+        let even = fec::decode_part(&read_part_symbols(stream)?).0;
+        let odd = fec::decode_part(&read_part_symbols(stream)?).0;
         Self::decode_parts(&even, &odd).map_err(bit_error)
     }
 }
@@ -222,7 +249,7 @@ impl GalileoInavPage {
 
     /// Interprets the two 120-bit page parts (15 bytes each, MSB first, tail bits included),
     /// as obtained after FEC decoding. The CRC is verified.
-    pub fn decode_parts(
+    pub(crate) fn decode_parts(
         even: &[u8; GALILEO_INAV_PART_BYTES],
         odd: &[u8; GALILEO_INAV_PART_BYTES],
     ) -> Result<Self, GalileoError> {
@@ -261,7 +288,7 @@ impl GalileoInavPage {
         bytes[15] = read_bits(odd, 10, 8).unwrap_or_default() as u8;
 
         let word = match page_type {
-            GalileoInavPageType::Nominal => GalileoInavWord::decode_bytes(&bytes)?,
+            GalileoInavPageType::Nominal => GalileoInavWord::decode(&bytes)?,
             GalileoInavPageType::Alert => GalileoInavWord::Raw(bytes),
         };
 
@@ -280,14 +307,15 @@ impl GalileoInavPage {
 
     /// Encodes this page as two 120-bit page parts (15 bytes each, MSB first, tail bits included),
     /// ready for FEC encoding. The CRC is computed.
-    pub fn encode_parts(
+    pub(crate) fn encode_parts(
         &self,
     ) -> Result<([u8; GALILEO_INAV_PART_BYTES], [u8; GALILEO_INAV_PART_BYTES]), GalileoError> {
         let mut even = [0u8; GALILEO_INAV_PART_BYTES];
         let mut odd = [0u8; GALILEO_INAV_PART_BYTES];
 
         let alert = (self.page_type == GalileoInavPageType::Alert) as u32;
-        let bytes = self.word.encode_bytes()?;
+        let mut bytes = [0u8; GALILEO_INAV_WORD_BYTES];
+        self.word.encode(&mut bytes)?;
 
         write_bits(&mut even, 0, alert, 2);
         write_bits(&mut odd, 0, 0x2 | alert, 2);
@@ -328,100 +356,58 @@ impl GalileoInavPage {
             }
         }
 
-        link::crc24q(&covered, 0, covered.len() * 8)
+        crc24q(&covered, 0, covered.len() * 8)
     }
+}
 
-    /// Interprets a page as reported by u-blox receivers (UBX-RXM-SFRBX, Galileo E1-B / E5b-I):
-    /// 8 words of 32 bits, the even page part (120 bits) in the 4 first words,
-    /// the odd page part in the 4 last words (8 padding bits each). The CRC is verified.
-    pub fn decode_ublox_words(words: &[u32; 8]) -> Result<Self, GalileoError> {
-        let mut bytes = [0u8; 32];
+/// CRC-24Q generator polynomial, X^24 term omitted:
+/// G(X) = (1 + X).P(X) with P(X) = X^23 + X^17 + X^13 + X^12 + X^11 + X^9 + X^8 + X^7 + X^5 + X^3 + 1.
+const CRC24Q_POLY: u32 = 0x86_4CFB;
 
-        for (i, word) in words.iter().enumerate() {
-            bytes[4 * i..4 * i + 4].copy_from_slice(&word.to_be_bytes());
+/// Computes the CRC-24Q of `count` bits of `slice`, starting at absolute
+/// bit position `bit_pos` (MSB first). The register is initialized to zero.
+fn crc24q(slice: &[u8], bit_pos: usize, count: usize) -> u32 {
+    let mut crc = 0u32;
+
+    for pos in bit_pos..bit_pos + count {
+        let top = ((crc >> 23) & 0x1) > 0;
+        crc = (crc << 1) & 0xff_ffff;
+
+        if top ^ get_bit(slice, pos) {
+            crc ^= CRC24Q_POLY;
         }
-
-        let mut even = [0u8; GALILEO_INAV_PART_BYTES];
-        let mut odd = [0u8; GALILEO_INAV_PART_BYTES];
-        even.copy_from_slice(&bytes[..GALILEO_INAV_PART_BYTES]);
-        odd.copy_from_slice(&bytes[16..16 + GALILEO_INAV_PART_BYTES]);
-
-        Self::decode_parts(&even, &odd)
     }
 
-    /// Encodes this page as u-blox receivers report it (UBX-RXM-SFRBX), see
-    /// [Self::decode_ublox_words]. Padding bits are set to zero.
-    pub fn encode_ublox_words(&self) -> Result<[u32; 8], GalileoError> {
-        let (even, odd) = self.encode_parts()?;
-
-        let mut bytes = [0u8; 32];
-        bytes[..GALILEO_INAV_PART_BYTES].copy_from_slice(&even);
-        bytes[16..16 + GALILEO_INAV_PART_BYTES].copy_from_slice(&odd);
-
-        let mut words = [0u32; 8];
-
-        for (i, word) in words.iter_mut().enumerate() {
-            *word = u32::from_be_bytes([
-                bytes[4 * i],
-                bytes[4 * i + 1],
-                bytes[4 * i + 2],
-                bytes[4 * i + 3],
-            ]);
-        }
-
-        Ok(words)
-    }
-
-    /// Decodes a page whose first symbol (start of the even part synchronization pattern)
-    /// is located at any symbol position (`symbol_offset`) of `slice`.
-    /// The page must start at that position exactly: use the
-    /// [crate::galileo::GalileoInavDecoder] to search for it.
-    /// Inverted symbols are supported, and symbol errors are corrected by the Viterbi decoder.
-    pub fn decode_at(slice: &[u8], symbol_offset: usize) -> Result<Self, GalileoError> {
-        if symbol_offset + GALILEO_INAV_PAGE_SYMBOLS > slice.len() * 8 {
-            return Err(GalileoError::WouldNotFit);
-        }
-
-        let (even, _) = link::read_part_symbols(slice, symbol_offset)
-            .ok_or(GalileoError::InvalidSyncPattern)?;
-
-        let (odd, _) = link::read_part_symbols(slice, symbol_offset + GALILEO_INAV_PART_SYMBOLS)
-            .ok_or(GalileoError::InvalidSyncPattern)?;
-
-        Self::decode_parts(&link::decode_part(&even).0, &link::decode_part(&odd).0)
-    }
-
-    /// Encodes this page as 500 symbols, at any symbol position (`symbol_offset`) of `slice`.
-    /// Surrounding symbols are preserved.
-    /// Returns the number of symbols written (always [GALILEO_INAV_PAGE_SYMBOLS]).
-    pub fn encode_at(&self, slice: &mut [u8], symbol_offset: usize) -> Result<usize, GalileoError> {
-        if symbol_offset + GALILEO_INAV_PAGE_SYMBOLS > slice.len() * 8 {
-            return Err(GalileoError::WouldNotFit);
-        }
-
-        let (even, odd) = self.encode_parts()?;
-
-        link::write_part_symbols(slice, symbol_offset, &even).ok_or(GalileoError::WouldNotFit)?;
-
-        link::write_part_symbols(slice, symbol_offset + GALILEO_INAV_PART_SYMBOLS, &odd)
-            .ok_or(GalileoError::WouldNotFit)?;
-
-        Ok(GALILEO_INAV_PAGE_SYMBOLS)
-    }
+    crc
 }
 
 #[cfg(test)]
 mod test {
+    use super::crc24q;
+
     use crate::{
-        bits::{read_bits, set_bit},
+        bits::{get_bit, read_bits, set_bit},
         galileo::{
-            test_vectors::UBLOX_E08, GalileoError, GalileoInavPage, GalileoInavPageType,
-            GalileoInavWord, GALILEO_INAV_PAGE_SYMBOLS,
+            fec,
+            test_vectors::{parts_to_ublox, ublox_to_parts, UBLOX_E08},
+            GalileoError, GalileoInavPage, GalileoInavPageType, GalileoInavWord,
+            GALILEO_INAV_PAGE_BYTES, GALILEO_INAV_PAGE_SYMBOLS, GALILEO_INAV_PART_SYMBOLS,
+            GALILEO_INAV_SYNC_PATTERN,
         },
-        Message,
+        BigEndian, Message,
     };
 
+    use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
+
     const ALL_TYPES: [u8; 12] = [0, 1, 2, 3, 4, 5, 6, 7, 10, 16, 20, 63];
+
+    /// Encodes with the [Message] trait, verifies the encoded size,
+    /// and returns the 63 encoded bytes.
+    fn encode(page: &GalileoInavPage) -> [u8; GALILEO_INAV_PAGE_BYTES] {
+        let mut buffer = [0u8; GALILEO_INAV_PAGE_BYTES];
+        assert_eq!(page.encode(&mut buffer).unwrap(), GALILEO_INAV_PAGE_BYTES);
+        buffer
+    }
 
     #[test]
     fn default_reciprocal() {
@@ -438,6 +424,23 @@ mod test {
     }
 
     #[test]
+    fn model_bit_exact_reciprocal() {
+        for word_type in ALL_TYPES {
+            let page = GalileoInavPage::model(word_type);
+            let encoded = encode(&page);
+
+            // 4 padding bits are left null
+            assert_eq!(encoded[GALILEO_INAV_PAGE_BYTES - 1] & 0x0f, 0);
+
+            let decoded = GalileoInavPage::decode(&encoded).unwrap();
+            assert_eq!(decoded, page, "word type {}", word_type);
+
+            // encode(decode(x)) == x, symbol for symbol
+            assert_eq!(encode(&decoded), encoded, "word type {}", word_type);
+        }
+    }
+
+    #[test]
     fn parts_reciprocal() {
         for word_type in ALL_TYPES {
             let page = GalileoInavPage::model(word_type);
@@ -451,6 +454,18 @@ mod test {
 
             let decoded = GalileoInavPage::decode_parts(&even, &odd).unwrap();
             assert_eq!(decoded, page, "word type {}", word_type);
+
+            // the transmitted symbols are the FEC encoded page parts
+            let encoded = encode(&page);
+            let mut reader = BitReadStream::new(BitReadBuffer::new(&encoded, BigEndian));
+            assert_eq!(
+                fec::decode_part(&super::read_part_symbols(&mut reader).unwrap()),
+                (even, 0)
+            );
+            assert_eq!(
+                fec::decode_part(&super::read_part_symbols(&mut reader).unwrap()),
+                (odd, 0)
+            );
         }
     }
 
@@ -458,33 +473,119 @@ mod test {
     fn symbols_reciprocal_any_offset() {
         for word_type in ALL_TYPES {
             let page = GalileoInavPage::model(word_type);
+            let reference = encode(&page);
 
             for offset in 0..16 {
-                let mut buffer = [0x5Au8; 72];
-                let size = page.encode_at(&mut buffer, offset).unwrap();
-                assert_eq!(size, GALILEO_INAV_PAGE_SYMBOLS);
+                let mut symbols = Vec::new();
 
-                // surrounding symbols preserved
-                let original = [0x5Au8; 72];
+                {
+                    let mut writer = BitWriteStream::new(&mut symbols, BigEndian);
+                    writer
+                        .write_int(0x5A5Au32 >> (16 - offset), offset)
+                        .unwrap();
+                    writer.write(&page).unwrap();
+                    assert_eq!(writer.bit_len(), offset + GALILEO_INAV_PAGE_SYMBOLS);
+                    writer.write_int(0x5Au8, 8).unwrap();
+                }
+
+                // surrounding symbols
                 assert_eq!(
-                    read_bits(&buffer, 0, offset),
-                    read_bits(&original, 0, offset)
+                    read_bits(&symbols, 0, offset),
+                    Some(0x5A5Au32 >> (16 - offset))
                 );
                 assert_eq!(
-                    read_bits(&buffer, offset + 500, 32),
-                    read_bits(&original, offset + 500, 32)
+                    read_bits(&symbols, offset + GALILEO_INAV_PAGE_SYMBOLS, 8),
+                    Some(0x5A)
                 );
 
-                let decoded = GalileoInavPage::decode_at(&buffer, offset).unwrap_or_else(|e| {
+                // the 500 symbols are identical at any offset
+                for symbol in 0..GALILEO_INAV_PAGE_SYMBOLS {
+                    assert_eq!(
+                        get_bit(&symbols, offset + symbol),
+                        get_bit(&reference, symbol),
+                        "word type {} @{} symbol #{}",
+                        word_type,
+                        offset,
+                        symbol
+                    );
+                }
+
+                let mut reader = BitReadStream::new(BitReadBuffer::new(&symbols, BigEndian));
+                reader.set_pos(offset).unwrap();
+
+                let decoded: GalileoInavPage = reader.read().unwrap_or_else(|e| {
                     panic!("word type {} @{}: {}", word_type, offset, e);
                 });
 
                 assert_eq!(decoded, page);
+                assert_eq!(reader.pos(), offset + GALILEO_INAV_PAGE_SYMBOLS);
 
                 // inverted symbols
-                let inverted: Vec<u8> = buffer.iter().map(|b| !b).collect();
-                assert_eq!(GalileoInavPage::decode_at(&inverted, offset).unwrap(), page);
+                let inverted: Vec<u8> = symbols.iter().map(|b| !b).collect();
+                let mut reader = BitReadStream::new(BitReadBuffer::new(&inverted, BigEndian));
+                reader.set_pos(offset).unwrap();
+                assert_eq!(reader.read::<GalileoInavPage>().unwrap(), page);
             }
+        }
+    }
+
+    #[test]
+    fn consecutive_pages_stream() {
+        let pages: Vec<_> = ALL_TYPES
+            .iter()
+            .map(|t| GalileoInavPage::model(*t))
+            .collect();
+
+        let mut symbols = Vec::new();
+
+        {
+            let mut writer = BitWriteStream::new(&mut symbols, BigEndian);
+            for page in pages.iter() {
+                writer.write(page).unwrap();
+            }
+        }
+
+        assert_eq!(
+            symbols.len(),
+            (pages.len() * GALILEO_INAV_PAGE_SYMBOLS + 7) / 8
+        );
+
+        // a sync pattern every 250 symbols
+        for part in 0..2 * pages.len() {
+            assert_eq!(
+                read_bits(&symbols, part * GALILEO_INAV_PART_SYMBOLS, 10),
+                Some(GALILEO_INAV_SYNC_PATTERN)
+            );
+        }
+
+        let mut reader = BitReadStream::new(BitReadBuffer::new(&symbols, BigEndian));
+
+        for page in pages.iter() {
+            assert_eq!(reader.read::<GalileoInavPage>().unwrap(), *page);
+        }
+    }
+
+    #[test]
+    fn symbol_errors_are_corrected() {
+        let page = GalileoInavPage::model(4);
+        let encoded = encode(&page);
+        let mut seed = 0x1357_9BDF;
+
+        for _ in 0..32 {
+            let mut corrupted = encoded;
+
+            // 6 symbol errors per page part (sync patterns spared)
+            for part in 0..2 {
+                for _ in 0..6 {
+                    let pos = part * 250 + 10 + (fec::test::lfsr(&mut seed) as usize) % 240;
+                    corrupted[pos / 8] ^= 0x80 >> (pos % 8);
+                }
+            }
+
+            assert_eq!(GalileoInavPage::decode(&corrupted).unwrap(), page);
+
+            // re-encoding removes the errors
+            assert_eq!(encode(&page), encoded);
         }
     }
 
@@ -502,6 +603,26 @@ mod test {
         assert_eq!(odd[0] & 0xC0, 0xC0);
 
         assert_eq!(GalileoInavPage::decode_parts(&even, &odd).unwrap(), page);
+
+        let encoded = encode(&page);
+        let decoded = GalileoInavPage::decode(&encoded).unwrap();
+        assert_eq!(decoded, page);
+        assert_eq!(encode(&decoded), encoded);
+    }
+
+    #[test]
+    fn field_masks() {
+        let page = GalileoInavPage::default()
+            .with_osnma(u64::MAX)
+            .with_sar(u32::MAX)
+            .with_spare(u8::MAX)
+            .with_ssp(u8::MAX);
+
+        assert_eq!(page.osnma, 0xff_ffff_ffff);
+        assert_eq!(page.sar, 0x3f_ffff);
+        assert_eq!(page.spare, 0x3);
+
+        assert_eq!(GalileoInavPage::decode(&encode(&page)).unwrap(), page);
     }
 
     #[test]
@@ -558,46 +679,95 @@ mod test {
     }
 
     #[test]
+    fn invalid_sync_pattern() {
+        let encoded = encode(&GalileoInavPage::model(1));
+
+        // even, then odd sync pattern
+        for pos in [0, 4, 9, 250, 259] {
+            let mut corrupted = encoded;
+            corrupted[pos / 8] ^= 0x80 >> (pos % 8);
+            assert!(
+                GalileoInavPage::decode(&corrupted).is_err(),
+                "sync symbol #{}",
+                pos
+            );
+        }
+
+        // swapped parts are rejected
+        let mut swapped = [0u8; GALILEO_INAV_PAGE_BYTES];
+        {
+            let mut writer = BitWriteStream::from_slice(&mut swapped, BigEndian);
+            for start in [250, 0] {
+                for pos in start..start + 250 {
+                    writer.write_bool(get_bit(&encoded, pos)).unwrap();
+                }
+            }
+        }
+        assert!(GalileoInavPage::decode(&swapped).is_err());
+    }
+
+    #[test]
     fn buffer_too_small() {
         let page = GalileoInavPage::model(1);
-        let mut buffer = [0u8; 63];
-        assert!(page.encode_at(&mut buffer, 4).is_ok());
-        assert!(matches!(
-            page.encode_at(&mut buffer, 5),
-            Err(GalileoError::WouldNotFit)
-        ));
-        assert!(matches!(
-            GalileoInavPage::decode_at(&buffer, 5),
-            Err(GalileoError::WouldNotFit)
-        ));
-        assert!(matches!(
-            GalileoInavPage::decode_at(&[0u8; 63], 0),
-            Err(GalileoError::InvalidSyncPattern)
-        ));
+
+        // does not panic
+        let mut buffer = [0u8; GALILEO_INAV_PAGE_BYTES - 1];
+        assert!(page.encode(&mut buffer).is_err());
+
+        let encoded = encode(&page);
+        assert!(GalileoInavPage::decode(&encoded[..GALILEO_INAV_PAGE_BYTES - 1]).is_err());
+        assert!(GalileoInavPage::decode(&[]).is_err());
+        assert!(GalileoInavPage::decode(&[0u8; 63]).is_err());
+    }
+
+    #[test]
+    fn crc24q_reference() {
+        // CRC-24Q of "123456789" (ASCII)
+        assert_eq!(crc24q(b"123456789", 0, 72), 0xCDE703);
+        assert_eq!(crc24q(&[0u8; 8], 0, 64), 0);
+
+        // leading zeros do not modify the CRC
+        let data = [0x00, 0x0A, 0xBC, 0xDE, 0xF0];
+        assert_eq!(crc24q(&data, 0, 40), crc24q(&data, 12, 28));
     }
 
     #[test]
     fn real_ublox_pages_bit_exact() {
         for (word_type, words) in UBLOX_E08.iter() {
-            let page = GalileoInavPage::decode_ublox_words(words).unwrap_or_else(|e| {
+            let (even, odd) = ublox_to_parts(words);
+
+            let page = GalileoInavPage::decode_parts(&even, &odd).unwrap_or_else(|e| {
                 panic!("word type {}: {}", word_type, e);
             });
 
             assert_eq!(page.page_type, GalileoInavPageType::Nominal);
             assert_eq!(page.word.word_type(), *word_type);
 
-            // bit exact re-encoding
+            // bit exact re-encoding (CRC included)
+            let (reencoded_even, reencoded_odd) = page.encode_parts().unwrap();
             assert_eq!(
-                page.encode_ublox_words().unwrap(),
+                parts_to_ublox(&reencoded_even, &reencoded_odd),
                 *words,
                 "type {}",
                 word_type
             );
 
-            // and through the symbol layer
-            let mut buffer = [0u8; 64];
-            page.encode_at(&mut buffer, 3).unwrap();
-            assert_eq!(GalileoInavPage::decode_at(&buffer, 3).unwrap(), page);
+            // and through the Message trait: the transmitted symbols
+            // are those of the real page parts
+            let encoded = encode(&page);
+            let mut reader = BitReadStream::new(BitReadBuffer::new(&encoded, BigEndian));
+            assert_eq!(
+                fec::decode_part(&super::read_part_symbols(&mut reader).unwrap()).0,
+                even
+            );
+            assert_eq!(
+                fec::decode_part(&super::read_part_symbols(&mut reader).unwrap()).0,
+                odd
+            );
+
+            let decoded = GalileoInavPage::decode(&encoded).unwrap();
+            assert_eq!(decoded, page);
+            assert_eq!(encode(&decoded), encoded);
         }
     }
 }

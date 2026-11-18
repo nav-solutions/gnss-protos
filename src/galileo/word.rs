@@ -1,12 +1,9 @@
-use bitbuffer::{
-    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
-};
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::{
     galileo::{
-        GalileoError, GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3,
-        GalileoInavWord4, GalileoInavWord5, GalileoInavWord6, GALILEO_INAV_WORD_BITS,
-        GALILEO_INAV_WORD_BYTES,
+        GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3, GalileoInavWord4,
+        GalileoInavWord5, GalileoInavWord6, GALILEO_INAV_WORD_BITS, GALILEO_INAV_WORD_BYTES,
     },
     Message,
 };
@@ -27,40 +24,6 @@ pub(crate) fn read_word_type(
         })
     }
 }
-
-/// Encodes any message as a 128-bit word.
-pub(crate) fn encode_word_bytes<W: BitWrite<BigEndian>>(
-    word: &W,
-) -> Result<[u8; GALILEO_INAV_WORD_BYTES], BitError> {
-    let mut bytes = [0u8; GALILEO_INAV_WORD_BYTES];
-
-    {
-        let mut stream = BitWriteStream::from_slice(&mut bytes, BigEndian);
-        stream.write(word)?;
-    }
-
-    Ok(bytes)
-}
-
-/// Implements [PartialEq] by comparing the binary representations,
-/// so floating point values are compared at the ICD resolution.
-macro_rules! impl_eq_by_encoding {
-    ($t:ty) => {
-        impl PartialEq for $t {
-            fn eq(&self, rhs: &Self) -> bool {
-                match (
-                    crate::galileo::word::encode_word_bytes(self),
-                    crate::galileo::word::encode_word_bytes(rhs),
-                ) {
-                    (Ok(lhs), Ok(rhs)) => lhs == rhs,
-                    _ => false,
-                }
-            }
-        }
-    };
-}
-
-pub(crate) use impl_eq_by_encoding;
 
 /// Galileo I/NAV word (128 bits), carried by one nominal [crate::galileo::GalileoInavPage].
 /// The 6 first bits define the word type, hence its content.
@@ -118,15 +81,25 @@ impl Message<BigEndian> for GalileoInavWord {
 impl BitRead<'_, BigEndian> for GalileoInavWord {
     /// Reads the 128 bits of the word, and interprets it according to its word type.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let mut bytes = [0u8; GALILEO_INAV_WORD_BYTES];
-        bytes.copy_from_slice(&stream.read_bytes(GALILEO_INAV_WORD_BYTES)?);
-        Self::decode_bytes(&bytes).map_err(|e| match e {
-            GalileoError::BitStream(e) => e,
-            e => BitError::UnmatchedDiscriminant {
-                discriminant: 0,
-                enum_name: e.to_string(),
+        // peek the word type: the word structures verify it
+        let start = stream.pos();
+        let word_type = stream.read_int::<u8>(6)?;
+        stream.set_pos(start)?;
+
+        match word_type {
+            GalileoInavWord0::WORD_TYPE => Ok(Self::Spare(stream.read()?)),
+            GalileoInavWord1::WORD_TYPE => Ok(Self::Ephemeris1(stream.read()?)),
+            GalileoInavWord2::WORD_TYPE => Ok(Self::Ephemeris2(stream.read()?)),
+            GalileoInavWord3::WORD_TYPE => Ok(Self::Ephemeris3(stream.read()?)),
+            GalileoInavWord4::WORD_TYPE => Ok(Self::Ephemeris4(stream.read()?)),
+            GalileoInavWord5::WORD_TYPE => Ok(Self::Ionosphere(stream.read()?)),
+            GalileoInavWord6::WORD_TYPE => Ok(Self::GstUtc(stream.read()?)),
+            _ => {
+                let mut bytes = [0u8; GALILEO_INAV_WORD_BYTES];
+                bytes.copy_from_slice(&stream.read_bytes(GALILEO_INAV_WORD_BYTES)?);
+                Ok(Self::Raw(bytes))
             },
-        })
+        }
     }
 }
 
@@ -147,27 +120,6 @@ impl BitWrite<BigEndian> for GalileoInavWord {
 }
 
 impl GalileoInavWord {
-    /// Interprets 128 bits (16 bytes, MSB first) according to their word type.
-    pub fn decode_bytes(bytes: &[u8; GALILEO_INAV_WORD_BYTES]) -> Result<Self, GalileoError> {
-        let mut stream = BitReadStream::new(BitReadBuffer::new(bytes, BigEndian));
-
-        match bytes[0] >> 2 {
-            GalileoInavWord0::WORD_TYPE => Ok(Self::Spare(stream.read()?)),
-            GalileoInavWord1::WORD_TYPE => Ok(Self::Ephemeris1(stream.read()?)),
-            GalileoInavWord2::WORD_TYPE => Ok(Self::Ephemeris2(stream.read()?)),
-            GalileoInavWord3::WORD_TYPE => Ok(Self::Ephemeris3(stream.read()?)),
-            GalileoInavWord4::WORD_TYPE => Ok(Self::Ephemeris4(stream.read()?)),
-            GalileoInavWord5::WORD_TYPE => Ok(Self::Ionosphere(stream.read()?)),
-            GalileoInavWord6::WORD_TYPE => Ok(Self::GstUtc(stream.read()?)),
-            _ => Ok(Self::Raw(*bytes)),
-        }
-    }
-
-    /// Encodes this word as 128 bits (16 bytes, MSB first).
-    pub fn encode_bytes(&self) -> Result<[u8; GALILEO_INAV_WORD_BYTES], GalileoError> {
-        Ok(encode_word_bytes(self)?)
-    }
-
     /// Returns the word type (6 bits) of this [GalileoInavWord].
     pub fn word_type(&self) -> u8 {
         match self {
@@ -288,7 +240,8 @@ impl GalileoInavWord {
 
 #[cfg(test)]
 mod test {
-    use crate::{galileo::GalileoInavWord, Message};
+    use crate::{galileo::GalileoInavWord, BigEndian, Message};
+    use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
 
     const ALL_TYPES: [u8; 14] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 17, 63];
 
@@ -306,18 +259,76 @@ mod test {
             let model = GalileoInavWord::model(word_type);
             assert_eq!(model.word_type(), word_type);
 
-            let bytes = model.encode_bytes().unwrap();
+            let mut bytes = [0u8; 16];
+            assert_eq!(model.encode(&mut bytes).unwrap(), 16);
             assert_eq!(bytes[0] >> 2, word_type);
 
-            let decoded = GalileoInavWord::decode_bytes(&bytes).unwrap();
+            let decoded = GalileoInavWord::decode(&bytes).unwrap();
             assert_eq!(decoded, model, "word type {}", word_type);
-            assert_eq!(decoded.encode_bytes().unwrap(), bytes);
 
-            // through the BitRead / BitWrite traits
-            let mut buffer = [0u8; 32];
-            model.encode(&mut buffer).unwrap();
-            assert_eq!(GalileoInavWord::decode(&buffer).unwrap(), model);
+            // bit exact
+            let mut reencoded = [0u8; 16];
+            decoded.encode(&mut reencoded).unwrap();
+            assert_eq!(reencoded, bytes, "word type {}", word_type);
+
+            // at any bit position of a stream
+            for offset in 0..8 {
+                let mut buffer = Vec::new();
+                {
+                    let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
+                    writer.write_int(0x7fu8 >> (7 - offset), offset).unwrap();
+                    writer.write(&model).unwrap();
+                    writer.write(&model).unwrap();
+                }
+                let mut reader = BitReadStream::new(BitReadBuffer::new(&buffer, BigEndian));
+                reader.set_pos(offset).unwrap();
+                assert_eq!(reader.read::<GalileoInavWord>().unwrap(), model);
+                assert_eq!(reader.read::<GalileoInavWord>().unwrap(), model);
+                assert_eq!(reader.pos(), offset + 256);
+            }
         }
+    }
+
+    #[test]
+    fn random_bits_reciprocal() {
+        // any 128 bits are interpreted according to their word type,
+        // and re-encoded bit for bit: no field is lost or altered.
+        let mut seed = 0x8765_4321u32;
+
+        let mut rand = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed as u8
+        };
+
+        for word_type in 0..64u8 {
+            for _ in 0..64 {
+                let mut bytes = [0u8; 16];
+
+                for byte in bytes.iter_mut() {
+                    *byte = rand();
+                }
+
+                bytes[0] = (word_type << 2) | (bytes[0] & 0x3);
+
+                let word = GalileoInavWord::decode(&bytes).unwrap();
+                assert_eq!(word.word_type(), word_type);
+
+                let mut reencoded = [0u8; 16];
+                word.encode(&mut reencoded).unwrap();
+
+                assert_eq!(reencoded, bytes, "word type {}: {:?}", word_type, word);
+            }
+        }
+    }
+
+    #[test]
+    fn too_short() {
+        let mut bytes = [0u8; 16];
+        GalileoInavWord::model(1).encode(&mut bytes).unwrap();
+        assert!(GalileoInavWord::decode(&bytes[..15]).is_err());
+        assert!(GalileoInavWord::model(1).encode(&mut [0u8; 15]).is_err());
     }
 
     #[test]

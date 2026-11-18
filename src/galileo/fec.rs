@@ -1,96 +1,61 @@
-//! Galileo I/NAV "link layer" (Galileo OS SIS ICD v2.1, §4.1.4 and §4.3.2).
+//! Galileo I/NAV forward error correction (Galileo OS SIS ICD v2.1, §4.1.4 and §4.3.2).
 //!
-//! An I/NAV page (2 s on E1-B or E5b-I) is transmitted as two *page parts*
-//! (even then odd). Each page part is made of 120 bits (114 data bits and
-//! 6 tail bits set to zero) that go through:
+//! Private to the crate: [crate::galileo::GalileoInavPage] is the only public
+//! entry point to the transmitted symbols, through the [crate::Message] trait.
+//!
+//! Each 120-bit page part (114 data bits and 6 tail bits set to zero) goes through:
 //!
 //! 1. a rate 1/2, constraint length 7 convolutional encoder
 //!    (G1 = 171o, G2 = 133o, G1 first, G2 inverted) producing 240 symbols;
 //! 2. a 30 columns x 8 rows block interleaver: the 240 symbols are written
 //!    column by column, and read row by row;
 //! 3. the (non encoded) 10-symbol synchronization pattern `0101100000`
-//!    is then prepended, giving 250 symbols (1 s at 250 sps).
-//!
-//! The 24-bit CRC (CRC-24Q) of a page is computed over both page parts
-//! and transmitted in the odd page part.
-//!
-//! This module is the only place where symbols, FEC and CRC are handled.
-//! It converts 120-bit page parts (15 bytes) into 240 symbols (30 bytes) and back.
-//! Messages ([crate::galileo::GalileoInavPage], [crate::galileo::GalileoInavWord]) are read
-//! and written on clean data bits only.
+//!    is then prepended by the page, giving 250 symbols (1 s at 250 sps).
 //!
 //! Symbols are hard symbols, packed MSB first: a symbol is a bit
 //! (`1` meaning the chip sequence was transmitted with a `-1` sign, as in the ICD binary convention).
 
-use crate::bits::{get_bit, read_bits, set_bit, write_bits};
+use crate::{
+    bits::{get_bit, set_bit},
+    galileo::GALILEO_INAV_SYNC_PATTERN,
+};
 
 /// Number of bits in a page part (data and tail bits).
-pub const GALILEO_INAV_PART_BITS: usize = 120;
+pub(crate) const GALILEO_INAV_PART_BITS: usize = 120;
 
 /// Number of bytes needed to store a page part.
-pub const GALILEO_INAV_PART_BYTES: usize = GALILEO_INAV_PART_BITS / 8;
+pub(crate) const GALILEO_INAV_PART_BYTES: usize = GALILEO_INAV_PART_BITS / 8;
 
 /// Number of data bits in a page part (tail bits excluded).
-pub const GALILEO_INAV_PART_DATA_BITS: usize = 114;
+pub(crate) const GALILEO_INAV_PART_DATA_BITS: usize = 114;
 
 /// Number of tail bits (set to zero) at the end of each page part.
-pub const GALILEO_INAV_TAIL_BITS: usize = 6;
+pub(crate) const GALILEO_INAV_TAIL_BITS: usize = 6;
 
 /// Number of encoded symbols in a page part (sync pattern excluded).
-pub const GALILEO_INAV_PART_ENCODED_SYMBOLS: usize = 2 * GALILEO_INAV_PART_BITS;
+pub(crate) const GALILEO_INAV_PART_ENCODED_SYMBOLS: usize = 2 * GALILEO_INAV_PART_BITS;
 
 /// Number of bytes needed to store the encoded symbols of a page part.
-pub const GALILEO_INAV_PART_ENCODED_BYTES: usize = GALILEO_INAV_PART_ENCODED_SYMBOLS / 8;
-
-/// Number of symbols in the I/NAV synchronization pattern.
-pub const GALILEO_INAV_SYNC_SYMBOLS: usize = 10;
-
-/// I/NAV synchronization pattern (`0101100000`), right aligned.
-pub const GALILEO_INAV_SYNC_PATTERN: u32 = 0b01_0110_0000;
+pub(crate) const GALILEO_INAV_PART_ENCODED_BYTES: usize = GALILEO_INAV_PART_ENCODED_SYMBOLS / 8;
 
 /// Inverted I/NAV synchronization pattern, as observed when the carrier phase
 /// is locked with a 180° ambiguity (the whole symbol stream is then inverted).
-pub const GALILEO_INAV_INVERTED_SYNC_PATTERN: u32 = !GALILEO_INAV_SYNC_PATTERN & 0x3ff;
-
-/// Total number of symbols of a page part, as transmitted (sync pattern included).
-pub const GALILEO_INAV_PART_SYMBOLS: usize =
-    GALILEO_INAV_SYNC_SYMBOLS + GALILEO_INAV_PART_ENCODED_SYMBOLS;
+pub(crate) const GALILEO_INAV_INVERTED_SYNC_PATTERN: u32 = !GALILEO_INAV_SYNC_PATTERN & 0x3ff;
 
 /// Block interleaver: number of columns (I/NAV).
-pub const GALILEO_INAV_INTERLEAVER_COLUMNS: usize = 30;
+pub(crate) const GALILEO_INAV_INTERLEAVER_COLUMNS: usize = 30;
 
 /// Block interleaver: number of rows (I/NAV).
-pub const GALILEO_INAV_INTERLEAVER_ROWS: usize = 8;
+pub(crate) const GALILEO_INAV_INTERLEAVER_ROWS: usize = 8;
 
 /// Convolutional code: first generator polynomial (171 octal).
-pub const GALILEO_FEC_G1: u8 = 0o171;
+pub(crate) const GALILEO_FEC_G1: u8 = 0o171;
 
 /// Convolutional code: second generator polynomial (133 octal). This branch is inverted.
-pub const GALILEO_FEC_G2: u8 = 0o133;
+pub(crate) const GALILEO_FEC_G2: u8 = 0o133;
 
 /// Number of states of the convolutional code (constraint length 7).
 const NUM_STATES: usize = 64;
-
-/// CRC-24Q generator polynomial, X^24 term omitted:
-/// G(X) = (1 + X).P(X) with P(X) = X^23 + X^17 + X^13 + X^12 + X^11 + X^9 + X^8 + X^7 + X^5 + X^3 + 1.
-pub const CRC24Q_POLY: u32 = 0x86_4CFB;
-
-/// Computes the CRC-24Q of `count` bits of `slice`, starting at absolute
-/// bit position `bit_pos` (MSB first). The register is initialized to zero.
-pub fn crc24q(slice: &[u8], bit_pos: usize, count: usize) -> u32 {
-    let mut crc = 0u32;
-
-    for pos in bit_pos..bit_pos + count {
-        let top = ((crc >> 23) & 0x1) > 0;
-        crc = (crc << 1) & 0xff_ffff;
-
-        if top ^ get_bit(slice, pos) {
-            crc ^= CRC24Q_POLY;
-        }
-    }
-
-    crc
-}
 
 /// Returns the two output symbols (G1, G2 inverted) of the convolutional encoder,
 /// for a 7-bit register whose MSB (bit 6) is the newest input bit.
@@ -104,7 +69,7 @@ fn fec_outputs(register: u8) -> (bool, bool) {
 /// Convolutional encoding (rate 1/2, K = 7) of a 120-bit page part.
 /// The encoder starts in the zero state: the 6 tail bits of the previous page part
 /// always flush it. Returns 240 symbols, G1 first, then (inverted) G2.
-pub fn convolutional_encode(
+pub(crate) fn convolutional_encode(
     part: &[u8; GALILEO_INAV_PART_BYTES],
 ) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
     let mut symbols = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
@@ -127,7 +92,7 @@ pub fn convolutional_encode(
 /// decoded bits are always zero. Returns the 120 decoded bits and the number of
 /// symbols that disagree with the re-encoded sequence (number of corrected
 /// symbol errors, a good quality indicator: 0 on a clean channel, high on noise).
-pub fn viterbi_decode(
+pub(crate) fn viterbi_decode(
     symbols: &[u8; GALILEO_INAV_PART_ENCODED_BYTES],
 ) -> ([u8; GALILEO_INAV_PART_BYTES], usize) {
     const UNREACHABLE: u32 = u32::MAX / 2;
@@ -191,7 +156,7 @@ pub fn viterbi_decode(
 /// Block interleaving (30 columns x 8 rows) of 240 encoded symbols:
 /// symbols are written column by column (8 symbols per column)
 /// and read row by row (30 symbols per row).
-pub fn interleave(
+pub(crate) fn interleave(
     symbols: &[u8; GALILEO_INAV_PART_ENCODED_BYTES],
 ) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
     let mut out = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
@@ -207,7 +172,7 @@ pub fn interleave(
 }
 
 /// Block de-interleaving, mirror operation of [interleave].
-pub fn deinterleave(
+pub(crate) fn deinterleave(
     symbols: &[u8; GALILEO_INAV_PART_ENCODED_BYTES],
 ) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
     let mut out = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
@@ -224,21 +189,23 @@ pub fn deinterleave(
 
 /// Encodes a 120-bit page part (tail bits included) into the 240 symbols
 /// to be transmitted after the synchronization pattern (FEC + interleaving).
-pub fn encode_part(part: &[u8; GALILEO_INAV_PART_BYTES]) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
+pub(crate) fn encode_part(
+    part: &[u8; GALILEO_INAV_PART_BYTES],
+) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
     interleave(&convolutional_encode(part))
 }
 
 /// Decodes the 240 symbols that follow a synchronization pattern into a 120-bit
 /// page part (de-interleaving + Viterbi decoding). Symbols must be of normal polarity
 /// (see [invert_symbols]). Returns the page part and the number of corrected symbol errors.
-pub fn decode_part(
+pub(crate) fn decode_part(
     symbols: &[u8; GALILEO_INAV_PART_ENCODED_BYTES],
 ) -> ([u8; GALILEO_INAV_PART_BYTES], usize) {
     viterbi_decode(&deinterleave(symbols))
 }
 
 /// Inverts all symbols (180° carrier phase ambiguity).
-pub fn invert_symbols(
+pub(crate) fn invert_symbols(
     symbols: &[u8; GALILEO_INAV_PART_ENCODED_BYTES],
 ) -> [u8; GALILEO_INAV_PART_ENCODED_BYTES] {
     let mut out = *symbols;
@@ -248,71 +215,6 @@ pub fn invert_symbols(
     }
 
     out
-}
-
-/// Writes a complete page part (sync pattern + 240 encoded symbols, 250 symbols)
-/// at absolute symbol position `symbol_pos` of `slice`. Surrounding symbols are preserved.
-/// Returns None if the slice is too short.
-pub fn write_part_symbols(
-    slice: &mut [u8],
-    symbol_pos: usize,
-    part: &[u8; GALILEO_INAV_PART_BYTES],
-) -> Option<()> {
-    if symbol_pos + GALILEO_INAV_PART_SYMBOLS > slice.len() * 8 {
-        return None;
-    }
-
-    write_bits(
-        slice,
-        symbol_pos,
-        GALILEO_INAV_SYNC_PATTERN,
-        GALILEO_INAV_SYNC_SYMBOLS,
-    )?;
-
-    let encoded = encode_part(part);
-
-    for (i, byte) in encoded.iter().enumerate() {
-        write_bits(
-            slice,
-            symbol_pos + GALILEO_INAV_SYNC_SYMBOLS + 8 * i,
-            *byte as u32,
-            8,
-        )?;
-    }
-
-    Some(())
-}
-
-/// Reads the 240 encoded symbols of a page part, whose synchronization pattern
-/// starts at absolute symbol position `symbol_pos` of `slice`.
-/// Returns the symbols, and true if the sync pattern was inverted
-/// (symbols are then returned already inverted back), or None if the slice
-/// is too short or no sync pattern (normal or inverted) is found at this position.
-pub fn read_part_symbols(
-    slice: &[u8],
-    symbol_pos: usize,
-) -> Option<([u8; GALILEO_INAV_PART_ENCODED_BYTES], bool)> {
-    let sync = read_bits(slice, symbol_pos, GALILEO_INAV_SYNC_SYMBOLS)?;
-
-    let inverted = if sync == GALILEO_INAV_SYNC_PATTERN {
-        false
-    } else if sync == GALILEO_INAV_INVERTED_SYNC_PATTERN {
-        true
-    } else {
-        return None;
-    };
-
-    let mut symbols = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
-
-    for (i, byte) in symbols.iter_mut().enumerate() {
-        *byte = read_bits(slice, symbol_pos + GALILEO_INAV_SYNC_SYMBOLS + 8 * i, 8)? as u8;
-    }
-
-    if inverted {
-        symbols = invert_symbols(&symbols);
-    }
-
-    Some((symbols, inverted))
 }
 
 #[cfg(test)]
@@ -350,7 +252,19 @@ pub(crate) mod test {
     fn sync_patterns() {
         assert_eq!(GALILEO_INAV_SYNC_PATTERN, 0x160);
         assert_eq!(GALILEO_INAV_INVERTED_SYNC_PATTERN, 0b10_1001_1111);
-        assert_eq!(GALILEO_INAV_PART_SYMBOLS, 250);
+        assert_eq!(GALILEO_INAV_PART_ENCODED_SYMBOLS, 240);
+    }
+
+    #[test]
+    fn invert() {
+        let mut seed = 0x0101_0101;
+        let mut symbols = [0u8; GALILEO_INAV_PART_ENCODED_BYTES];
+        for byte in symbols.iter_mut() {
+            *byte = lfsr(&mut seed) as u8;
+        }
+        let inverted = invert_symbols(&symbols);
+        assert!(symbols.iter().zip(inverted.iter()).all(|(a, b)| *a == !*b));
+        assert_eq!(invert_symbols(&inverted), symbols);
     }
 
     /// OS SIS ICD v2.1, Table 83: the 8 SSP bits are the last data bits of the
@@ -466,46 +380,5 @@ pub(crate) mod test {
             let (_, errors) = decode_part(&symbols);
             assert!(errors > 20, "only {} errors on noise", errors);
         }
-    }
-
-    #[test]
-    fn crc24q_reference() {
-        // CRC-24Q of "123456789" (ASCII)
-        assert_eq!(crc24q(b"123456789", 0, 72), 0xCDE703);
-        assert_eq!(crc24q(&[0u8; 8], 0, 64), 0);
-
-        // leading zeros do not modify the CRC
-        let data = [0x00, 0x0A, 0xBC, 0xDE, 0xF0];
-        assert_eq!(crc24q(&data, 0, 40), crc24q(&data, 12, 28));
-    }
-
-    #[test]
-    fn part_symbols_any_offset() {
-        let mut seed = 0x5555_1234;
-        let part = random_part(&mut seed);
-
-        for offset in 0..16 {
-            let mut buffer = [0xA5u8; 40];
-            write_part_symbols(&mut buffer, offset, &part).unwrap();
-
-            // preserved surrounding symbols
-            assert_eq!(
-                read_bits(&buffer, 0, offset),
-                Some(read_bits(&[0xA5u8; 4], 0, offset).unwrap())
-            );
-
-            let (symbols, inverted) = read_part_symbols(&buffer, offset).unwrap();
-            assert!(!inverted);
-            assert_eq!(decode_part(&symbols).0, part);
-
-            // inverted stream
-            let inverted_buffer: Vec<u8> = buffer.iter().map(|b| !b).collect();
-            let (symbols, inverted) = read_part_symbols(&inverted_buffer, offset).unwrap();
-            assert!(inverted);
-            assert_eq!(decode_part(&symbols).0, part);
-        }
-
-        assert!(write_part_symbols(&mut [0u8; 31], 3, &part).is_none());
-        assert!(read_part_symbols(&[0u8; 40], 0).is_none());
     }
 }

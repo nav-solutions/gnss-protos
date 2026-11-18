@@ -2,6 +2,8 @@
 //! on 2025-04-25 (nav-solutions/data `UBX/16dBatt_no_interference_coldstart.ubx`).
 //! Reference values were obtained with RTKLIB (convbin) from the same recording.
 
+use crate::galileo::{fec::GALILEO_INAV_PART_BYTES, GalileoInavPage};
+
 /// E08 pages, one per word type: (word type, UBX-RXM-SFRBX words).
 pub(crate) const UBLOX_E08: [(u8, [u32; 8]); 16] = [
     (
@@ -118,6 +120,55 @@ pub(crate) const UBLOX_E08: [(u8, [u32; 8]); 16] = [
     ),
 ];
 
+/// Splits a page as reported by u-blox receivers (UBX-RXM-SFRBX, Galileo E1-B / E5b-I)
+/// into its two 120-bit page parts: 8 words of 32 bits, the even page part
+/// in the 4 first words, the odd page part in the 4 last words (8 padding bits each).
+pub(crate) fn ublox_to_parts(
+    words: &[u32; 8],
+) -> ([u8; GALILEO_INAV_PART_BYTES], [u8; GALILEO_INAV_PART_BYTES]) {
+    let mut bytes = [0u8; 32];
+
+    for (i, word) in words.iter().enumerate() {
+        bytes[4 * i..4 * i + 4].copy_from_slice(&word.to_be_bytes());
+    }
+
+    let mut even = [0u8; GALILEO_INAV_PART_BYTES];
+    let mut odd = [0u8; GALILEO_INAV_PART_BYTES];
+    even.copy_from_slice(&bytes[..GALILEO_INAV_PART_BYTES]);
+    odd.copy_from_slice(&bytes[16..16 + GALILEO_INAV_PART_BYTES]);
+
+    (even, odd)
+}
+
+/// Mirror operation of [ublox_to_parts]. Padding bits are set to zero.
+pub(crate) fn parts_to_ublox(
+    even: &[u8; GALILEO_INAV_PART_BYTES],
+    odd: &[u8; GALILEO_INAV_PART_BYTES],
+) -> [u32; 8] {
+    let mut bytes = [0u8; 32];
+    bytes[..GALILEO_INAV_PART_BYTES].copy_from_slice(even);
+    bytes[16..16 + GALILEO_INAV_PART_BYTES].copy_from_slice(odd);
+
+    let mut words = [0u32; 8];
+
+    for (i, word) in words.iter_mut().enumerate() {
+        *word = u32::from_be_bytes([
+            bytes[4 * i],
+            bytes[4 * i + 1],
+            bytes[4 * i + 2],
+            bytes[4 * i + 3],
+        ]);
+    }
+
+    words
+}
+
+/// Interprets a page as reported by u-blox receivers. The CRC is verified.
+pub(crate) fn ublox_page(words: &[u32; 8]) -> GalileoInavPage {
+    let (even, odd) = ublox_to_parts(words);
+    GalileoInavPage::decode_parts(&even, &odd).unwrap()
+}
+
 /// Returns the E08 page of given word type.
 pub(crate) fn ublox_e08(word_type: u8) -> [u32; 8] {
     UBLOX_E08
@@ -140,12 +191,20 @@ pub(crate) fn ublox_e08(word_type: u8) -> [u32; 8] {
 /// ```
 #[cfg(test)]
 mod test {
-    use super::ublox_e08;
+    use super::{parts_to_ublox, ublox_e08, ublox_page, ublox_to_parts, UBLOX_E08};
     use crate::galileo::{GalileoInavPage, GalileoSignalHealth};
     use core::f64::consts::PI;
 
     fn decode(word_type: u8) -> GalileoInavPage {
-        GalileoInavPage::decode_ublox_words(&ublox_e08(word_type)).unwrap()
+        ublox_page(&ublox_e08(word_type))
+    }
+
+    #[test]
+    fn ublox_parts_reciprocal() {
+        for (_, words) in UBLOX_E08.iter() {
+            let (even, odd) = ublox_to_parts(words);
+            assert_eq!(parts_to_ublox(&even, &odd), *words);
+        }
     }
 
     fn assert_close(value: f64, expected: f64, tolerance: f64, name: &str) {
