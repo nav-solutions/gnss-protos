@@ -4,6 +4,7 @@
 use crate::gps::{test_vectors::bytes_to_words, GpsQzssFrame};
 
 mod eph1;
+mod eph123;
 mod eph2;
 mod eph3;
 
