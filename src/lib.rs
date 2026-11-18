@@ -22,6 +22,9 @@ pub mod gps;
 #[cfg_attr(docsrs, doc(cfg(feature = "galileo")))]
 pub mod galileo;
 
+#[cfg(test)]
+pub mod tests;
+
 mod buffer;
 mod errors;
 
