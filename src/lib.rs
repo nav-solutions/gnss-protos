@@ -12,14 +12,7 @@
  */
 
 pub mod bits;
-
-mod buffer;
-pub use buffer::{Buffer, StaticBuffer};
-
-mod errors;
-
-#[cfg(test)]
-mod tests;
+pub mod constants;
 
 #[cfg(feature = "gps")]
 #[cfg_attr(docsrs, doc(cfg(feature = "gps")))]
@@ -29,6 +22,10 @@ pub mod gps;
 #[cfg_attr(docsrs, doc(cfg(feature = "galileo")))]
 pub mod galileo;
 
+mod buffer;
+mod errors;
+
+pub use buffer::{Buffer, StaticBuffer};
 pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
