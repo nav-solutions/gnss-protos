@@ -254,7 +254,7 @@ impl GpsQzssFrame1 {
         if self.ura <= 6 {
             2.0_f64.powi((1 + self.ura / 2) as i32)
         } else {
-            2.0_f64.powi((self.ura / 2) as i32)
+            2.0_f64.powi((self.ura - 2) as i32)
         }
     }
 

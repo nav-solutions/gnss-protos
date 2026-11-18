@@ -74,9 +74,8 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated inclination rate (in radians/s).
-    pub fn with_inclination_rate_radians_s(mut self, rate_rad_sec: f64) -> Self {
-        self.idot = rate_rad_sec;
-        self
+    pub fn with_inclination_rate_radians_s(self, rate_rad_sec: f64) -> Self {
+        self.with_inclination_rate_semicircles_s(rad_to_semicircles(rate_rad_sec))
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated orbit radius cosine harmonic term (meters)

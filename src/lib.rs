@@ -3,10 +3,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /*
- * gnss-protos is part of the rtk-rs framework.
+ * gnss-protos is part of the nav-solutions framework.
  *
  * Authors: Guillaume W. Bres <guillaume.bressaix@gmail.com> et al.
- * (cf. https://github.com/rtk-rs/gnss-protos/graphs/contributors)
+ * (cf. https://github.com/nav-solutions/gnss-protos/graphs/contributors)
  *
  * This framework is shipped under Mozilla Public V2 license.
  */
