@@ -6,6 +6,7 @@ use crate::gps::{test_vectors::bytes_to_words, GpsQzssFrame};
 mod eph1;
 mod eph2;
 mod eph3;
+mod eph123;
 
 /// Verifies that `encoded` starts with a valid 300-bit GPS subframe:
 /// parity of each word, and words 2 & 10 ending with D29 = D30 = 0.
