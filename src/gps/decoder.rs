@@ -317,7 +317,7 @@ mod test {
         let mut buffer = encode_stream(&frames, 9);
 
         // flip one bit in the middle of frame #2 (data bit of word 4)
-        let bit = 9 + 2 * GPS_FRAME_BITS + 3 * 30 + 10;
+        let bit = 9 + 2 * GPS_FRAME_BITS + 3 * GPS_WORD_BITS + 10;
         buffer[bit / 8] ^= 0x80 >> (bit % 8);
 
         let mut decoder = GpsQzssDecoder::default();
