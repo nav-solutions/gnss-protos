@@ -1,5 +1,6 @@
 use crate::{
-    gps::{from_scaled, link::GPS_WORD_DATA_BITS, to_scaled, write_signed, write_unsigned},
+    bits::{from_scaled, to_scaled, write_signed, write_unsigned},
+    gps::GPS_WORD_DATA_BITS,
     Message,
 };
 
@@ -50,23 +51,7 @@ pub struct GpsQzssAlmanach {
     pub af0: f64,
 }
 
-impl PartialEq for GpsQzssAlmanach {
-    fn eq(&self, rhs: &Self) -> bool {
-        self.data_id == rhs.data_id
-            && self.sv_id == rhs.sv_id
-            && self.toa_seconds == rhs.toa_seconds
-            && self.sv_health == rhs.sv_health
-            && (self.eccentricity - rhs.eccentricity).abs() < 1e-6
-            && (self.di - rhs.di).abs() < 1e-5
-            && (self.omega_dot - rhs.omega_dot).abs() < 1e-11
-            && (self.sqrt_a - rhs.sqrt_a).abs() < 1e-3
-            && (self.omega0 - rhs.omega0).abs() < 1e-6
-            && (self.omega - rhs.omega).abs() < 1e-6
-            && (self.m0 - rhs.m0).abs() < 1e-6
-            && (self.af0 - rhs.af0).abs() < 1e-6
-            && (self.af1 - rhs.af1).abs() < 1e-11
-    }
-}
+crate::bits::impl_eq_by_encoding!(GpsQzssAlmanach, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
 impl Message<BigEndian> for GpsQzssAlmanach {
     fn encoding_size(&self) -> usize {
@@ -79,7 +64,7 @@ impl Message<BigEndian> for GpsQzssAlmanach {
 }
 
 impl BitWrite<BigEndian> for GpsQzssAlmanach {
-    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         // word 3
         stream.write_int(self.data_id & 0x3, 2)?;
@@ -107,14 +92,14 @@ impl BitWrite<BigEndian> for GpsQzssAlmanach {
         stream.write_int(af0 >> 3, 8)?;
         write_signed(stream, to_scaled(self.af1, -38), 11)?;
         stream.write_int(af0 & 0x7, 3)?;
-        stream.write_int(0u8, 2)?; // solved by the link layer
+        stream.write_int(0u8, 2)?; // solved when the frame is encoded
 
         Ok(())
     }
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssAlmanach {
-    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         // word 3
         let data_id = stream.read_int::<u8>(2)?;

@@ -1,8 +1,6 @@
 use crate::{
-    gps::{
-        from_scaled, link::GPS_WORD_DATA_BITS, to_scaled, write_signed, write_unsigned,
-        GpsQzssSatelliteHealth,
-    },
+    bits::{from_scaled, to_scaled, write_signed, write_unsigned},
+    gps::{GpsQzssSatelliteHealth, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -79,71 +77,7 @@ pub struct GpsQzssFrame1 {
     pub af0: f64,
 }
 
-impl PartialEq for GpsQzssFrame1 {
-    fn eq(&self, rhs: &Self) -> bool {
-        if rhs.week != self.week {
-            return false;
-        }
-
-        if rhs.ca_or_p_l2 != self.ca_or_p_l2 {
-            return false;
-        }
-
-        if rhs.ura != self.ura {
-            return false;
-        }
-
-        if rhs.health != self.health {
-            return false;
-        }
-
-        if rhs.iodc() != self.iodc() {
-            return false;
-        }
-
-        if rhs.toc != self.toc {
-            return false;
-        }
-
-        if (rhs.tgd - self.tgd).abs() > 1e-9 {
-            return false;
-        }
-
-        if (rhs.af2 - self.af2).abs() > 1E-13 {
-            return false;
-        }
-
-        if (rhs.af1 - self.af1).abs() > 1E-12 {
-            return false;
-        }
-
-        if (rhs.af0 - self.af0).abs() > 1E-9 {
-            return false;
-        }
-
-        if rhs.reserved_word4 != self.reserved_word4 {
-            return false;
-        }
-
-        if rhs.l2_p_data_flag != self.l2_p_data_flag {
-            return false;
-        }
-
-        if rhs.reserved_word5 != self.reserved_word5 {
-            return false;
-        }
-
-        if rhs.reserved_word6 != self.reserved_word6 {
-            return false;
-        }
-
-        if rhs.reserved_word7 != self.reserved_word7 {
-            return false;
-        }
-
-        true
-    }
-}
+crate::bits::impl_eq_by_encoding!(GpsQzssFrame1, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
 impl Message<BigEndian> for GpsQzssFrame1 {
     fn encoding_size(&self) -> usize {
@@ -156,7 +90,7 @@ impl Message<BigEndian> for GpsQzssFrame1 {
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame1 {
-    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         // word 3
         stream.write_int(self.week & 0x3ff, 10)?;
@@ -185,7 +119,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame1 {
         write_signed(stream, to_scaled(self.af2, -55), 8)?;
         write_signed(stream, to_scaled(self.af1, -43), 16)?;
 
-        // word 10 (last 2 bits are solved by the link layer)
+        // word 10 (last 2 bits are solved when the frame is encoded)
         write_signed(stream, to_scaled(self.af0, -31), 22)?;
         stream.write_int(0u8, 2)?;
 
@@ -194,7 +128,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame1 {
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
-    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         // word 3
         let week = stream.read_int::<u16>(10)?;
@@ -462,10 +396,8 @@ impl GpsQzssFrame1 {
 mod test {
     use crate::{
         gps::{GpsQzssFrame1, GpsQzssSatelliteHealth},
-        Buffer, Message, StaticBuffer,
+        Message,
     };
-
-    use bitbuffer::{BigEndian, BitReadStream};
 
     #[test]
     fn reciprocal() {
@@ -579,12 +511,21 @@ mod test {
             let ura = GpsQzssFrame1::compute_ura(value_m);
             assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
 
-            let mut frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
+            let frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
 
             assert_eq!(frame1.ura, encoded_ura);
 
-            let mut expected = GpsQzssFrame1::default();
-            expected.ura = encoded_ura;
+            let expected = GpsQzssFrame1 {
+                ura: encoded_ura,
+                ..Default::default()
+            };
+
+            assert_eq!(frame1, expected);
+
+            // reciprocal
+            let mut bytes = [0u8; 24];
+            frame1.encode(&mut bytes).unwrap();
+            assert_eq!(GpsQzssFrame1::decode(&bytes).unwrap().ura, encoded_ura);
 
             // assert_eq!(
             //     frame1.with_nominal_user_range_accuracy_m(value_m).ura,

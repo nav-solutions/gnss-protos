@@ -27,10 +27,6 @@ pub enum GpsError {
     #[error("read issue: not enough bytes?")]
     BufferRead(#[from] BitError),
 
-    /// Destination buffer is too small for this frame
-    #[error("buffer too small for this GPS frame")]
-    WouldNotFit,
-
     /// Buffering Error
     #[error("buffering error: {0}")]
     Buffering(#[from] BufferingError),

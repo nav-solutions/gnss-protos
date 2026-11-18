@@ -1,7 +1,7 @@
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::{
-    gps::{link::GPS_WORD_DATA_BITS, GpsQzssFrameId},
+    gps::{GpsQzssFrameId, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -45,7 +45,7 @@ impl Message<BigEndian> for GpsQzssHow {
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssHow {
-    /// Reads the 24 data bits of the HOW (parity free, see [crate::gps::link]).
+    /// Reads the 24 data bits of the HOW (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let tow_count = stream.read_int::<u32>(17)?;
         let alert = stream.read_bool()?;
@@ -69,8 +69,8 @@ impl BitRead<'_, BigEndian> for GpsQzssHow {
 }
 
 impl BitWrite<BigEndian> for GpsQzssHow {
-    /// Writes the 24 data bits of the HOW (parity free, see [crate::gps::link]).
-    /// The two last bits are solved by the link layer.
+    /// Writes the 24 data bits of the HOW (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
+    /// The two last bits (t) are solved when the frame is encoded.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         stream.write_int((self.tow / 6) & 0x1ffff, 17)?;
         stream.write_bool(self.alert)?;
