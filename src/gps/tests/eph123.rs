@@ -17,7 +17,7 @@ fn run_file(path: &str) -> u32 {
     let mut position = 0;
     let mut buffer = [0u8; 8192];
     let mut fd = File::open(path).unwrap();
-    
+
     let mut size = fd.read(&mut buffer).unwrap_or_else(|e| {
         panic!("Failed to read file {}: {}", path, e);
     });
