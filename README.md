@@ -26,11 +26,24 @@ Supported protocols
 - GPS / QZSS protocol (on `gps` crate feature), note that this feature is activated by default.
 - Galileo I/NAV protocol, E1-B and E5b-I (on `galileo` crate feature), note that this feature is activated by default.
 
+Encoding & decoding
+===================
+
+Every message implements the `Message` trait, which builds on the [bitbuffer](https://crates.io/crates/bitbuffer)
+`BitRead` / `BitWrite` traits. This is the one and only way to encode and decode messages:
+
+- `Message::encode` / `Message::decode` work from / to a byte buffer, starting on its first bit.
+- `BitWriteStream::write` / `BitReadStream::read` (re-exported from `bitbuffer`) work at any bit position of a stream.
+Messages written one after the other form a valid bit (or symbol) stream, ready for transmission.
+
+The library is strictly reciprocal: decoding then re-encoding any valid message gives back
+the very same bits. Equality between messages is "bit true": two messages are equal when they encode to the same bits.
+
 GPS / QZSS
 ==========
 
 The `gps` compilation option (enabled by default) activates support
-for the GPS (US) and QZSS (Jap) protocol.
+for the GPS (US) and QZSS (Jap) protocol, in the `gps` module.
 
 The framework interprets the EPH-1, 2 and 3 subframes, which is enough for real-time applications,
 as demonstrated by our [rt-navi (Real Time navigation)](https://github.com/nav-solutions/rt-navi) appplication.
@@ -38,13 +51,13 @@ Subframes 4 and 5 (almanac and status pages) are decoded and encoded as raw data
 their interpretation is work in progress.
 
 GPS is not aligned to bytes: a subframe is 300 bits long (10 words of 30 bits),
-each word carrying 24 data bits and 6 parity bits. The library is organized in two layers:
+each word carrying 24 data bits and 6 parity bits.
 
-- the `gps::link` layer is the only place that deals with the transmitted bits: parity (IS-GPS-200 §20.3.5.2),
+- `GpsQzssFrame` is the only message that deals with the transmitted bits: parity (IS-GPS-200 §20.3.5.2),
 data inversion (D30*), bits 23-24 of words 2 and 10, inverted streams (180° carrier phase ambiguity).
-It converts 10 words of 30 bits into 240 contiguous, parity free, data bits (and back).
-- messages (`GpsQzssTelemetry`, `GpsQzssHow`, `GpsQzssFrame1`..) are read and written on those
-240 data bits. Parameters that the ICD splits over two words (M0, e, sqrt(A)...) are contiguous there.
+Parity is always computed when encoding, and always verified when decoding.
+- messages (`GpsQzssTelemetry`, `GpsQzssHow`, `GpsQzssFrame1`..) are read and written on the
+240 parity free data bits. Parameters that the ICD splits over two words (M0, e, sqrt(A)...) are contiguous there.
 
 1. The `GpsQzssDecoder` is the solution when working with GPS/QZSS bit streams.
 It synchronizes itself on the preamble at any bit position (normal or inverted),
@@ -53,17 +66,22 @@ from a tracking loop) or from a byte slice at any bit offset (`decode`). The dec
 between calls, so a frame may span several buffers. Positions are expressed in bits, not bytes.
 
 ```rust
-use gnss_protos::{GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow, GPS_FRAME_BITS};
+use gnss_protos::{
+    BigEndian, BitWriteStream, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow,
+    GPS_FRAME_BITS,
+};
 
-// Encode 3 frames, contiguously, 5 bits after the start of the buffer
+// Stream 3 frames, contiguously, 5 bits after the start of the buffer
 let frame = GpsQzssFrame::default()
     .with_hand_over_word(GpsQzssHow::default().with_tow_seconds(259_956));
 
-let mut buffer = [0u8; 128];
+let mut buffer = Vec::new();
+let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
 
-for i in 0..3 {
-    frame.encode_at(&mut buffer, 5 + i * GPS_FRAME_BITS)
-        .unwrap();
+writer.write_int(0u8, 5).unwrap();
+
+for _ in 0..3 {
+    writer.write(&frame).unwrap();
 }
 
 // The decoder verifies the parity of each frame by default
@@ -79,6 +97,7 @@ loop {
         Some(decoded) => {
             // the frame started at position - GPS_FRAME_BITS
             assert_eq!(position - GPS_FRAME_BITS, 5 + count * GPS_FRAME_BITS);
+            assert_eq!(decoded, frame);
             assert_eq!(decoded.how.tow, 259_956);
             assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
             count += 1;
@@ -90,21 +109,20 @@ loop {
 assert_eq!(count, 3);
 ```
 
-2. `GpsQzssFrame` can be decoded from / encoded to 10 words of 30 bits (`decode_words`, `encode_words`),
-from / to any bit position of a buffer (`decode_at`, `encode_at`), or using the `bitbuffer`
-`BitRead` / `BitWrite` traits. Some receivers report words whose polarity was already corrected
-(u-blox UBX-RXM-SFRBX for example): use `decode_polarity_corrected_words` for those.
+2. `GpsQzssFrame` implements `Message`: it is decoded from / encoded to its 300 transmitted bits (38 bytes,
+4 padding bits).
 
 ```rust
-use gnss_protos::{GpsQzssFrame, GpsQzssFrameId};
+use gnss_protos::{GpsQzssFrame, GpsQzssFrameId, Message};
 
-// EPH-1 subframe, as reported by a u-blox receiver (UBX-RXM-SFRBX)
-let words = [
-    0x22C13E1B, 0x1527C973, 0x13E40004, 0x104F5D31, 0x1744E6D7,
-    0x07755783, 0x330C80B5, 0x125042A1, 0x00001684, 0x312C3033,
+// Real EPH-1 subframe, as transmitted (300 bits, parity included)
+let bytes = [
+    0x8B, 0x04, 0xF8, 0x6E, 0xAD, 0x83, 0x68, 0xC4, 0xF9, 0x00, 0x01, 0x10, 0x4F,
+    0x5D, 0x31, 0xA2, 0xEC, 0x64, 0xA0, 0x77, 0x55, 0x78, 0x33, 0x3C, 0xDF, 0xD2,
+    0x92, 0x50, 0x42, 0xA1, 0xFF, 0xFF, 0xA5, 0xEC, 0xED, 0x3C, 0xFC, 0xC0,
 ];
 
-let frame = GpsQzssFrame::decode_polarity_corrected_words(&words, true)
+let frame = GpsQzssFrame::decode(&bytes)
     .unwrap();
 
 assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris1);
@@ -113,13 +131,18 @@ assert_eq!(frame.how.tow, 259_956);
 let eph1 = frame.subframe.as_eph1().unwrap();
 assert_eq!(eph1.week, 318);
 assert_eq!(eph1.toc, 266_400);
+
+// bit exact re-encoding (parity included)
+let mut encoded = [0u8; 38];
+frame.encode(&mut encoded).unwrap();
+assert_eq!(encoded, bytes);
 ```
 
 Galileo
 =======
 
 The `galileo` compilation option (enabled by default) activates support
-for the Galileo I/NAV protocol (E1-B and E5b-I), following the Galileo OS SIS ICD v2.1.
+for the Galileo I/NAV protocol (E1-B and E5b-I), following the Galileo OS SIS ICD v2.1, in the `galileo` module.
 
 The framework interprets the word types 0 to 6 (ephemeris, clock, ionosphere, BGD, health, GST and GST-UTC),
 which is enough for real-time applications. Other word types (almanacs, reduced CED, FEC2, ARAIM..)
@@ -128,13 +151,10 @@ are decoded and encoded as raw data bits, their interpretation is work in progre
 Galileo is a symbol based protocol. An I/NAV page is transmitted in 2 seconds, as two page parts
 (even, then odd) of 250 symbols each: a 10-symbol synchronization pattern followed by 120 bits
 encoded by a rate 1/2 convolutional code (FEC) and interleaved. A CRC-24Q protects the page.
-The library is organized in three layers:
 
-- the `galileo::link` layer is the only place that deals with the transmitted symbols: synchronization pattern,
+- `GalileoInavPage` is the only message that deals with the transmitted symbols: synchronization pattern,
 convolutional encoding and Viterbi decoding, block interleaving, CRC-24Q, inverted streams (180° carrier phase ambiguity).
-It converts 250 symbols into a 120-bit page part (and back).
-- `GalileoInavPage` gathers two page parts and verifies the CRC. It carries one 128-bit `GalileoInavWord`
-and the OSNMA, SAR and SSP fields.
+It carries one 128-bit `GalileoInavWord` and the OSNMA, SAR and SSP fields.
 - `GalileoInavWord` is the navigation data, interpreted according to its word type (`GalileoInavWord1`..)
 
 1. The `GalileoInavDecoder` is the solution when working with Galileo symbol streams.
@@ -145,11 +165,11 @@ at any symbol offset (`decode`). Positions are expressed in symbols, not bytes.
 
 ```rust
 use gnss_protos::{
-    GalileoInavDecoder, GalileoInavPage, GalileoInavWord, GalileoInavWord4,
-    GALILEO_INAV_PAGE_SYMBOLS,
+    BigEndian, BitWriteStream, GalileoInavDecoder, GalileoInavPage, GalileoInavWord,
+    GalileoInavWord4, GALILEO_INAV_PAGE_SYMBOLS,
 };
 
-// Encode 3 pages, contiguously, 7 symbols after the start of the buffer
+// Stream 3 pages, contiguously, 7 symbols after the start of the buffer
 let page = GalileoInavPage::default()
     .with_word(GalileoInavWord::Ephemeris4(
         GalileoInavWord4::default()
@@ -158,11 +178,13 @@ let page = GalileoInavPage::default()
             .with_clock_offset_seconds(-4.5e-4),
     ));
 
-let mut buffer = [0u8; 256];
+let mut buffer = Vec::new();
+let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
 
-for i in 0..3 {
-    page.encode_at(&mut buffer, 7 + i * GALILEO_INAV_PAGE_SYMBOLS)
-        .unwrap();
+writer.write_int(0u8, 7).unwrap();
+
+for _ in 0..3 {
+    writer.write(&page).unwrap();
 }
 
 // some symbol errors: corrected by the Viterbi decoder
@@ -191,21 +213,21 @@ loop {
 assert_eq!(count, 3);
 ```
 
-2. `GalileoInavPage` can be decoded from / encoded to its two 120-bit page parts (`decode_parts`, `encode_parts`),
-as most receivers report them after FEC decoding (u-blox UBX-RXM-SFRBX: `decode_ublox_words`, `encode_ublox_words`),
-from / to any symbol position of a buffer (`decode_at`, `encode_at`), or using the `bitbuffer`
-`BitRead` / `BitWrite` traits.
+2. `GalileoInavPage` implements `Message`: it is decoded from / encoded to its 500 transmitted symbols
+(63 bytes, 4 padding bits).
 
 ```rust
-use gnss_protos::GalileoInavPage;
+use gnss_protos::{GalileoInavPage, Message};
 
-// E08 word type 4, as reported by a u-blox receiver (UBX-RXM-SFRBX)
-let words = [
-    0x041EC800, 0x07000F76, 0x73FC461C, 0x87FF8000,
-    0x8F804986, 0x6BD3872A, 0xAAAA423B, 0x4ECAC000,
+// Real E08 page (word type 4), as transmitted (500 symbols)
+let symbols = [
+    0x58, 0x0B, 0x0D, 0xA5, 0x47, 0xCB, 0xFB, 0xA3, 0x45, 0x51, 0x4A, 0xDD, 0x5B, 0x9A, 0xB6, 0x1C,
+    0xD2, 0x89, 0x40, 0x57, 0xC1, 0xBE, 0x9D, 0x69, 0x61, 0x85, 0x51, 0xCB, 0xFF, 0xAB, 0xDC, 0x56,
+    0x0D, 0x01, 0xFF, 0x2F, 0x07, 0x31, 0xC3, 0x13, 0xBC, 0x01, 0x03, 0x7B, 0x5A, 0x8F, 0xD5, 0x0B,
+    0xF1, 0x4F, 0x7F, 0xCB, 0x67, 0x41, 0x27, 0x8E, 0xBC, 0x09, 0xB4, 0x41, 0xFF, 0xEA, 0xC0,
 ];
 
-let page = GalileoInavPage::decode_ublox_words(&words)
+let page = GalileoInavPage::decode(&symbols)
     .unwrap();
 
 let eph4 = page.word.as_word4().unwrap();
@@ -214,8 +236,10 @@ assert_eq!(eph4.iodnav, 123);
 assert_eq!(eph4.toc, 454_800);
 assert!((eph4.af0 - -4.54849563539E-04).abs() < 1E-14);
 
-// bit exact re-encoding (CRC included)
-assert_eq!(page.encode_ublox_words().unwrap(), words);
+// bit exact re-encoding (FEC and CRC included)
+let mut encoded = [0u8; 63];
+page.encode(&mut encoded).unwrap();
+assert_eq!(encoded, symbols);
 ```
 
 License
