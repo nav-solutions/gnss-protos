@@ -104,9 +104,9 @@ pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
 pub use frame3::GpsQzssFrame3;
 pub use frame_id::GpsQzssFrameId;
-pub use message::GpsQzssMessage;
 pub use health::GpsQzssSatelliteHealth;
 pub use how::GpsQzssHow;
+pub use message::GpsQzssMessage;
 pub use subframe::{GpsQzssSubframe, GPS_SUBFRAME_DATA_BYTES};
 pub use tlm::GpsQzssTelemetry;
 
