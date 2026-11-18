@@ -1,8 +1,6 @@
 use crate::{
-    gps::{
-        from_scaled, link::GPS_WORD_DATA_BITS, rad_to_semicircles, to_scaled, write_signed,
-        write_unsigned,
-    },
+    bits::{from_scaled, rad_to_semicircles, to_scaled, write_signed, write_unsigned},
+    gps::GPS_WORD_DATA_BITS,
     Message,
 };
 
@@ -47,55 +45,7 @@ pub struct GpsQzssFrame2 {
     pub aodo: u8,
 }
 
-impl PartialEq for GpsQzssFrame2 {
-    fn eq(&self, rhs: &Self) -> bool {
-        if self.toe != rhs.toe {
-            return false;
-        }
-
-        if self.iode != rhs.iode {
-            return false;
-        }
-
-        if (self.m0 - rhs.m0).abs() > 1e-3 {
-            return false;
-        }
-
-        if (self.dn - rhs.dn).abs() > 1e-8 {
-            return false;
-        }
-
-        if (self.cuc - rhs.cuc).abs() > 1e-9 {
-            return false;
-        }
-
-        if (self.cus - rhs.cus).abs() > 1e-9 {
-            return false;
-        }
-
-        if (self.crs - rhs.crs).abs() > 1e-9 {
-            return false;
-        }
-
-        if (self.e - rhs.e).abs() > 1e-10 {
-            return false;
-        }
-
-        if (self.sqrt_a - rhs.sqrt_a).abs() > 1e-5 {
-            return false;
-        }
-
-        if self.fit_int_flag != rhs.fit_int_flag {
-            return false;
-        }
-
-        if self.aodo != rhs.aodo {
-            return false;
-        }
-
-        true
-    }
-}
+crate::bits::impl_eq_by_encoding!(GpsQzssFrame2, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
 impl Message<BigEndian> for GpsQzssFrame2 {
     fn encoding_size(&self) -> usize {
@@ -108,7 +58,7 @@ impl Message<BigEndian> for GpsQzssFrame2 {
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame2 {
-    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         // word 3
@@ -127,7 +77,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
         write_signed(stream, to_scaled(self.cus, -29), 16)?;
         write_unsigned(stream, to_scaled(self.sqrt_a, -19), 32)?;
 
-        // word 10 (last 2 bits are solved by the link layer)
+        // word 10 (last 2 bits are solved when the frame is encoded)
         write_unsigned(stream, (self.toe / 16) as i64, 16)?;
         stream.write_bool(self.fit_int_flag)?;
         stream.write_int(self.aodo & 0x1f, 5)?;
@@ -138,7 +88,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
-    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         // word 3
@@ -288,9 +238,7 @@ impl GpsQzssFrame2 {
 
 #[cfg(test)]
 mod frame2 {
-    use crate::{gps::GpsQzssFrame2, Buffer, Message, StaticBuffer};
-
-    use bitbuffer::{BigEndian, BitReadStream};
+    use crate::{gps::GpsQzssFrame2, Message};
 
     #[test]
     fn reciprocal() {

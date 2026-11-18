@@ -5,6 +5,10 @@ use bitbuffer::{BigEndian, BitError, BitReadStream, BitWrite, BitWriteStream};
 /// Number of data bytes (parity free) of a subframe payload (words 3 to 10).
 pub const GPS_SUBFRAME_DATA_BYTES: usize = 24;
 
+/// The 2 last data bits of word 10 (t-bits) are solved when encoding,
+/// so that the word ends with D29 = D30 = 0: they do not carry any information.
+const GPS_T_BITS_MASK: u8 = 0x03;
+
 /// GPS / QZSS Interpreted subframes
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum GpsQzssSubframe {
@@ -19,10 +23,12 @@ pub enum GpsQzssSubframe {
 
     /// GPS Almanach / Status Frame #4, not interpreted yet:
     /// raw (parity free) data bits of words 3 to 10.
+    /// The 2 last bits (t-bits of word 10) are solved when encoding, and decoded as zeros.
     Almanach4([u8; GPS_SUBFRAME_DATA_BYTES]),
 
     /// GPS Almanach / Status Frame #5, not interpreted yet:
     /// raw (parity free) data bits of words 3 to 10.
+    /// The 2 last bits (t-bits of word 10) are solved when encoding, and decoded as zeros.
     Almanach5([u8; GPS_SUBFRAME_DATA_BYTES]),
 }
 
@@ -52,6 +58,9 @@ impl GpsQzssSubframe {
                 let mut raw = [0u8; GPS_SUBFRAME_DATA_BYTES];
                 raw.copy_from_slice(&stream.read_bytes(GPS_SUBFRAME_DATA_BYTES)?);
 
+                // t-bits: solved for parity, no meaning
+                raw[GPS_SUBFRAME_DATA_BYTES - 1] &= !GPS_T_BITS_MASK;
+
                 if frame_id == GpsQzssFrameId::Almanach4 {
                     Ok(Self::Almanach4(raw))
                 } else {
@@ -74,7 +83,7 @@ impl GpsQzssSubframe {
 }
 
 impl Default for GpsQzssSubframe {
-    /// Builds a default [GpsQzssSubFrame::Ephemeris1]
+    /// Builds a default [GpsQzssSubframe::Ephemeris1]
     fn default() -> Self {
         Self::Ephemeris1(Default::default())
     }
@@ -88,8 +97,22 @@ impl GpsQzssSubframe {
             GpsQzssFrameId::Ephemeris1 => Self::Ephemeris1(GpsQzssFrame1::model()),
             GpsQzssFrameId::Ephemeris2 => Self::Ephemeris2(GpsQzssFrame2::model()),
             GpsQzssFrameId::Ephemeris3 => Self::Ephemeris3(GpsQzssFrame3::model()),
-            GpsQzssFrameId::Almanach4 => Self::Almanach4([0x5A; GPS_SUBFRAME_DATA_BYTES]),
-            GpsQzssFrameId::Almanach5 => Self::Almanach5([0xA5; GPS_SUBFRAME_DATA_BYTES]),
+            GpsQzssFrameId::Almanach4 | GpsQzssFrameId::Almanach5 => {
+                let mut raw = if frame_id == GpsQzssFrameId::Almanach4 {
+                    [0x5A; GPS_SUBFRAME_DATA_BYTES]
+                } else {
+                    [0xA5; GPS_SUBFRAME_DATA_BYTES]
+                };
+
+                // t-bits are always decoded as zeros
+                raw[GPS_SUBFRAME_DATA_BYTES - 1] &= !GPS_T_BITS_MASK;
+
+                if frame_id == GpsQzssFrameId::Almanach4 {
+                    Self::Almanach4(raw)
+                } else {
+                    Self::Almanach5(raw)
+                }
+            },
         }
     }
 

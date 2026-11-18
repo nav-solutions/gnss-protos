@@ -1,5 +1,5 @@
 use crate::{
-    gps::{link::GPS_WORD_DATA_BITS, GPS_PREAMBLE_BYTE},
+    gps::{GPS_PREAMBLE_BYTE, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -30,7 +30,7 @@ impl Message<BigEndian> for GpsQzssTelemetry {
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
-    /// Reads the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
+    /// Reads the 24 data bits of the TLM word (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         let preamble = stream.read_int::<u8>(8)?;
         let message = stream.read_int::<u16>(14)?;
@@ -53,7 +53,7 @@ impl BitRead<'_, BigEndian> for GpsQzssTelemetry {
 }
 
 impl BitWrite<BigEndian> for GpsQzssTelemetry {
-    /// Writes the 24 data bits of the TLM word (parity free, see [crate::gps::link]).
+    /// Writes the 24 data bits of the TLM word (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         stream.write_int(GPS_PREAMBLE_BYTE, 8)?;
         stream.write_int(self.message & 0x3fff, 14)?;
@@ -127,7 +127,7 @@ impl GpsQzssTelemetry {
 
 #[cfg(test)]
 mod telemetry {
-    use crate::{gps::GpsQzssTelemetry, Buffer, Message, StaticBuffer};
+    use crate::{gps::GpsQzssTelemetry, Message};
 
     #[test]
     fn reciprocal() {

@@ -1,5 +1,6 @@
 use crate::{
-    gps::{from_scaled, link::GPS_WORD_DATA_BITS, rad_to_semicircles, to_scaled, write_signed},
+    bits::{from_scaled, rad_to_semicircles, to_scaled, write_signed},
+    gps::GPS_WORD_DATA_BITS,
     Message,
 };
 
@@ -73,9 +74,8 @@ impl GpsQzssFrame3 {
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated inclination rate (in radians/s).
-    pub fn with_inclination_rate_radians_s(mut self, rate_rad_sec: f64) -> Self {
-        self.idot = rate_rad_sec;
-        self
+    pub fn with_inclination_rate_radians_s(self, rate_rad_sec: f64) -> Self {
+        self.with_inclination_rate_semicircles_s(rad_to_semicircles(rate_rad_sec))
     }
 
     /// Copies and returns [GpsQzssFrame3] with updated orbit radius cosine harmonic term (meters)
@@ -132,47 +132,7 @@ impl GpsQzssFrame3 {
     }
 }
 
-impl PartialEq for GpsQzssFrame3 {
-    fn eq(&self, rhs: &Self) -> bool {
-        if (self.cic - rhs.cic).abs() > 1e-9 {
-            return false;
-        }
-
-        if (self.cis - rhs.cis).abs() > 1e-8 {
-            return false;
-        }
-
-        if (self.crc - rhs.crc).abs() > 1e-2 {
-            return false;
-        }
-
-        if (self.i0 - rhs.i0).abs() > 1e-3 {
-            return false;
-        }
-
-        if self.iode != rhs.iode {
-            return false;
-        }
-
-        if (self.idot - rhs.idot).abs() > 1e-3 {
-            return false;
-        }
-
-        if (self.omega0 - rhs.omega0).abs() > 1e-3 {
-            return false;
-        }
-
-        if (self.omega - rhs.omega).abs() > 1e-3 {
-            return false;
-        }
-
-        if (self.omega_dot - rhs.omega_dot).abs() > 1e-3 {
-            return false;
-        }
-
-        true
-    }
-}
+crate::bits::impl_eq_by_encoding!(GpsQzssFrame3, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
 impl Message<BigEndian> for GpsQzssFrame3 {
     fn encoding_size(&self) -> usize {
@@ -185,7 +145,7 @@ impl Message<BigEndian> for GpsQzssFrame3 {
 }
 
 impl BitWrite<BigEndian> for GpsQzssFrame3 {
-    /// Writes the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         // words 3 & 4
@@ -203,7 +163,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
         // word 9
         write_signed(stream, to_scaled(self.omega_dot, -43), 24)?;
 
-        // word 10 (last 2 bits are solved by the link layer)
+        // word 10 (last 2 bits are solved when the frame is encoded)
         stream.write_int(self.iode, 8)?;
         write_signed(stream, to_scaled(self.idot, -43), 14)?;
         stream.write_int(0u8, 2)?;
@@ -213,7 +173,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
 }
 
 impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
-    /// Reads the 192 data bits of words 3 to 10 (parity free, see [crate::gps::link]).
+    /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         // words 3 & 4
@@ -252,9 +212,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
 
 #[cfg(test)]
 mod frame3 {
-    use crate::{gps::GpsQzssFrame3, Buffer, Message, StaticBuffer};
-
-    use bitbuffer::{BigEndian, BitReadStream};
+    use crate::{gps::GpsQzssFrame3, Message};
 
     #[test]
     fn reciprocal() {

@@ -4,12 +4,14 @@ use std::{fs::File, io::Write};
 
 use crate::{
     gps::{
-        link, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId, GpsQzssHow,
-        GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
+        tests::assert_valid_subframe, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId,
+        GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
     },
     tests::init_logger,
-    Buffer, Decoder, Message, StaticBuffer,
+    BigEndian, Message,
 };
+
+use bitbuffer::BitWriteStream;
 
 #[test]
 fn test1() {
@@ -57,10 +59,7 @@ fn test1() {
     assert_eq!(encoded[1], 0x48);
     assert_eq!(encoded[2], 0xD0 | 0x02 | 0x01);
     // the 300 bits form a valid GPS subframe (parity, t-bits)
-    let words = link::read_words(&encoded, 0).unwrap();
-    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
-    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
-    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
+    assert_valid_subframe(&encoded);
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0x60);
@@ -145,10 +144,7 @@ fn test2() {
     assert_eq!(encoded[1], 0x48);
     assert_eq!(encoded[2], 0x34 << 2 | 0x01);
     // the 300 bits form a valid GPS subframe (parity, t-bits)
-    let words = link::read_words(&encoded, 0).unwrap();
-    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
-    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
-    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
+    assert_valid_subframe(&encoded);
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0xDF);
@@ -238,10 +234,7 @@ fn test3() {
     assert_eq!(encoded[1], 0x04);
     assert_eq!(encoded[2], 0x23 << 2);
     // the 300 bits form a valid GPS subframe (parity, t-bits)
-    let words = link::read_words(&encoded, 0).unwrap();
-    assert!(link::decode_frame(&words, true).is_ok(), "invalid parity");
-    assert_eq!(words[1] & 0x3, 0, "HOW must end with D29=D30=0");
-    assert_eq!(words[9] & 0x3, 0, "word 10 must end with D29=D30=0");
+    assert_valid_subframe(&encoded);
 
     // TODO (bit true test)
     // assert_eq!(encoded[4], 0x4E);
@@ -472,6 +465,9 @@ fn reciprocal() {
             .with_clock_drift_seconds_s(*af1)
             .with_clock_drift_rate_seconds_s2(*af2);
 
+        subframe.ura = *ura;
+        subframe.health = GpsQzssSatelliteHealth::from(*health);
+
         if *alert {
             how = how.with_alert_bit();
         }
@@ -505,6 +501,16 @@ fn reciprocal() {
         });
 
         assert_eq!(decoded, frame, "reciprocal failed");
+        assert_eq!(decoded.how.frame_id, *frame_id);
+        assert_eq!(decoded.subframe.as_eph1().unwrap().ura, *ura);
+        assert_eq!(decoded.subframe.as_eph1().unwrap().health, subframe.health);
+        assert_valid_subframe(&encoded);
+
+        // bit exact
+        let mut reencoded = [0; 1024];
+        decoded.encode(&mut reencoded).unwrap();
+        assert_eq!(reencoded, encoded, "bit exact reciprocal failed");
+
         info!("test ({}): {:?}", test_num, frame);
     }
 }
@@ -556,10 +562,16 @@ fn generate_bin_file() {
         subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
     }
 
-    let mut buffer = vec![0u8; (NUM_FRAMES * GPS_FRAME_BITS + 7) / 8];
+    let mut buffer = Vec::with_capacity((NUM_FRAMES * GPS_FRAME_BITS + 7) / 8);
 
-    for (i, frame) in frames.iter().enumerate() {
-        frame.encode_at(&mut buffer, i * GPS_FRAME_BITS).unwrap();
+    {
+        let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
+
+        for frame in frames.iter() {
+            writer.write(frame).unwrap();
+        }
+
+        assert_eq!(writer.bit_len(), NUM_FRAMES * GPS_FRAME_BITS);
     }
 
     std::fs::create_dir_all("data/GPS").unwrap();

@@ -114,7 +114,7 @@ impl GpsQzssKlobuharUtc {
 
     fn word8(&self) -> Word8 {
         Word8 {
-            toc: (self.toc / 16) as u16,
+            toc: (self.toc / GPS_TOC_TOE_LSB_S) as u16,
             iodc_lsb: (self.iodc & 0xff) as u8,
         }
     }

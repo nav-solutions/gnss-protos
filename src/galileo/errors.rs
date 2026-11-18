@@ -31,8 +31,4 @@ pub enum GalileoError {
     /// Buffer read / write issue
     #[error("bit stream issue: {0}")]
     BitStream(#[from] BitError),
-
-    /// Destination (or source) buffer is too small for this page
-    #[error("buffer too small for this Galileo page")]
-    WouldNotFit,
 }

@@ -1,6 +1,9 @@
-use crate::gps::{
-    link::{read_bits, GPS_INVERTED_PREAMBLE_BYTE, GPS_WORD_MASK},
-    GpsQzssFrame, GPS_FRAME_BITS, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+use crate::{
+    bits::get_bit,
+    gps::{
+        frame::GPS_WORD_MASK, GpsQzssFrame, GPS_FRAME_BITS, GPS_INVERTED_PREAMBLE_BYTE,
+        GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+    },
 };
 
 #[cfg(feature = "log")]
@@ -85,7 +88,7 @@ impl GpsQzssDecoder {
             return None;
         }
 
-        match GpsQzssFrame::decode_words(&self.words, self.parity_verification) {
+        match GpsQzssFrame::from_words(&self.words, self.parity_verification) {
             Ok(frame) => {
                 // a frame was consumed: the next one needs 300 new bits
                 self.fill = 0;
@@ -132,7 +135,7 @@ impl GpsQzssDecoder {
         let mut pos = bit_offset;
 
         while pos < total {
-            let bit = read_bits(slice, pos, 1).unwrap_or_default() > 0;
+            let bit = get_bit(slice, pos);
             pos += 1;
 
             if let Some(frame) = self.push_bit(bit) {
@@ -146,9 +149,17 @@ impl GpsQzssDecoder {
 
 #[cfg(test)]
 mod test {
-    use crate::gps::{
-        link, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssSubframe, GPS_FRAME_BITS,
+    use crate::{
+        bits::get_bit,
+        gps::{
+            test_vectors::{on_air, UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3},
+            GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssSubframe, GPS_FRAME_BITS,
+            GPS_WORD_BITS,
+        },
+        BigEndian,
     };
+
+    use bitbuffer::BitWriteStream;
 
     /// Builds a realistic stream: 5 consecutive subframes (1 to 5),
     /// with evolving TLM/HOW contents.
@@ -178,25 +189,39 @@ mod test {
             .collect()
     }
 
-    /// Encodes the frames contiguously, after `offset` bits of noise.
+    /// Pseudo random bit generator
+    struct Noise(u16);
+
+    impl Noise {
+        fn bit(&mut self) -> bool {
+            self.0 = (self.0 >> 1) ^ (-((self.0 & 1) as i16) as u16 & 0xB400);
+            self.0 & 0x1 > 0
+        }
+    }
+
+    /// Streams the frames contiguously, after `offset` bits of noise,
+    /// followed by a few bits of noise.
     fn encode_stream(frames: &[GpsQzssFrame], offset: usize) -> Vec<u8> {
-        let size = (offset + frames.len() * GPS_FRAME_BITS + 7) / 8 + 1;
-        let mut buffer = vec![0u8; size];
+        let mut noise = Noise(0xACE1);
+        let mut bytes = Vec::new();
 
-        // pseudo random noise in front of the stream
-        let mut lfsr = 0xACE1u16;
-        for byte in buffer.iter_mut() {
-            lfsr = (lfsr >> 1) ^ (-((lfsr & 1) as i16) as u16 & 0xB400);
-            *byte = lfsr as u8;
+        {
+            let mut writer = BitWriteStream::new(&mut bytes, BigEndian);
+
+            for _ in 0..offset {
+                writer.write_bool(noise.bit()).unwrap();
+            }
+
+            for frame in frames.iter() {
+                writer.write(frame).unwrap();
+            }
+
+            for _ in 0..13 {
+                writer.write_bool(noise.bit()).unwrap();
+            }
         }
 
-        for (i, frame) in frames.iter().enumerate() {
-            frame
-                .encode_at(&mut buffer, offset + i * GPS_FRAME_BITS)
-                .unwrap();
-        }
-
-        buffer
+        bytes
     }
 
     fn decode_all(decoder: &mut GpsQzssDecoder, buffer: &[u8]) -> Vec<(usize, GpsQzssFrame)> {
@@ -260,8 +285,7 @@ mod test {
         let mut decoded = Vec::new();
 
         for pos in 0..buffer.len() * 8 {
-            let bit = link::read_bits(&buffer, pos, 1).unwrap() > 0;
-            if let Some(frame) = decoder.push_bit(bit) {
+            if let Some(frame) = decoder.push_bit(get_bit(&buffer, pos)) {
                 decoded.push(frame);
             }
         }
@@ -293,7 +317,7 @@ mod test {
         let mut buffer = encode_stream(&frames, 9);
 
         // flip one bit in the middle of frame #2 (data bit of word 4)
-        let bit = 9 + 2 * GPS_FRAME_BITS + 3 * 30 + 10;
+        let bit = 9 + 2 * GPS_FRAME_BITS + 3 * GPS_WORD_BITS + 10;
         buffer[bit / 8] ^= 0x80 >> (bit % 8);
 
         let mut decoder = GpsQzssDecoder::default();
@@ -307,28 +331,76 @@ mod test {
         assert_eq!(decoded[1], frames[1]);
         assert_eq!(decoded[2], frames[3]);
         assert_eq!(decoded[3], frames[4]);
+
+        // without parity verification, the corrupted frame is kept
+        let mut decoder = GpsQzssDecoder::default().without_parity_verification();
+        let decoded = decode_all(&mut decoder, &buffer);
+        assert!(decoded.len() >= 5);
+        assert!(decoded.iter().any(|(_, f)| *f == frames[3]));
+    }
+
+    #[test]
+    fn reset() {
+        let frames = stream_model(2);
+        let buffer = encode_stream(&frames, 0);
+
+        // interrupted in the middle of the first frame
+        let mut decoder = GpsQzssDecoder::default();
+        for pos in 0..GPS_FRAME_BITS / 2 {
+            assert!(decoder.push_bit(get_bit(&buffer, pos)).is_none());
+        }
+
+        decoder.reset();
+
+        // the end of the first frame is lost, the second one is decoded
+        let decoded: Vec<_> = decode_all(&mut decoder, &buffer[GPS_FRAME_BITS / 2 / 8..])
+            .into_iter()
+            .map(|(_, f)| f)
+            .collect();
+
+        assert_eq!(decoded, vec![frames[1]]);
     }
 
     #[test]
     fn real_ublox_stream() {
-        use link::test::{UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3};
+        let mut bytes = Vec::new();
 
-        let mut buffer = [0u8; 128];
-        let mut position = 13;
+        {
+            let mut writer = BitWriteStream::new(&mut bytes, BigEndian);
+            writer.write_int(0u16, 13).unwrap();
 
-        for words in [UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3] {
-            let words = link::from_polarity_corrected(&words);
-            link::write_words(&mut buffer, position, &words).unwrap();
-            position += GPS_FRAME_BITS;
+            for words in [UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3] {
+                for word in on_air(words).iter() {
+                    writer.write_int(*word, GPS_WORD_BITS).unwrap();
+                }
+            }
+
+            writer.write_int(0u8, 8).unwrap();
         }
 
         let mut decoder = GpsQzssDecoder::default();
-        let decoded = decode_all(&mut decoder, &buffer);
+        let decoded = decode_all(&mut decoder, &bytes);
 
         assert_eq!(decoded.len(), 3);
         assert_eq!(decoded[0].0, 13);
         assert!(decoded[0].1.subframe.as_eph1().is_some());
         assert!(decoded[1].1.subframe.as_eph2().is_some());
         assert!(decoded[2].1.subframe.as_eph3().is_some());
+
+        // bit exact: the decoded frames re-encode into the very same stream
+        let mut reencoded = Vec::new();
+
+        {
+            let mut writer = BitWriteStream::new(&mut reencoded, BigEndian);
+            writer.write_int(0u16, 13).unwrap();
+
+            for (_, frame) in decoded.iter() {
+                writer.write(frame).unwrap();
+            }
+
+            writer.write_int(0u8, 8).unwrap();
+        }
+
+        assert_eq!(reencoded, bytes);
     }
 }

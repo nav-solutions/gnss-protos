@@ -68,6 +68,7 @@ pub(crate) fn get_bit(slice: &[u8], bit_pos: usize) -> bool {
 
 /// Writes a single bit at absolute bit position `bit_pos`.
 #[inline]
+#[cfg(any(test, feature = "galileo"))]
 pub(crate) fn set_bit(slice: &mut [u8], bit_pos: usize, bit: bool) {
     let mask = 0x80u8 >> (bit_pos % 8);
 
@@ -126,6 +127,34 @@ pub(crate) fn to_scaled(value: f64, pow2: i32) -> i64 {
 pub(crate) fn from_scaled<T: Into<f64>>(value: T, pow2: i32) -> f64 {
     value.into() * 2.0_f64.powi(pow2)
 }
+
+/// Implements [PartialEq] by comparing the binary representations
+/// (bit true equality): floating point values are compared at the ICD resolution,
+/// and two messages are equal if and only if they encode to the very same bits.
+/// The type must implement [crate::Message], and `$bytes` must be
+/// its [crate::Message::encoding_size].
+#[cfg(any(feature = "gps", feature = "galileo"))]
+macro_rules! impl_eq_by_encoding {
+    ($t:ty, $bytes:expr) => {
+        impl PartialEq for $t {
+            fn eq(&self, rhs: &Self) -> bool {
+                let mut lhs_bytes = [0u8; $bytes];
+                let mut rhs_bytes = [0u8; $bytes];
+
+                match (
+                    crate::Message::encode(self, &mut lhs_bytes),
+                    crate::Message::encode(rhs, &mut rhs_bytes),
+                ) {
+                    (Ok(_), Ok(_)) => lhs_bytes == rhs_bytes,
+                    _ => false,
+                }
+            }
+        }
+    };
+}
+
+#[cfg(any(feature = "gps", feature = "galileo"))]
+pub(crate) use impl_eq_by_encoding;
 
 #[cfg(test)]
 mod test {

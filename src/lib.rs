@@ -3,35 +3,42 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /*
- * gnss-protos is part of the rtk-rs framework.
+ * gnss-protos is part of the nav-solutions framework.
  *
  * Authors: Guillaume W. Bres <guillaume.bressaix@gmail.com> et al.
- * (cf. https://github.com/rtk-rs/gnss-protos/graphs/contributors)
+ * (cf. https://github.com/nav-solutions/gnss-protos/graphs/contributors)
  *
  * This framework is shipped under Mozilla Public V2 license.
  */
 
 pub mod bits;
-
-mod buffer;
-pub use buffer::{Buffer, StaticBuffer};
-
-mod errors;
-
-#[cfg(test)]
-mod tests;
+pub mod constants;
 
 #[cfg(feature = "gps")]
-mod gps;
+#[cfg_attr(docsrs, doc(cfg(feature = "gps")))]
+pub mod gps;
 
 #[cfg(feature = "galileo")]
 #[cfg_attr(docsrs, doc(cfg(feature = "galileo")))]
 pub mod galileo;
 
+#[cfg(test)]
+pub mod tests;
+
+mod buffer;
+mod errors;
+
+pub use buffer::{Buffer, StaticBuffer};
 pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
-pub use gps::*;
+pub use gps::{
+    GpsError, GpsQzssAlmanach, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2,
+    GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssSubframe,
+    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_INVERTED_PREAMBLE_BYTE,
+    GPS_PREAMBLE_BYTE, GPS_SUBFRAME_DATA_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES,
+    GPS_WORD_DATA_BITS,
+};
 
 #[cfg(feature = "galileo")]
 pub use galileo::{
@@ -39,13 +46,15 @@ pub use galileo::{
     GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3, GalileoInavWord4,
     GalileoInavWord5, GalileoInavWord6, GalileoSignalHealth, GalileoSisa,
     GALILEO_INAV_DEFAULT_MAX_SYMBOL_ERRORS, GALILEO_INAV_PAGE_BYTES, GALILEO_INAV_PAGE_SYMBOLS,
-    GALILEO_INAV_SYMBOL_RATE, GALILEO_INAV_WORD0_SPARE_BYTES, GALILEO_INAV_WORD_BITS,
+    GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYMBOL_RATE, GALILEO_INAV_SYNC_PATTERN,
+    GALILEO_INAV_SYNC_SYMBOLS, GALILEO_INAV_WORD0_SPARE_BYTES, GALILEO_INAV_WORD_BITS,
     GALILEO_INAV_WORD_BYTES, GALILEO_IONO_REGIONS,
 };
 
-pub use bitbuffer::{BigEndian, BitError, BitRead, BitWrite, Endianness, LittleEndian};
-
-use bitbuffer::{BitReadBuffer, BitReadStream, BitWriteStream};
+pub use bitbuffer::{
+    BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
+    Endianness, LittleEndian,
+};
 
 /// All our GNSS decoders implement the [Decoder] trait.
 pub trait Decoder<E: Endianness>: Default {
@@ -80,19 +89,31 @@ pub trait Message<E: Endianness>:
     /// Bitwise encoding size. Some protocols may be unaligned.
     fn encoding_bits(&self) -> usize;
 
-    /// [Message] encoding attempt to mutable buffer.
-    /// [Message] must fit entirely.
+    /// [Message] encoding attempt to mutable buffer, starting on its first bit.
+    /// [Message] must fit entirely, otherwise [BitError::NotEnoughData] is returned.
+    /// To encode at any bit position, or to stream several messages back to back,
+    /// write the [Message] to a [BitWriteStream] (see [BitWrite]).
     ///
     /// Returns total number of encoded bytes on success,
     /// depending on protocol, this may include padding bits.
-    /// Returns [Self::Err] on encoding issues.
+    /// Returns [BitError] on encoding issues.
     fn encode(&self, buffer: &mut [u8]) -> Result<usize, BitError> {
+        let bits = self.encoding_bits();
+
+        if buffer.len() * 8 < bits {
+            return Err(BitError::NotEnoughData {
+                requested: bits,
+                bits_left: buffer.len() * 8,
+            });
+        }
+
         let mut writer = BitWriteStream::from_slice(buffer, E::endianness());
         writer.write(self)?;
         Ok(self.encoding_size())
     }
 
-    /// [Message] decoding attempt, from read-only buffer state.
+    /// [Message] decoding attempt, from read-only buffer state, starting on its first bit.
+    /// To decode at any bit position, read the [Message] from a [BitReadStream] (see [BitRead]).
     /// This is not compatible with a real-time decoder, for this task you are
     /// expected to run a mutable [Decoder] implementation.
     fn decode(buffer: &[u8]) -> Result<Self, BitError> {
