@@ -44,6 +44,15 @@ fn run_file(path: &str) -> u32 {
 #[test]
 fn test_gps_lnav_eph123() {
     init_logger();
-    
     assert_eq!(run_file("data/GPS/esbcdnk_g15_eph123.bin"), 24);
+    assert_eq!(run_file("data/GPS/esbcdnk_g24_eph123.bin"), 21);
+    assert_eq!(run_file("data/GPS/esbcdnk_g31_eph123.bin"), 27);
+}
+
+#[test]
+fn test_qzss_lnav_eph123() {
+    init_logger();
+    assert_eq!(run_file("data/GPS/esbcdnk_j01_eph123.bin"), 12);
+    assert_eq!(run_file("data/GPS/esbcdnk_j02_eph123.bin"), 18);
+    assert_eq!(run_file("data/GPS/esbcdnk_j03_eph123.bin"), 15);
 }
