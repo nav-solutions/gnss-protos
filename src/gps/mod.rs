@@ -47,6 +47,19 @@ pub const GPS_FRAME_BITS: usize = GPS_WORDS_PER_FRAME * GPS_WORD_BITS;
 /// Total GPS/QZSS frame size (in bytes!)
 pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
 
+/// GPS Week number wraps at 1024
+pub const GPS_WEEK_ROLLOVER: u32 = 1024;
+
+/// A GPS/QZSS frame (5 subframes) lasts 30s. Frames are
+/// aligned to the week start.
+pub const GPS_FRAME_DURATION_S: u32 = 30;
+
+/// A GPS/QZSS subframe lasts 6. We have 5 subframes per frame.
+pub const GPS_SUBFRAME_DURATION_S: u32 = 6;
+
+/// SF1.toc and SF2.toe are expressed with a 16s LSB
+pub const GPS_TOC_TOE_LSB_S: u32 = 16;
+
 /// Number of data (parity free) bytes per GPS frame.
 pub(crate) const GPS_FRAME_DATA_BYTES: usize = GPS_WORDS_PER_FRAME * GPS_WORD_DATA_BITS / 8;
 

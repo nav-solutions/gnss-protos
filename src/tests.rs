@@ -1,6 +1,4 @@
-use std::{
-    sync::Once,
-};
+use std::sync::Once;
 
 use log::LevelFilter;
 
@@ -19,40 +17,40 @@ pub fn init_logger() {
 // /// in a stream, at the begginning of the stream, simply "delaying" the following values.
 // pub fn insert_zeros(slice: &[u8], num_zero_bits: usize) -> Vec<u8> {
 //     let size = slice.len();
-// 
+//
 //     let extra_bit = num_zero_bits % 8;
-// 
+//
 //     let mut extra_bytes = num_zero_bits / 8;
-// 
+//
 //     if extra_bit > 0 {
 //         extra_bytes += 1;
 //     }
-// 
+//
 //     println!("extra bytes: {}", extra_bytes);
-// 
+//
 //     let mut ret = vec![0u8; size + extra_bytes];
-// 
+//
 //     // first copy as is
 //     ret[..size].copy_from_slice(slice);
-// 
+//
 //     if extra_bit > 0 {
 //         let shift = 8 - extra_bit;
 //         let mut mask = 0x00;
-// 
+//
 //         for i in 0..extra_bit {
 //             mask |= 1 << (8 - i - 1);
 //         }
-// 
+//
 //         println!("MASK=0x{:02X}", mask);
-// 
+//
 //         for i in 0..size - 1 {
 //             ret[size - i - 1] >>= extra_bit;
 //             ret[size - i - 1] |= ret[size - i - 2] << (8 - extra_bit)
 //         }
-// 
+//
 //         ret[0] >>= extra_bit;
 //     }
-// 
+//
 //     ret
 // }
 
