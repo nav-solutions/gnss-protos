@@ -1,8 +1,9 @@
 use crate::{
     gps::{
         GpsError, GpsQzssHow, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
-        GPS_FRAME_DATA_BYTES, GPS_INVERTED_PREAMBLE_BYTE, GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
-        GPS_WORD_BITS,
+        GPS_FRAME_DATA_BYTES, GPS_FRAME_DURATION_S, GPS_INVERTED_PREAMBLE_BYTE, GPS_PREAMBLE_BYTE,
+        GPS_QZSS_ALMANACH_PAGES, GPS_QZSS_MESSAGE_DURATION_S, GPS_SUBFRAME_DURATION_S,
+        GPS_WEEK_SECONDS, GPS_WORDS_PER_FRAME, GPS_WORD_BITS,
     },
     Message,
 };
@@ -247,6 +248,40 @@ impl GpsQzssFrame {
         self
     }
 
+    /// Returns the GPS time (in seconds of week) at which the transmission of
+    /// this subframe started. The HOW carries the time of the next subframe.
+    pub fn transmission_time_s(&self) -> u32 {
+        (self.how.tow + GPS_WEEK_SECONDS - GPS_SUBFRAME_DURATION_S) % GPS_WEEK_SECONDS
+    }
+
+    /// Returns the GPS time (in seconds of week) at which the frame (5 subframes)
+    /// this subframe belongs to started.
+    pub fn frame_start_time_s(&self) -> u32 {
+        let index = self.subframe.frame_id().encode() as u32;
+        (self.how.tow + GPS_WEEK_SECONDS - index * GPS_SUBFRAME_DURATION_S) % GPS_WEEK_SECONDS
+    }
+
+    /// Returns the page number (1..=25) of the frame this subframe belongs to,
+    /// in the 12'30" rotation: subframes 4 and 5 transmit that page
+    /// ([crate::gps::GpsQzssFrame4], [crate::gps::GpsQzssFrame5]).
+    ///
+    /// The page number is not transmitted: it derives from the time of transmission, the
+    /// rotation being aligned on the beginning of the week (frame 0 of the week is page 1).
+    pub fn page_number(&self) -> u8 {
+        let frame = self.frame_start_time_s() / GPS_FRAME_DURATION_S;
+        (frame % GPS_QZSS_ALMANACH_PAGES as u32) as u8 + 1
+    }
+
+    /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
+    /// of a complete 12'30" rotation: a rotation that ends before the end of the week.
+    pub fn starts_rotation(&self) -> bool {
+        let start = self.transmission_time_s();
+
+        self.subframe.frame_id() == crate::gps::GpsQzssFrameId::Ephemeris1
+            && start % GPS_QZSS_MESSAGE_DURATION_S == 0
+            && start + GPS_QZSS_MESSAGE_DURATION_S <= GPS_WEEK_SECONDS
+    }
+
     /// Interprets the 240 parity free data bits (30 bytes) of a frame.
     fn from_data(data: &[u8; GPS_FRAME_DATA_BYTES]) -> Result<Self, GpsError> {
         let mut stream = BitReadStream::new(BitReadBuffer::new(data, BigEndian));
@@ -361,8 +396,8 @@ mod test {
                 bytes_to_words, on_air, to_polarity_corrected, words_to_bytes, UBLOX_EPH1,
                 UBLOX_EPH2, UBLOX_EPH3,
             },
-            GpsQzssFrame, GpsQzssFrameId, GpsQzssSubframe, GPS_FRAME_BITS, GPS_FRAME_BYTES,
-            GPS_PREAMBLE_BYTE,
+            GpsQzssFrame, GpsQzssFrame4, GpsQzssFrame5, GpsQzssFrameId, GpsQzssSubframe,
+            GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_PREAMBLE_BYTE, GPS_SUBFRAME_DATA_BYTES,
         },
         BigEndian, Message,
     };
@@ -726,14 +761,21 @@ mod test {
 
     #[test]
     fn raw_almanach_subframes() {
-        for (frame_id, subframe) in [
+        // raw data bits, interpreted (as reserved pages: SV ID 0 and 63)
+        // through the Message trait of the subframe 4 / 5 pages
+        let raw4: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| i as u8 * 7);
+        let raw5: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| 0xff - i as u8);
+
+        for (frame_id, subframe, expected) in [
             (
                 GpsQzssFrameId::Almanach4,
-                GpsQzssSubframe::Almanach4(core::array::from_fn(|i| i as u8 * 7)),
+                GpsQzssSubframe::Almanach4(GpsQzssFrame4::decode(&raw4).unwrap()),
+                raw4,
             ),
             (
                 GpsQzssFrameId::Almanach5,
-                GpsQzssSubframe::Almanach5(core::array::from_fn(|i| 0xff - i as u8)),
+                GpsQzssSubframe::Almanach5(GpsQzssFrame5::decode(&raw5).unwrap()),
+                raw5,
             ),
         ] {
             let frame = GpsQzssFrame::model(frame_id).with_subframe(subframe);
@@ -742,9 +784,19 @@ mod test {
 
             // the 2 last bits of word 10 (t-bits) are solved for the parity:
             // they are decoded as zeros
-            let (raw, expected) = match (decoded.subframe, subframe) {
-                (GpsQzssSubframe::Almanach4(a), GpsQzssSubframe::Almanach4(b))
-                | (GpsQzssSubframe::Almanach5(a), GpsQzssSubframe::Almanach5(b)) => (a, b),
+            let mut raw = [0u8; GPS_SUBFRAME_DATA_BYTES];
+
+            match (decoded.subframe, subframe) {
+                (GpsQzssSubframe::Almanach4(a), GpsQzssSubframe::Almanach4(b)) => {
+                    assert!(a.as_reserved().is_some());
+                    assert_eq!(a, b);
+                    a.encode(&mut raw).unwrap();
+                },
+                (GpsQzssSubframe::Almanach5(a), GpsQzssSubframe::Almanach5(b)) => {
+                    assert!(a.as_reserved().is_some());
+                    assert_eq!(a, b);
+                    a.encode(&mut raw).unwrap();
+                },
                 _ => panic!("wrong subframe type"),
             };
 

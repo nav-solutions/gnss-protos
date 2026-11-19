@@ -35,8 +35,10 @@ pub use errors::{BufferingError, Error};
 
 #[cfg(feature = "gps")]
 pub use gps::{
-    GpsError, GpsQzssAlmanach, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2,
-    GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssSubframe,
+    GpsError, GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssConfigHealth, GpsQzssDecoder,
+    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame4, GpsQzssFrame5,
+    GpsQzssFrameId, GpsQzssHow, GpsQzssIonosphereUtc, GpsQzssMessage, GpsQzssNmct,
+    GpsQzssReservedPage, GpsQzssSatelliteHealth, GpsQzssSpecialMessage, GpsQzssSubframe,
     GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_INVERTED_PREAMBLE_BYTE,
     GPS_PREAMBLE_BYTE, GPS_SUBFRAME_DATA_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES,
     GPS_WORD_DATA_BITS,

@@ -67,20 +67,38 @@ pub const GPS_TOC_TOE_LSB_S: u32 = 16;
 /// Number of data (parity free) bytes per GPS frame.
 pub(crate) const GPS_FRAME_DATA_BYTES: usize = GPS_WORDS_PER_FRAME * GPS_WORD_DATA_BITS / 8;
 
-/// Number of [GpsQzssFrame]s in a rotation: EPH-1,2,3 then ALM-4,5.
+/// Number of [GpsQzssFrame]s (subframes) in a frame: EPH-1,2,3 then ALM-4,5.
+/// A frame lasts 30 s.
 pub const GPS_QZSS_ROTATION_ITEMS: usize = 5;
 
-/// Number of "pages" or complete EPH-1,2,3 ALM-4,5 rotation in a GPS/QZSS message.
-/// Which contains the complete Almanach information for the entire constellation.
-pub const GPS_QZSS_MESSAGE_ITEMS: usize = 25;
+/// Number of pages of subframes 4 and 5: the complete almanac is transmitted
+/// over 25 frames (12'30").
+pub const GPS_QZSS_ALMANACH_PAGES: usize = 25;
 
-/// Total size (in bytes) that must be allocated to fit a complete 25-page GPS message,
-/// including Almanach for the entire constellation. This is usually not enough for a true
-/// application that may require double/tripple buffering, but at least this defines your basis.
-pub const GPS_QZSS_MESSAGE_BYTES: usize = GPS_QZSS_MESSAGE_ITEMS * GPS_FRAME_BYTES;
+/// Number of pages (frames of 5 subframes) in a GPS/QZSS message: the 12'30" rotation,
+/// which contains the complete almanac for the entire constellation.
+pub const GPS_QZSS_MESSAGE_ITEMS: usize = GPS_QZSS_ALMANACH_PAGES;
 
-/// Total number of bits in a 25-page GPS message.
-pub const GPS_QZSS_MESSAGE_BITS: usize = GPS_QZSS_MESSAGE_ITEMS * GPS_FRAME_BITS;
+/// Number of [GpsQzssFrame]s (subframes) in a GPS/QZSS message (12'30").
+pub const GPS_QZSS_MESSAGE_FRAMES: usize = GPS_QZSS_MESSAGE_ITEMS * GPS_QZSS_ROTATION_ITEMS;
+
+/// Total number of bits in a complete GPS/QZSS message (125 contiguous subframes).
+pub const GPS_QZSS_MESSAGE_BITS: usize = GPS_QZSS_MESSAGE_FRAMES * GPS_FRAME_BITS;
+
+/// Total size (in bytes) that must be allocated to fit a complete GPS/QZSS message
+/// (125 contiguous subframes), including the almanac of the entire constellation.
+/// This is usually not enough for a true application that may require double/triple
+/// buffering, but at least this defines your basis.
+pub const GPS_QZSS_MESSAGE_BYTES: usize = (GPS_QZSS_MESSAGE_BITS + 7) / 8;
+
+/// Duration (in seconds) of a complete GPS/QZSS message (12'30").
+pub const GPS_QZSS_MESSAGE_DURATION_S: u32 = GPS_QZSS_MESSAGE_ITEMS as u32 * GPS_FRAME_DURATION_S;
+
+/// GPS week duration (in seconds)
+pub const GPS_WEEK_SECONDS: u32 = 604_800;
+
+/// Data ID of the GPS / QZSS LNAV message (`01`), transmitted in subframes 4 and 5.
+pub const GPS_QZSS_DATA_ID: u8 = 1;
 
 mod almanach;
 mod decoder;
@@ -89,10 +107,13 @@ mod frame;
 mod frame1;
 mod frame2;
 mod frame3;
+mod frame4;
+mod frame5;
 mod frame_id;
 mod health;
 mod how;
 mod message;
+mod reserved;
 mod subframe;
 mod tlm;
 
@@ -103,12 +124,31 @@ pub use frame::GpsQzssFrame;
 pub use frame1::GpsQzssFrame1;
 pub use frame2::GpsQzssFrame2;
 pub use frame3::GpsQzssFrame3;
+pub use frame4::{
+    GpsQzssConfigHealth, GpsQzssFrame4, GpsQzssIonosphereUtc, GpsQzssNmct, GpsQzssSpecialMessage,
+    GPS_CONFIG_HEALTH_SATELLITES, GPS_CONFIG_SATELLITES, GPS_FRAME4_PAGE_SV_IDS,
+    GPS_NMCT_ERD_COUNT, GPS_NMCT_ERD_NOT_AVAILABLE, GPS_SPECIAL_MESSAGE_CHARS,
+};
+pub use frame5::{GpsQzssAlmanachHealth, GpsQzssFrame5, GPS_ALMANACH_HEALTH_SATELLITES};
 pub use frame_id::GpsQzssFrameId;
 pub use health::GpsQzssSatelliteHealth;
 pub use how::GpsQzssHow;
-pub use message::GpsQzssMessage;
+pub use message::{GpsQzssMessage, GpsQzssMessageBuilder, GpsQzssMessagePage};
+pub use reserved::{GpsQzssReservedPage, GPS_PAGE_DATA_BYTES};
 pub use subframe::{GpsQzssSubframe, GPS_SUBFRAME_DATA_BYTES};
 pub use tlm::GpsQzssTelemetry;
+
+/// Returns the SV (page) ID of the subframe 4 or 5 page that starts
+/// at the current position, without consuming the stream.
+pub(crate) fn peek_sv_id(
+    stream: &mut crate::BitReadStream<'_, crate::BigEndian>,
+) -> Result<u8, crate::BitError> {
+    let start = stream.pos();
+    let _data_id = stream.read_int::<u8>(2)?;
+    let sv_id = stream.read_int::<u8>(6)?;
+    stream.set_pos(start)?;
+    Ok(sv_id)
+}
 
 #[cfg(test)]
 pub(crate) mod test_vectors;
@@ -131,5 +171,31 @@ mod test {
         assert_eq!(GPS_FRAME_DATA_BYTES, 30);
         assert_eq!(GPS_SUBFRAME_DATA_BYTES, 24);
         assert_eq!(GPS_INVERTED_PREAMBLE_BYTE, 0x74);
+    }
+
+    #[test]
+    fn message_properties() {
+        use crate::gps::{
+            GPS_QZSS_MESSAGE_BITS, GPS_QZSS_MESSAGE_BYTES, GPS_QZSS_MESSAGE_DURATION_S,
+            GPS_QZSS_MESSAGE_FRAMES, GPS_QZSS_MESSAGE_ITEMS, GPS_QZSS_ROTATION_ITEMS,
+            GPS_SUBFRAME_DURATION_S, GPS_WEEK_SECONDS,
+        };
+
+        assert_eq!(GPS_QZSS_ROTATION_ITEMS, 5);
+        assert_eq!(GPS_QZSS_MESSAGE_ITEMS, 25);
+        assert_eq!(GPS_QZSS_MESSAGE_FRAMES, 125);
+        assert_eq!(GPS_QZSS_MESSAGE_BITS, 37_500);
+        assert_eq!(GPS_QZSS_MESSAGE_BYTES, 4688);
+
+        // 12'30"
+        assert_eq!(GPS_QZSS_MESSAGE_DURATION_S, 750);
+        assert_eq!(
+            GPS_QZSS_MESSAGE_FRAMES as u32 * GPS_SUBFRAME_DURATION_S,
+            GPS_QZSS_MESSAGE_DURATION_S
+        );
+
+        // a week is not a whole number of messages:
+        // the last rotation of the week is interrupted
+        assert_eq!(GPS_WEEK_SECONDS % GPS_QZSS_MESSAGE_DURATION_S, 300);
     }
 }
