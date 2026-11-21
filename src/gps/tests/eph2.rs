@@ -4,10 +4,8 @@ use crate::{
     gps::{
         test_vectors::{on_air, words_to_bytes, UBLOX_EPH2},
         tests::assert_valid_subframe,
-        GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframe2, GpsQzssSubframeId, GpsQzssHow, 
-        GpsQzssTelemetry, GPS_SUBFRAME_BITS,
-        GpsQzssSubframeEnum,
-        GPS_SUBFRAME_BYTES,
+        GpsQzssDecoder, GpsQzssHow, GpsQzssSubframe, GpsQzssSubframe2, GpsQzssSubframeEnum,
+        GpsQzssSubframeId, GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES,
     },
     tests::init_logger,
     BigEndian, Message,

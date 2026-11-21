@@ -60,7 +60,7 @@ pub const GPS_SUBFRAME_DURATION_S: u32 = 6;
 
 /// Total number of bytes required to allocate a 300-bit GPS/QZSS frame: 38 bytes
 /// with one byte half zero-padded.
-pub const GPS_SUBFRAME_BYTES: usize = (GPS_SUBFRAME_BITS / 8) + 1;
+pub const GPS_SUBFRAME_BYTES: usize = GPS_SUBFRAME_BITS / 8 + 1;
 
 /// Total number of payload bytes (=parity free) in a subframe: Words3-10 included: 27 bytes
 const GPS_SUBFRAME_DATA_BYTES: usize = GPS_WORD_BITS * 8 / 8;
@@ -72,7 +72,7 @@ pub const GPS_FRAME_ITEMS: usize = 5;
 pub const GPS_FRAME_BITS: usize = GPS_FRAME_ITEMS * GPS_SUBFRAME_BITS;
 
 /// Total number of bytes required to allocate a 30s page
-pub const GPS_FRAME_BYTES: usize = (GPS_FRAME_BITS / 8) + 1;
+pub const GPS_FRAME_BYTES: usize = GPS_FRAME_BITS / 8 + 1;
 
 /// A GPS/QZSS frame lasts 30 seconds.
 pub const GPS_FRAME_DURATION_S: u32 = GPS_FRAME_ITEMS as u32 * GPS_SUBFRAME_DURATION_S;
@@ -86,7 +86,7 @@ pub const GPS_SUPERFRAME_BITS: usize = GPS_SUPERFRAME_ITEMS * GPS_FRAME_BITS;
 
 /// Total number of bytes required to allocate a complete almanach, 12'30s of GPS/QZSS broadcast,
 /// which means 25x 30s cycles: 4_688 bytes.
-pub const GPS_SUPERFRAME_BYTES: usize = GPS_SUPERFRAME_ITEMS * GPS_FRAME_BYTES;
+pub const GPS_SUPERFRAME_BYTES: usize = GPS_SUPERFRAME_BITS / 8 + 1;
 
 /// Duration of a constellation Almanach in seconds: 25 * 30s = 750s = 12'30s.
 pub const GPS_SUPERFRAME_DURATION_S: u32 = GPS_SUPERFRAME_ITEMS as u32 * GPS_FRAME_DURATION_S;
@@ -102,7 +102,7 @@ mod frame;
 mod health;
 mod how;
 mod subframe;
-mod superframe;
+// mod superframe;
 mod tlm;
 
 // #[cfg(feature = "hifitime")]
@@ -111,11 +111,11 @@ mod tlm;
 pub use almanach::GpsQzssAlmanach;
 pub use decoder::GpsQzssDecoder;
 pub use errors::GpsError;
+pub use frame::*;
 pub use health::GpsQzssSatelliteHealth;
 pub use how::GpsQzssHow;
 pub use subframe::*;
-pub use frame::*;
-pub use superframe::*;
+// pub use superframe::*;
 pub use tlm::GpsQzssTelemetry;
 
 // #[cfg(feature = "hifitime")]
@@ -132,10 +132,9 @@ mod test {
     use crate::gps::{
         GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_FRAME_DURATION_S, GPS_FRAME_ITEMS,
         GPS_INVERTED_PREAMBLE_BYTE, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_DATA_BYTES,
-        GPS_SUBFRAME_DURATION_S, GPS_SUBFRAME_WORDS, GPS_SUPERFRAME_DURATION_S,
-        GPS_SUPERFRAME_ITEMS, GPS_WEEK_ROLLOVER, GPS_WORD_BITS, GPS_WORD_BYTES,
-        GPS_SUPERFRAME_BITS,
-        GPS_SUPERFRAME_BYTES,
+        GPS_SUBFRAME_DURATION_S, GPS_SUBFRAME_WORDS, GPS_SUPERFRAME_BITS, GPS_SUPERFRAME_BYTES,
+        GPS_SUPERFRAME_DURATION_S, GPS_SUPERFRAME_ITEMS, GPS_WEEK_ROLLOVER, GPS_WORD_BITS,
+        GPS_WORD_BYTES,
     };
 
     #[test]

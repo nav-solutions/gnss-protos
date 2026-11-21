@@ -1,7 +1,7 @@
 //! GPS / QZSS scenario tests: realistic frames, bit-exact reciprocity
 //! through the [crate::Message] trait, bitbuffer streams and the [crate::gps::GpsQzssDecoder].
 
-use crate::gps::{test_vectors::bytes_to_words,GpsQzssSubframe};
+use crate::gps::{test_vectors::bytes_to_words, GpsQzssSubframe};
 
 // mod almanach;
 mod eph1;

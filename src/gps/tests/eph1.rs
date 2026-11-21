@@ -4,9 +4,9 @@ use std::{fs::File, io::Write};
 
 use crate::{
     gps::{
-        tests::assert_valid_subframe, GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframe1, GpsQzssSubframeId,
-        GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssTelemetry, GPS_SUBFRAME_BITS,
-        GpsQzssSubframeEnum,
+        tests::assert_valid_subframe, GpsQzssDecoder, GpsQzssHow, GpsQzssSatelliteHealth,
+        GpsQzssSubframe, GpsQzssSubframe1, GpsQzssSubframeEnum, GpsQzssSubframeId,
+        GpsQzssTelemetry, GPS_SUBFRAME_BITS,
     },
     tests::init_logger,
     BigEndian, Message,

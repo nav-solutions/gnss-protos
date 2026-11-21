@@ -1,10 +1,8 @@
 use crate::{
     bits::get_bit,
     gps::{
-        GPS_SUBFRAME_BITS, GPS_INVERTED_PREAMBLE_BYTE,
-        GPS_PREAMBLE_BYTE, GPS_SUBFRAME_WORDS,
-        GpsQzssSubframe,
-        subframe::GPS_WORD_MASK,
+        subframe::GPS_WORD_MASK, GpsQzssSubframe, GPS_INVERTED_PREAMBLE_BYTE, GPS_PREAMBLE_BYTE,
+        GPS_SUBFRAME_BITS, GPS_SUBFRAME_WORDS,
     },
 };
 
@@ -155,9 +153,8 @@ mod test {
         bits::get_bit,
         gps::{
             test_vectors::{on_air, UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3},
-            GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframeId, GPS_SUBFRAME_BITS,
-            GPS_WORD_BITS,
-            GpsQzssSubframeEnum,
+            GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframeEnum, GpsQzssSubframeId,
+            GPS_SUBFRAME_BITS, GPS_WORD_BITS,
         },
         BigEndian,
     };
@@ -254,7 +251,12 @@ mod test {
             assert_eq!(decoded.len(), frames.len(), "offset={}", offset);
 
             for (i, (position, frame)) in decoded.iter().enumerate() {
-                assert_eq!(*position, offset + i * GPS_SUBFRAME_BITS, "offset={}", offset);
+                assert_eq!(
+                    *position,
+                    offset + i * GPS_SUBFRAME_BITS,
+                    "offset={}",
+                    offset
+                );
                 assert_eq!(*frame, frames[i], "offset={} frame #{}", offset, i);
             }
         }

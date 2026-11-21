@@ -1,14 +1,15 @@
 //! GPS 30" message rotation
 use crate::{
     gps::{
-        GpsError, GpsQzssSubframe,
-        GPS_FRAME_BITS, 
-        GpsQzssSubframeId,
+        GpsError, GpsQzssSubframe, GpsQzssSubframeId, GPS_FRAME_BITS, GPS_FRAME_BYTES,
         GPS_FRAME_ITEMS,
-        GPS_FRAME_BYTES,
     },
     BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream, Message,
 };
+
+mod builder;
+
+pub use builder::GpsQzssFrameBuilder;
 
 /// [GpsQzssFrame] represents a 30s rotation broadcasted by every satellite
 /// which consists in a rotation of EPH-1, 2, 3 then ALM4 and ALM5 subframe sequence.
@@ -24,16 +25,6 @@ use crate::{
 /// it is possible to deal with partly incorrect 30s bursts here,
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct GpsQzssFrame([GpsQzssSubframe; GPS_FRAME_ITEMS]);
-
-/// [GpsQzssFrameBuilder] may be used to collect (record)
-/// [GpsQzssFrame]s, which are composed of [GPS_FRAME_ITEMS] subframes.
-///
-/// The frame builder will align itself to the first EPH-1 received
-/// and will return once a valid 30s burst is received.
-pub struct GpsQzssFrameBuilder {
-    ptr: usize,
-    buffer: [GpsQzssSubframe; GPS_FRAME_ITEMS],
-}
 
 impl Message<BigEndian> for GpsQzssFrame {
     fn encoding_size(&self) -> usize {
@@ -51,27 +42,27 @@ impl GpsQzssFrame {
     pub fn eph_1(&self) -> GpsQzssSubframe {
         self.0[0]
     }
-    
+
     /// Returns the second subframe of this 30s burst,
     /// as [GpsQzssFrame] following the EPH-1 subframe.
     pub fn eph_2(&self) -> GpsQzssSubframe {
         self.0[1]
     }
-    
+
     /// Returns the third subframe of this 30s burst,
     /// as [GpsQzssFrame] following the EPH-2 subframe
     /// and conluding the EPH subframes (first 3/5 18s of the burst).
     pub fn eph_3(&self) -> GpsQzssSubframe {
         self.0[2]
     }
-    
+
     /// Returns the fourth subframe of this 30s burst,
     /// as [GpsQzssFrame] following the EPH-3 subframe
     /// and marking the first almanach subframe.
     pub fn alm_4(&self) -> GpsQzssSubframe {
         self.0[3]
     }
-    
+
     /// Returns last subframe of this 30s burst,
     /// as [GpsQzssFrame] following ALM-4 subframe
     /// and concluding this 30s cycle.
@@ -106,7 +97,8 @@ impl GpsQzssFrame {
     /// Builds a [GpsQzssFrame] from individual parts, which must be correctly defined.
     /// Currently, this method does not check the actual timeline progression,
     /// only frame class progression.
-    pub fn from_parts(eph_1: GpsQzssSubframe,
+    pub fn from_parts(
+        eph_1: GpsQzssSubframe,
         eph_2: GpsQzssSubframe,
         eph_3: GpsQzssSubframe,
         alm_4: GpsQzssSubframe,
@@ -138,13 +130,12 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame {
         let alm_5 = GpsQzssSubframe::read(stream)?;
 
         // attempt to build: sequence must be correct
-        let parsed = Self::from_slice([eph_1, eph_2, eph_3, alm_4, alm_5])
-            .map_err(|_| {
-                BitError::UnmatchedDiscriminant {
-                    discriminant: 0,
-                    enum_name: "invalid GPS 30s rotation".to_string(),
-                }
-            })?;
+        let parsed = Self::from_slice([eph_1, eph_2, eph_3, alm_4, alm_5]).map_err(|_| {
+            BitError::UnmatchedDiscriminant {
+                discriminant: 0,
+                enum_name: "invalid GPS 30s rotation".to_string(),
+            }
+        })?;
 
         Ok(parsed)
     }
@@ -154,11 +145,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame {
 mod test {
 
     use crate::gps::{
-        GpsQzssFrame,
-        GpsQzssHow,
-        GpsQzssSubframe,
-        GpsQzssSubframeId,
-        GpsQzssSubframeEnum,
+        GpsQzssFrame, GpsQzssHow, GpsQzssSubframe, GpsQzssSubframeEnum, GpsQzssSubframeId,
     };
 
     // TODO test all SF4 and SF5 variants
@@ -193,10 +180,10 @@ mod test {
 
         let frame = GpsQzssFrame::from_slice([eph_1, eph_2, eph_3, alm_4, alm_5]).unwrap();
 
-        assert_eq!(frame.eph_1() , eph_1);
-        assert_eq!(frame.eph_2() , eph_2);
-        assert_eq!(frame.eph_3() , eph_3);
-        assert_eq!(frame.alm_4() , alm_4);
-        assert_eq!(frame.alm_5() , alm_5);
+        assert_eq!(frame.eph_1(), eph_1);
+        assert_eq!(frame.eph_2(), eph_2);
+        assert_eq!(frame.eph_3(), eph_3);
+        assert_eq!(frame.alm_4(), alm_4);
+        assert_eq!(frame.alm_5(), alm_5);
     }
 }
