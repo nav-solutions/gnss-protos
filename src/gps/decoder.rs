@@ -1,8 +1,10 @@
 use crate::{
     bits::get_bit,
     gps::{
-        frame::GPS_WORD_MASK, GpsQzssFrame, GPS_FRAME_BITS, GPS_INVERTED_PREAMBLE_BYTE,
-        GPS_PREAMBLE_BYTE, GPS_WORDS_PER_FRAME,
+        GPS_SUBFRAME_BITS, GPS_INVERTED_PREAMBLE_BYTE,
+        GPS_PREAMBLE_BYTE, GPS_SUBFRAME_WORDS,
+        GpsQzssSubframe,
+        subframe::GPS_WORD_MASK,
     },
 };
 
@@ -22,7 +24,7 @@ use log::trace;
 #[derive(Debug, Copy, Clone)]
 pub struct GpsQzssDecoder {
     /// 300-bit shift register: 10 words of 30 bits, oldest word first.
-    words: [u32; GPS_WORDS_PER_FRAME],
+    words: [u32; GPS_SUBFRAME_WORDS],
 
     /// Number of bits accumulated since last synchronization (saturates at 300).
     fill: usize,
@@ -35,7 +37,7 @@ impl Default for GpsQzssDecoder {
     /// Creates a new [GpsQzssDecoder] with parity verification.
     fn default() -> Self {
         Self {
-            words: [0; GPS_WORDS_PER_FRAME],
+            words: [0; GPS_SUBFRAME_WORDS],
             fill: 0,
             parity_verification: true,
         }
@@ -59,13 +61,13 @@ impl GpsQzssDecoder {
 
     /// Drops the current synchronization state.
     pub fn reset(&mut self) {
-        self.words = [0; GPS_WORDS_PER_FRAME];
+        self.words = [0; GPS_SUBFRAME_WORDS];
         self.fill = 0;
     }
 
     /// Pushes a new bit into the decoder.
     /// Returns a [GpsQzssFrame] when this bit completes a valid frame.
-    pub fn push_bit(&mut self, bit: bool) -> Option<GpsQzssFrame> {
+    pub fn push_bit(&mut self, bit: bool) -> Option<GpsQzssSubframe> {
         let mut carry = bit as u32;
 
         for word in self.words.iter_mut().rev() {
@@ -74,11 +76,11 @@ impl GpsQzssDecoder {
             carry = msb;
         }
 
-        if self.fill < GPS_FRAME_BITS {
+        if self.fill < GPS_SUBFRAME_BITS {
             self.fill += 1;
         }
 
-        if self.fill < GPS_FRAME_BITS {
+        if self.fill < GPS_SUBFRAME_BITS {
             return None;
         }
 
@@ -88,7 +90,7 @@ impl GpsQzssDecoder {
             return None;
         }
 
-        match GpsQzssFrame::from_words(&self.words, self.parity_verification) {
+        match GpsQzssSubframe::from_words(&self.words, self.parity_verification) {
             Ok(frame) => {
                 // a frame was consumed: the next one needs 300 new bits
                 self.fill = 0;
@@ -107,12 +109,12 @@ impl GpsQzssDecoder {
     /// Feeds bits from `slice`, starting at absolute bit position `bit_offset`,
     /// until a frame is decoded or the slice is exhausted.
     ///
-    /// Returns the number of bits consumed, and the decoded frame if any.
+    /// Returns the number of bits consumed, and the decoded subframe (if any).
     /// The decoder state is preserved between calls: a frame may span
     /// several slices. To decode a complete buffer:
     ///
     /// ```
-    /// use gnss_protos::{GpsQzssDecoder, GpsQzssFrame};
+    /// use gnss_protos::gps::{GpsQzssDecoder, GpsQzssSubframe};
     ///
     /// let bytes = [0u8; 128]; // any input
     /// let mut decoder = GpsQzssDecoder::default();
@@ -130,7 +132,7 @@ impl GpsQzssDecoder {
     ///     }
     /// }
     /// ```
-    pub fn decode(&mut self, slice: &[u8], bit_offset: usize) -> (usize, Option<GpsQzssFrame>) {
+    pub fn decode(&mut self, slice: &[u8], bit_offset: usize) -> (usize, Option<GpsQzssSubframe>) {
         let total = slice.len() * 8;
         let mut pos = bit_offset;
 
@@ -153,8 +155,9 @@ mod test {
         bits::get_bit,
         gps::{
             test_vectors::{on_air, UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3},
-            GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssSubframe, GPS_FRAME_BITS,
+            GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframeId, GPS_SUBFRAME_BITS,
             GPS_WORD_BITS,
+            GpsQzssSubframeEnum,
         },
         BigEndian,
     };
@@ -163,24 +166,24 @@ mod test {
 
     /// Builds a realistic stream: 5 consecutive subframes (1 to 5),
     /// with evolving TLM/HOW contents.
-    fn stream_model(num_frames: usize) -> Vec<GpsQzssFrame> {
+    fn stream_model(num_frames: usize) -> Vec<GpsQzssSubframe> {
         let ids = [
-            GpsQzssFrameId::Ephemeris1,
-            GpsQzssFrameId::Ephemeris2,
-            GpsQzssFrameId::Ephemeris3,
-            GpsQzssFrameId::Almanach4,
-            GpsQzssFrameId::Almanach5,
+            GpsQzssSubframeId::Ephemeris1,
+            GpsQzssSubframeId::Ephemeris2,
+            GpsQzssSubframeId::Ephemeris3,
+            GpsQzssSubframeId::Almanach4,
+            GpsQzssSubframeId::Almanach5,
         ];
 
         (0..num_frames)
             .map(|i| {
-                let mut frame = GpsQzssFrame::model(ids[i % 5]);
+                let mut frame = GpsQzssSubframe::model(ids[i % 5]);
                 frame.telemetry.message = (i as u16) & 0x3fff;
                 frame.telemetry.integrity = i % 2 == 0;
                 frame.how.tow = 6 * (100 + i as u32);
                 frame.how.alert = i % 3 == 0;
 
-                if let GpsQzssSubframe::Ephemeris1(eph1) = &mut frame.subframe {
+                if let GpsQzssSubframeEnum::Ephemeris1(eph1) = &mut frame.subframe {
                     eph1.week = (i as u16) & 0x3ff;
                 }
 
@@ -201,7 +204,7 @@ mod test {
 
     /// Streams the frames contiguously, after `offset` bits of noise,
     /// followed by a few bits of noise.
-    fn encode_stream(frames: &[GpsQzssFrame], offset: usize) -> Vec<u8> {
+    fn encode_stream(frames: &[GpsQzssSubframe], offset: usize) -> Vec<u8> {
         let mut noise = Noise(0xACE1);
         let mut bytes = Vec::new();
 
@@ -224,7 +227,7 @@ mod test {
         bytes
     }
 
-    fn decode_all(decoder: &mut GpsQzssDecoder, buffer: &[u8]) -> Vec<(usize, GpsQzssFrame)> {
+    fn decode_all(decoder: &mut GpsQzssDecoder, buffer: &[u8]) -> Vec<(usize, GpsQzssSubframe)> {
         let mut ret = Vec::new();
         let mut position = 0;
 
@@ -233,7 +236,7 @@ mod test {
             position += consumed;
 
             match frame {
-                Some(frame) => ret.push((position - GPS_FRAME_BITS, frame)),
+                Some(frame) => ret.push((position - GPS_SUBFRAME_BITS, frame)),
                 None => return ret,
             }
         }
@@ -251,7 +254,7 @@ mod test {
             assert_eq!(decoded.len(), frames.len(), "offset={}", offset);
 
             for (i, (position, frame)) in decoded.iter().enumerate() {
-                assert_eq!(*position, offset + i * GPS_FRAME_BITS, "offset={}", offset);
+                assert_eq!(*position, offset + i * GPS_SUBFRAME_BITS, "offset={}", offset);
                 assert_eq!(*frame, frames[i], "offset={} frame #{}", offset, i);
             }
         }
@@ -317,7 +320,7 @@ mod test {
         let mut buffer = encode_stream(&frames, 9);
 
         // flip one bit in the middle of frame #2 (data bit of word 4)
-        let bit = 9 + 2 * GPS_FRAME_BITS + 3 * GPS_WORD_BITS + 10;
+        let bit = 9 + 2 * GPS_SUBFRAME_BITS + 3 * GPS_WORD_BITS + 10;
         buffer[bit / 8] ^= 0x80 >> (bit % 8);
 
         let mut decoder = GpsQzssDecoder::default();
@@ -346,14 +349,14 @@ mod test {
 
         // interrupted in the middle of the first frame
         let mut decoder = GpsQzssDecoder::default();
-        for pos in 0..GPS_FRAME_BITS / 2 {
+        for pos in 0..GPS_SUBFRAME_BITS / 2 {
             assert!(decoder.push_bit(get_bit(&buffer, pos)).is_none());
         }
 
         decoder.reset();
 
         // the end of the first frame is lost, the second one is decoded
-        let decoded: Vec<_> = decode_all(&mut decoder, &buffer[GPS_FRAME_BITS / 2 / 8..])
+        let decoded: Vec<_> = decode_all(&mut decoder, &buffer[GPS_SUBFRAME_BITS / 2 / 8..])
             .into_iter()
             .map(|(_, f)| f)
             .collect();

@@ -1,7 +1,7 @@
 //! Satellites configuration and health (subframe 4, page 25, SV ID 63).
 
 use crate::{
-    gps::{GpsQzssSatelliteHealth, GPS_QZSS_DATA_ID, GPS_SUBFRAME_DATA_BYTES, GPS_WORD_DATA_BITS},
+    gps::{GpsQzssSatelliteHealth, GPS_LNAV_CONFIG_DID, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -42,12 +42,12 @@ pub struct GpsQzssConfigHealth {
     pub reserved_word10: u8,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssConfigHealth, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssConfigHealth, 24); // TODO improve defs
 
 impl Default for GpsQzssConfigHealth {
     fn default() -> Self {
         Self {
-            data_id: GPS_QZSS_DATA_ID,
+            data_id: GPS_LNAV_CONFIG_DID,
             configurations: [0; GPS_CONFIG_SATELLITES],
             health: Default::default(),
             reserved_word8: 0,
@@ -58,7 +58,7 @@ impl Default for GpsQzssConfigHealth {
 
 impl Message<BigEndian> for GpsQzssConfigHealth {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24 // TODO improve defs
     }
 
     fn encoding_bits(&self) -> usize {

@@ -6,8 +6,8 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
-/// [GpsQzssAlmanach] page, found in Frame-5 pages 1 to 24,
-/// and Frame-4 pages 2 to 5 and 7 to 10 (IS-GPS-200 §20.3.3.5.1.2).
+/// [GpsQzssAlmanach] found in SF-5 pages 1 to 24,
+/// and SF-4 pages 2 to 5 and 7 to 10 (IS-GPS-200 §20.3.3.5.1.2).
 /// Read and written on the 192 parity free data bits of words 3 to 10.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct GpsQzssAlmanach {
@@ -51,7 +51,7 @@ pub struct GpsQzssAlmanach {
     pub af0: f64,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssAlmanach, crate::gps::GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssAlmanach, GPS_WORD_DATA_BITS);
 
 impl Message<BigEndian> for GpsQzssAlmanach {
     fn encoding_size(&self) -> usize {
@@ -263,7 +263,14 @@ impl GpsQzssAlmanach {
     /// Copies and returns [GpsQzssAlmanach] with updated Keplerian parameters:
     /// square root of the semi-major axis (√m), inclination correction δi, longitude of
     /// ascending node Ω0, argument of perigee ω and mean anomaly M0 (in semicircles).
-    pub fn with_orbit(mut self, sqrt_a: f64, di: f64, omega0: f64, omega: f64, m0: f64) -> Self {
+    pub fn with_keplerian_parameters(
+        mut self,
+        sqrt_a: f64,
+        di: f64,
+        omega0: f64,
+        omega: f64,
+        m0: f64,
+    ) -> Self {
         self.sqrt_a = sqrt_a;
         self.di = di;
         self.omega0 = omega0;
@@ -296,13 +303,13 @@ impl GpsQzssAlmanach {
     #[cfg(test)]
     pub fn model() -> Self {
         Self {
-            data_id: crate::gps::GPS_QZSS_DATA_ID,
+            data_id: crate::gps::GPS_LNAV_CONFIG_DID,
             ..Self::default()
         }
         .with_sv_id(12)
         .with_eccentricity(0.01)
         .with_toa_seconds(405_504)
-        .with_orbit(5153.6, 0.0128, -0.43, 0.27, 0.61)
+        .with_keplerian_parameters(5153.6, 0.0128, -0.43, 0.27, 0.61)
         .with_omega_dot(-2.6e-9)
         .with_clock(1.2e-4, -3.6e-12)
     }
@@ -441,7 +448,7 @@ mod test {
         // on the ascending node, which lies on the x axis
         let alm = GpsQzssAlmanach::default()
             .with_sv_id(1)
-            .with_orbit(5153.6, 0.0, 0.0, 0.0, 0.0);
+            .with_keplerian_parameters(5153.6, 0.0, 0.0, 0.0, 0.0);
 
         let a = alm.semi_major_axis_m();
 
@@ -479,7 +486,7 @@ mod test {
         let e = 0.02;
         let alm = GpsQzssAlmanach::default()
             .with_eccentricity(e)
-            .with_orbit(5153.6, 0.01, 0.3, 0.2, 0.0);
+            .with_keplerian_parameters(5153.6, 0.01, 0.3, 0.2, 0.0);
 
         let a = alm.semi_major_axis_m();
         let period = alm.orbital_period_s();
@@ -499,7 +506,7 @@ mod test {
         }
 
         // periodic in the orbital plane (earth rotation aside)
-        let alm = alm.with_orbit(5153.6, 0.01, 0.3, 0.2, 0.4);
+        let alm = alm.with_keplerian_parameters(5153.6, 0.01, 0.3, 0.2, 0.4);
         let (x0, y0, z0) = alm.position_ecef_m(0.0);
         let (x1, y1, z1) = alm.position_ecef_m(period);
         assert!((z0 - z1).abs() < 1e-3);
@@ -510,7 +517,7 @@ mod test {
     fn earth_rotation() {
         // a geostationary like check: the ECEF longitude of the node drifts
         // at the earth rotation rate
-        let alm = GpsQzssAlmanach::default().with_orbit(5153.6, 0.0, 0.0, 0.0, 0.0);
+        let alm = GpsQzssAlmanach::default().with_keplerian_parameters(5153.6, 0.0, 0.0, 0.0, 0.0);
         let period = alm.orbital_period_s();
 
         let (x, y, z) = alm.position_ecef_m(period);

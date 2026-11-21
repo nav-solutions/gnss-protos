@@ -2,8 +2,8 @@
 
 use crate::{
     gps::{
-        GpsQzssAlmanach, GpsQzssReservedPage, GPS_QZSS_ALMANACH_PAGES, GPS_SUBFRAME_DATA_BYTES,
-        GPS_WORD_DATA_BITS,
+        subframe::{peek_sv_id, GpsQzssReservedSubframe},
+        GpsQzssAlmanach, GPS_SUBFRAME_DATA_BYTES, GPS_SUPERFRAME_ITEMS, GPS_WORD_DATA_BITS,
     },
     Message,
 };
@@ -14,7 +14,7 @@ mod health;
 
 pub use health::{GpsQzssAlmanachHealth, GPS_ALMANACH_HEALTH_SATELLITES};
 
-/// [GpsQzssFrame5] interprets a subframe 5 page, according to its SV (page) ID.
+/// [GpsQzssSubframe5] interprets a subframe 5 page, according to its SV (page) ID.
 ///
 /// | Pages  | SV ID | Content                    |
 /// |--------|-------|----------------------------|
@@ -23,9 +23,9 @@ pub use health::{GpsQzssAlmanachHealth, GPS_ALMANACH_HEALTH_SATELLITES};
 ///
 /// Any other SV ID (including dummy pages, SV ID 0) is preserved
 /// as a [GpsQzssReservedPage]: all data bits are preserved, so
-/// [GpsQzssFrame5] is encoded back bit for bit.
+/// [GpsQzssSubframe5] is encoded back bit for bit.
 #[derive(Debug, Copy, Clone)]
-pub enum GpsQzssFrame5 {
+pub enum GpsQzssSubframe5 {
     /// [GpsQzssAlmanach] (pages 1 to 24)
     Almanach(GpsQzssAlmanach),
 
@@ -33,21 +33,21 @@ pub enum GpsQzssFrame5 {
     Health(GpsQzssAlmanachHealth),
 
     /// [GpsQzssReservedPage] (dummy and unexpected pages)
-    Reserved(GpsQzssReservedPage),
+    Reserved(GpsQzssReservedSubframe),
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssFrame5, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssSubframe5, GPS_SUBFRAME_DATA_BYTES);
 
-impl Default for GpsQzssFrame5 {
+impl Default for GpsQzssSubframe5 {
     /// Builds a dummy page
     fn default() -> Self {
         Self::Reserved(Default::default())
     }
 }
 
-impl Message<BigEndian> for GpsQzssFrame5 {
+impl Message<BigEndian> for GpsQzssSubframe5 {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24 // TODO improve defs
     }
 
     fn encoding_bits(&self) -> usize {
@@ -55,7 +55,7 @@ impl Message<BigEndian> for GpsQzssFrame5 {
     }
 }
 
-impl BitWrite<BigEndian> for GpsQzssFrame5 {
+impl BitWrite<BigEndian> for GpsQzssSubframe5 {
     /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         match self {
@@ -66,11 +66,11 @@ impl BitWrite<BigEndian> for GpsQzssFrame5 {
     }
 }
 
-impl BitRead<'_, BigEndian> for GpsQzssFrame5 {
+impl BitRead<'_, BigEndian> for GpsQzssSubframe5 {
     /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]),
     /// and interprets them according to the SV (page) ID.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        match crate::gps::peek_sv_id(stream)? {
+        match peek_sv_id(stream)? {
             1..=32 => Ok(Self::Almanach(stream.read()?)),
             GpsQzssAlmanachHealth::SV_ID => Ok(Self::Health(stream.read()?)),
             _ => Ok(Self::Reserved(stream.read()?)),
@@ -78,7 +78,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame5 {
     }
 }
 
-impl GpsQzssFrame5 {
+impl GpsQzssSubframe5 {
     /// Returns the SV (page) ID of this page.
     pub fn sv_id(&self) -> u8 {
         match self {
@@ -109,8 +109,7 @@ impl GpsQzssFrame5 {
     /// Returns the pages (1..=25) on which this content is nominally transmitted.
     pub fn pages(&self) -> impl Iterator<Item = u8> {
         let sv_id = self.sv_id();
-        (1..=GPS_QZSS_ALMANACH_PAGES as u8)
-            .filter(move |page| Self::page_sv_id(*page) == Some(sv_id))
+        (1..=GPS_SUPERFRAME_ITEMS as u8).filter(move |page| Self::page_sv_id(*page) == Some(sv_id))
     }
 
     /// Returns true if this content may be transmitted on given page (1..=25):
@@ -139,7 +138,7 @@ impl GpsQzssFrame5 {
     }
 
     /// Unwraps self as [GpsQzssReservedPage] (if feasible)
-    pub fn as_reserved(&self) -> Option<&GpsQzssReservedPage> {
+    pub fn as_reserved(&self) -> Option<&GpsQzssReservedSubframe> {
         match self {
             Self::Reserved(page) => Some(page),
             _ => None,
@@ -177,35 +176,35 @@ mod frame5 {
             (25, 51),
         ] {
             assert_eq!(
-                GpsQzssFrame5::page_sv_id(page),
+                GpsQzssSubframe5::page_sv_id(page),
                 Some(sv_id),
                 "page {}",
                 page
             );
-            let model = GpsQzssFrame5::model(page);
+            let model = GpsQzssSubframe5::model(page);
             assert_eq!(model.sv_id(), sv_id);
             assert!(model.matches_page(page));
             assert_eq!(model.pages().collect::<Vec<_>>(), vec![page]);
         }
 
-        assert_eq!(GpsQzssFrame5::page_sv_id(0), None);
-        assert_eq!(GpsQzssFrame5::page_sv_id(26), None);
+        assert_eq!(GpsQzssSubframe5::page_sv_id(0), None);
+        assert_eq!(GpsQzssSubframe5::page_sv_id(26), None);
 
         // dummy pages replace almanacs
-        assert!(GpsQzssFrame5::default().matches_page(3));
-        assert!(!GpsQzssFrame5::default().matches_page(25));
-        assert!(!GpsQzssFrame5::model(3).matches_page(4));
+        assert!(GpsQzssSubframe5::default().matches_page(3));
+        assert!(!GpsQzssSubframe5::default().matches_page(25));
+        assert!(!GpsQzssSubframe5::model(3).matches_page(4));
     }
 
     #[test]
     fn reciprocal() {
         for page in 1..=25u8 {
-            let model = GpsQzssFrame5::model(page);
+            let model = GpsQzssSubframe5::model(page);
 
             let mut bytes = [0u8; 24];
             assert_eq!(model.encode(&mut bytes).unwrap(), 24);
 
-            let decoded = GpsQzssFrame5::decode(&bytes).unwrap();
+            let decoded = GpsQzssSubframe5::decode(&bytes).unwrap();
             assert_eq!(decoded, model, "page {}", page);
             assert_eq!(
                 core::mem::discriminant(&decoded),
@@ -231,10 +230,10 @@ mod frame5 {
             (52, false, false),
             (63, false, false),
         ] {
-            GpsQzssReservedPage::model(sv_id)
+            GpsQzssReservedSubframe::model(sv_id)
                 .encode(&mut bytes)
                 .unwrap();
-            let page = GpsQzssFrame5::decode(&bytes).unwrap();
+            let page = GpsQzssSubframe5::decode(&bytes).unwrap();
 
             assert_eq!(page.sv_id(), sv_id);
             assert_eq!(page.as_almanach().is_some(), almanach, "sv {}", sv_id);

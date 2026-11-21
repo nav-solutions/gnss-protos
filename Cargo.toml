@@ -21,11 +21,10 @@ msrv = "1.89"
 [features]
 default = ["gps", "galileo"]
 
-# STD support. Currently only used in test mode.
-std = []
-
 # Unlock GPS (+QZSS) protocol
 gps = []
+
+std = []
 
 # Unlock Galileo (I/NAV) protocol
 galileo = []
@@ -41,6 +40,7 @@ rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 thiserror = "1"
 bitbuffer = "0.11"
 log = { version = "0.4", optional = true }
+hifitime = { version = "4", optional = true }
 num-traits = { version = "0.2", default-features = false }
 
 [dev-dependencies]

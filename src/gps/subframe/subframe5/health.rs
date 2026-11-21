@@ -2,14 +2,14 @@
 
 use crate::{
     bits::write_unsigned,
-    gps::{GpsQzssSatelliteHealth, GPS_QZSS_DATA_ID, GPS_SUBFRAME_DATA_BYTES, GPS_WORD_DATA_BITS},
+    gps::{GpsQzssSatelliteHealth, GPS_LNAV_CONFIG_DID, GPS_WORD_DATA_BITS},
     Message,
 };
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 /// Number of satellites whose health is described by subframe 5 page 25 (PRN 1 to 24).
-pub const GPS_ALMANACH_HEALTH_SATELLITES: usize = 24;
+pub const GPS_ALMANACH_HEALTH_SATELLITES: usize = 24; // TODO: improve defs
 
 /// [GpsQzssAlmanachHealth] (IS-GPS-200 §20.3.3.5.1.3), transmitted in subframe 5 page 25
 /// (SV ID 51): almanac reference time and week, health of satellites 1 to 24.
@@ -34,12 +34,12 @@ pub struct GpsQzssAlmanachHealth {
     pub reserved: u32,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssAlmanachHealth, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssAlmanachHealth, 24); // TODO: improve defs
 
 impl Default for GpsQzssAlmanachHealth {
     fn default() -> Self {
         Self {
-            data_id: GPS_QZSS_DATA_ID,
+            data_id: GPS_LNAV_CONFIG_DID,
             toa_seconds: 0,
             wna: 0,
             health: Default::default(),
@@ -50,7 +50,7 @@ impl Default for GpsQzssAlmanachHealth {
 
 impl Message<BigEndian> for GpsQzssAlmanachHealth {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24 // TODO: improve defs
     }
 
     fn encoding_bits(&self) -> usize {

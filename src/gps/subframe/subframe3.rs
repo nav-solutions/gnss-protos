@@ -6,9 +6,9 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
-/// [GpsQzssFrame3] Ephemeris #3 frame interpretation.
+/// [GpsQzssSubframe3] Ephemeris #3 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
-pub struct GpsQzssFrame3 {
+pub struct GpsQzssSubframe3 {
     /// Inclination angle cosine harmonic in radians.
     pub cic: f64,
 
@@ -37,82 +37,82 @@ pub struct GpsQzssFrame3 {
     pub omega_dot: f64,
 }
 
-impl GpsQzssFrame3 {
-    /// Copies and returns [GpsQzssFrame3] with updated IODE
+impl GpsQzssSubframe3 {
+    /// Copies and returns [GpsQzssSubframe3] with updated IODE
     pub fn with_iode(mut self, iode: u8) -> Self {
         self.iode = iode;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
+    /// Copies and returns [GpsQzssSubframe3] with updated Cic correction term
     pub fn with_cic_radians(mut self, cic_rad: f64) -> Self {
         self.cic = cic_rad;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated Cic correction term
+    /// Copies and returns [GpsQzssSubframe3] with updated Cic correction term
     pub fn with_cis_radians(mut self, cis_rad: f64) -> Self {
         self.cis = cis_rad;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated inclination angle (in semicircles) at reference time.
+    /// Copies and returns [GpsQzssSubframe3] with updated inclination angle (in semicircles) at reference time.
     pub fn with_inclination_semicircles(mut self, angle_semicircles: f64) -> Self {
         self.i0 = angle_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated inclination angle (in radians) at reference time.
+    /// Copies and returns [GpsQzssSubframe3] with updated inclination angle (in radians) at reference time.
     pub fn with_inclination_radians(self, angle_rad: f64) -> Self {
         self.with_inclination_semicircles(rad_to_semicircles(angle_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated inclination rate (in semicircles/s).
+    /// Copies and returns [GpsQzssSubframe3] with updated inclination rate (in semicircles/s).
     pub fn with_inclination_rate_semicircles_s(mut self, rate_semicircles_sec: f64) -> Self {
         self.idot = rate_semicircles_sec;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated inclination rate (in radians/s).
+    /// Copies and returns [GpsQzssSubframe3] with updated inclination rate (in radians/s).
     pub fn with_inclination_rate_radians_s(self, rate_rad_sec: f64) -> Self {
         self.with_inclination_rate_semicircles_s(rad_to_semicircles(rate_rad_sec))
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated orbit radius cosine harmonic term (meters)
+    /// Copies and returns [GpsQzssSubframe3] with updated orbit radius cosine harmonic term (meters)
     pub fn with_crc_meters(mut self, crc_m: f64) -> Self {
         self.crc = crc_m;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in semicircles) at reference time.
+    /// Copies and returns [GpsQzssSubframe3] with updated longitude of ascending node (in semicircles) at reference time.
     pub fn with_longitude_ascending_node_semicircles(mut self, angle_semicircles: f64) -> Self {
         self.omega0 = angle_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated longitude of ascending node (in radians) at reference time.
+    /// Copies and returns [GpsQzssSubframe3] with updated longitude of ascending node (in radians) at reference time.
     pub fn with_longitude_ascending_node_radians(self, angle_rad: f64) -> Self {
         self.with_longitude_ascending_node_semicircles(rad_to_semicircles(angle_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega (in semicircles)
+    /// Copies and returns [GpsQzssSubframe3] with updated omega (in semicircles)
     pub fn with_omega_semicircles(mut self, angle_semicircles: f64) -> Self {
         self.omega = angle_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega (in radians)
+    /// Copies and returns [GpsQzssSubframe3] with updated omega (in radians)
     pub fn with_omega_radians(self, angle_rad: f64) -> Self {
         self.with_omega_semicircles(rad_to_semicircles(angle_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega rate (in semicircles.s⁻¹)
+    /// Copies and returns [GpsQzssSubframe3] with updated omega rate (in semicircles.s⁻¹)
     pub fn with_omega_dot_semicircles_s(mut self, omega_dot: f64) -> Self {
         self.omega_dot = omega_dot;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame3] with updated omega velocity (in radians.s⁻¹)
+    /// Copies and returns [GpsQzssSubframe3] with updated omega velocity (in radians.s⁻¹)
     pub fn with_omega_dot_rad_s(self, omega_dot_rad: f64) -> Self {
         self.with_omega_dot_semicircles_s(rad_to_semicircles(omega_dot_rad))
     }
@@ -132,9 +132,9 @@ impl GpsQzssFrame3 {
     }
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssFrame3, crate::gps::GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssSubframe3, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
-impl Message<BigEndian> for GpsQzssFrame3 {
+impl Message<BigEndian> for GpsQzssSubframe3 {
     fn encoding_size(&self) -> usize {
         8 * GPS_WORD_DATA_BITS / 8
     }
@@ -144,7 +144,7 @@ impl Message<BigEndian> for GpsQzssFrame3 {
     }
 }
 
-impl BitWrite<BigEndian> for GpsQzssFrame3 {
+impl BitWrite<BigEndian> for GpsQzssSubframe3 {
     /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
@@ -172,7 +172,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame3 {
     }
 }
 
-impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
+impl BitRead<'_, BigEndian> for GpsQzssSubframe3 {
     /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (Omega0, i0, omega) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
@@ -212,7 +212,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame3 {
 
 #[cfg(test)]
 mod frame3 {
-    use crate::{gps::GpsQzssFrame3, Message};
+    use crate::{gps::GpsQzssSubframe3, Message};
 
     #[test]
     fn reciprocal() {
@@ -224,7 +224,7 @@ mod frame3 {
                 2.0e-9, 3.0e-9, 3.0e-3, 2.0e-1, 25, 4.0e-10, 7.0e-1, 7.0e-1, 4.0e-9,
             ),
         ] {
-            let frame = GpsQzssFrame3 {
+            let frame = GpsQzssSubframe3 {
                 cic,
                 cis,
                 crc,
@@ -242,7 +242,7 @@ mod frame3 {
                 panic!("Failed to encode frame: {}", e);
             });
 
-            let decoded = GpsQzssFrame3::decode(&buf).unwrap_or_else(|e| {
+            let decoded = GpsQzssSubframe3::decode(&buf).unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-3: {}", e);
             });
 

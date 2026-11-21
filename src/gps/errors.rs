@@ -23,6 +23,16 @@ pub enum GpsError {
     #[error("invalid word parity")]
     Parity,
 
+    /// A valid 30s GPS/QZSS cycle is composed of:
+    /// - 1: EPH-1 Subframe 1
+    /// - 2: EPH-2 Subframe 2
+    /// - 3: EPH-3 Subframe 3
+    /// - 4: ALM-4 Subframe 4
+    /// - 5: ALM-5 Subframe 5
+    /// Order must be strictly respected
+    #[error("misaligned GPS subframes")]
+    InvalidSubframesRotation,
+
     /// [crate::gps::GpsQzssMessage] does not start on the first subframe
     /// of page 1 (at a multiple of 12'30" since the beginning of the week)
     #[error("GPS message: does not start with page 1")]

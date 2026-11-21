@@ -1,7 +1,7 @@
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
 use crate::{
-    gps::{GpsQzssFrameId, GPS_WORD_DATA_BITS},
+    gps::{GpsQzssSubframeId, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -31,7 +31,7 @@ pub struct GpsQzssHow {
     pub anti_spoofing: bool,
 
     /// Following Frame ID (to decode following data words)
-    pub frame_id: GpsQzssFrameId,
+    pub frame_id: GpsQzssSubframeId,
 }
 
 impl Message<BigEndian> for GpsQzssHow {
@@ -53,7 +53,7 @@ impl BitRead<'_, BigEndian> for GpsQzssHow {
         let frame_id = stream.read_int::<u8>(3)?;
         let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
-        match GpsQzssFrameId::decode(frame_id) {
+        match GpsQzssSubframeId::decode(frame_id) {
             Ok(frame_id) => Ok(Self {
                 alert,
                 frame_id,
@@ -93,9 +93,8 @@ impl Default for GpsQzssHow {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::fmt::Display for GpsQzssHow {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Display for GpsQzssHow {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
             "{} TOW={} - ALERT={} - A/S={}",
@@ -106,9 +105,9 @@ impl std::fmt::Display for GpsQzssHow {
 
 impl GpsQzssHow {
     #[cfg(test)]
-    pub fn model(frame_id: GpsQzssFrameId) -> Self {
+    pub fn model(frame_id: GpsQzssSubframeId) -> Self {
         Self::default()
-            .with_frame_id(frame_id)
+            .with_subframe_id(frame_id)
             .with_tow_seconds(15_000)
             .with_alert_bit()
             .with_anti_spoofing()
@@ -122,8 +121,8 @@ impl GpsQzssHow {
         self
     }
 
-    /// Copies and returns [GpsQzssHow] with updated [GpsQzssFrameId]
-    pub fn with_frame_id(mut self, frame_id: GpsQzssFrameId) -> Self {
+    /// Copies and returns [GpsQzssHow] with updated [GpsQzssSubframeId]
+    pub fn with_subframe_id(mut self, frame_id: GpsQzssSubframeId) -> Self {
         self.frame_id = frame_id;
         self
     }
@@ -154,24 +153,24 @@ impl GpsQzssHow {
 
     /// Constructs a default EPH-1 [GpsQzssHow]
     pub fn ephemeris1() -> Self {
-        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris1)
+        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris1)
     }
 
     /// Constructs a default EPH-2 [GpsQzssHow]
     pub fn ephemeris2() -> Self {
-        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris1)
+        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris1)
     }
 
     /// Constructs a default EPH-3 [GpsQzssHow]
     pub fn ephemeris3() -> Self {
-        Self::default().with_frame_id(GpsQzssFrameId::Ephemeris3)
+        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris3)
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsQzssFrameId, GpsQzssHow},
+        gps::{GpsQzssHow, GpsQzssSubframeId},
         Message,
     };
 
@@ -196,11 +195,11 @@ mod test {
     #[test]
     fn reciprocal() {
         for (tow, frame_id, alert, anti_spoofing) in [
-            (0x05DC, GpsQzssFrameId::Ephemeris1, true, false),
-            (0x0708, GpsQzssFrameId::Ephemeris1, false, false),
-            (0x0_1194, GpsQzssFrameId::Ephemeris1, false, true),
-            (0x0_1194, GpsQzssFrameId::Ephemeris2, false, true),
-            (0x0_1194, GpsQzssFrameId::Ephemeris3, false, true),
+            (0x05DC, GpsQzssSubframeId::Ephemeris1, true, false),
+            (0x0708, GpsQzssSubframeId::Ephemeris1, false, false),
+            (0x0_1194, GpsQzssSubframeId::Ephemeris1, false, true),
+            (0x0_1194, GpsQzssSubframeId::Ephemeris2, false, true),
+            (0x0_1194, GpsQzssSubframeId::Ephemeris3, false, true),
         ] {
             let how = GpsQzssHow {
                 tow,

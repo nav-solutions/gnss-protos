@@ -2,7 +2,7 @@
 
 use crate::{
     bits::{from_scaled, to_scaled, write_signed, write_unsigned},
-    gps::{GPS_QZSS_DATA_ID, GPS_SUBFRAME_DATA_BYTES, GPS_WORD_DATA_BITS},
+    gps::{GPS_LNAV_CONFIG_DID, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -65,12 +65,12 @@ pub struct GpsQzssIonosphereUtc {
     pub reserved: u16,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssIonosphereUtc, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssIonosphereUtc, 24); // TODO improve defs
 
 impl Default for GpsQzssIonosphereUtc {
     fn default() -> Self {
         Self {
-            data_id: GPS_QZSS_DATA_ID,
+            data_id: GPS_LNAV_CONFIG_DID,
             alpha: [0.0; 4],
             beta: [0.0; 4],
             a1: 0.0,
@@ -88,7 +88,7 @@ impl Default for GpsQzssIonosphereUtc {
 
 impl Message<BigEndian> for GpsQzssIonosphereUtc {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24 // TODO improve defs
     }
 
     fn encoding_bits(&self) -> usize {

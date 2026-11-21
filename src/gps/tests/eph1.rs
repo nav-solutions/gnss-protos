@@ -4,8 +4,9 @@ use std::{fs::File, io::Write};
 
 use crate::{
     gps::{
-        tests::assert_valid_subframe, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame1, GpsQzssFrameId,
-        GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS,
+        tests::assert_valid_subframe, GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframe1, GpsQzssSubframeId,
+        GpsQzssHow, GpsQzssSatelliteHealth, GpsQzssTelemetry, GPS_SUBFRAME_BITS,
+        GpsQzssSubframeEnum,
     },
     tests::init_logger,
     BigEndian, Message,
@@ -17,7 +18,7 @@ use bitbuffer::BitWriteStream;
 fn test1() {
     init_logger();
 
-    let frame = GpsQzssFrame::default()
+    let frame = GpsQzssSubframe::default()
         .with_telemetry(
             GpsQzssTelemetry::default()
                 .with_message(0x1234)
@@ -30,8 +31,8 @@ fn test1() {
                 .with_alert_bit()
                 .with_anti_spoofing(),
         )
-        .with_subframe(GpsQzssSubframe::Ephemeris1(
-            GpsQzssFrame1::default()
+        .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris1(
+            GpsQzssSubframe1::default()
                 .healthy()
                 .with_week(0x123)
                 .with_iodc(0x123)
@@ -98,7 +99,7 @@ fn test1() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let decoded = GpsQzssFrame::decode(&encoded).unwrap_or_else(|e| {
+    let decoded = GpsQzssSubframe::decode(&encoded).unwrap_or_else(|e| {
         panic!("failed to decode frame: {}", e);
     });
 
@@ -109,7 +110,7 @@ fn test1() {
 fn test2() {
     init_logger();
 
-    let frame = GpsQzssFrame::default()
+    let frame = GpsQzssSubframe::default()
         .with_telemetry(
             GpsQzssTelemetry::default()
                 .with_message(0x1234)
@@ -122,8 +123,8 @@ fn test2() {
                 .with_alert_bit()
                 .without_anti_spoofing(),
         )
-        .with_subframe(GpsQzssSubframe::Ephemeris1(
-            GpsQzssFrame1::default()
+        .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris1(
+            GpsQzssSubframe1::default()
                 .healthy()
                 .with_week(0x123)
                 .with_iodc(0x345)
@@ -184,7 +185,7 @@ fn test2() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let decoded = GpsQzssFrame::decode(&encoded).unwrap_or_else(|e| {
+    let decoded = GpsQzssSubframe::decode(&encoded).unwrap_or_else(|e| {
         panic!("failed to decode frame: {}", e);
     });
 
@@ -193,7 +194,7 @@ fn test2() {
 
 #[test]
 fn test3() {
-    let frame = GpsQzssFrame::default()
+    let frame = GpsQzssSubframe::default()
         .with_telemetry(
             GpsQzssTelemetry::default()
                 .with_message(0x0123)
@@ -206,8 +207,8 @@ fn test3() {
                 .without_alert_bit()
                 .without_anti_spoofing(),
         )
-        .with_subframe(GpsQzssSubframe::Ephemeris1(
-            GpsQzssFrame1::default()
+        .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris1(
+            GpsQzssSubframe1::default()
                 .healthy()
                 .with_week(0x321)
                 .with_iodc(0x321)
@@ -274,7 +275,7 @@ fn test3() {
     // assert_eq!(encoded[37], 0x00);
 
     // reciprocal
-    let decoded = GpsQzssFrame::decode(&encoded).unwrap_or_else(|e| {
+    let decoded = GpsQzssSubframe::decode(&encoded).unwrap_or_else(|e| {
         panic!("failed to decode frame: {}", e);
     });
 
@@ -312,7 +313,7 @@ fn reciprocal() {
             15_000,
             false,
             false,
-            GpsQzssFrameId::Ephemeris1,
+            GpsQzssSubframeId::Ephemeris1,
             0x13E,
             false,
             false,
@@ -332,7 +333,7 @@ fn reciprocal() {
             15_000,
             true,
             false,
-            GpsQzssFrameId::Ephemeris1,
+            GpsQzssSubframeId::Ephemeris1,
             0x13F,
             false,
             true,
@@ -352,7 +353,7 @@ fn reciprocal() {
             15_000,
             true,
             false,
-            GpsQzssFrameId::Ephemeris1,
+            GpsQzssSubframeId::Ephemeris1,
             0x13F,
             false,
             true,
@@ -454,7 +455,7 @@ fn reciprocal() {
         let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
         let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
 
-        let mut subframe = GpsQzssFrame1::default()
+        let mut subframe = GpsQzssSubframe1::default()
             .with_week(*week)
             .with_iodc(*iodc)
             // .with_health_mask(*health)
@@ -484,10 +485,10 @@ fn reciprocal() {
             telemetry = telemetry.with_reserved_bit();
         }
 
-        let frame = GpsQzssFrame::default()
+        let frame = GpsQzssSubframe::default()
             .with_telemetry(telemetry)
             .with_hand_over_word(how)
-            .with_subframe(GpsQzssSubframe::Ephemeris1(subframe));
+            .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris1(subframe));
 
         let mut encoded = [0; 1024];
 
@@ -496,7 +497,7 @@ fn reciprocal() {
         });
 
         // reciprocal
-        let decoded = GpsQzssFrame::decode(&encoded).unwrap_or_else(|e| {
+        let decoded = GpsQzssSubframe::decode(&encoded).unwrap_or_else(|e| {
             panic!("failed to decode frame: {}", e);
         });
 
@@ -523,10 +524,10 @@ fn generate_bin_file() {
 
     let mut frames = Vec::with_capacity(NUM_FRAMES);
 
-    let mut frame = GpsQzssFrame::default()
+    let mut frame = GpsQzssSubframe::default()
         .with_telemetry(GpsQzssTelemetry::model())
-        .with_hand_over_word(GpsQzssHow::model(GpsQzssFrameId::Ephemeris1))
-        .with_subframe(GpsQzssSubframe::model(GpsQzssFrameId::Ephemeris1));
+        .with_hand_over_word(GpsQzssHow::model(GpsQzssSubframeId::Ephemeris1))
+        .with_subframe_enum(GpsQzssSubframeEnum::model(GpsQzssSubframeId::Ephemeris1));
 
     for _ in 0..NUM_FRAMES {
         frames.push(frame);
@@ -562,7 +563,7 @@ fn generate_bin_file() {
         subframe.l2_p_data_flag = !subframe.l2_p_data_flag;
     }
 
-    let mut buffer = Vec::with_capacity((NUM_FRAMES * GPS_FRAME_BITS + 7) / 8);
+    let mut buffer = Vec::with_capacity((NUM_FRAMES * GPS_SUBFRAME_BITS + 7) / 8);
 
     {
         let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
@@ -571,7 +572,7 @@ fn generate_bin_file() {
             writer.write(frame).unwrap();
         }
 
-        assert_eq!(writer.bit_len(), NUM_FRAMES * GPS_FRAME_BITS);
+        assert_eq!(writer.bit_len(), NUM_FRAMES * GPS_SUBFRAME_BITS);
     }
 
     std::fs::create_dir_all("data/GPS").unwrap();

@@ -7,7 +7,7 @@
 
 use crate::{
     bits::{read_bits, write_bits},
-    gps::{GPS_FRAME_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS},
+    gps::{GPS_FRAME_BYTES, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_WORDS, GPS_WORD_BITS},
 };
 
 /// 30-bit mask.
@@ -491,9 +491,9 @@ pub(crate) const UBLOX_G25_STREAM: [[u32; 10]; 94] = [
 
 /// Converts polarity corrected words (u-blox) to the transmitted words.
 pub(crate) fn from_polarity_corrected(
-    words: &[u32; GPS_WORDS_PER_FRAME],
-) -> [u32; GPS_WORDS_PER_FRAME] {
-    let mut ret = [0u32; GPS_WORDS_PER_FRAME];
+    words: &[u32; GPS_SUBFRAME_WORDS],
+) -> [u32; GPS_SUBFRAME_WORDS] {
+    let mut ret = [0u32; GPS_SUBFRAME_WORDS];
     let mut prev = 0u32;
 
     for (i, word) in words.iter().enumerate() {
@@ -511,9 +511,9 @@ pub(crate) fn from_polarity_corrected(
 
 /// Mirror operation of [from_polarity_corrected].
 pub(crate) fn to_polarity_corrected(
-    words: &[u32; GPS_WORDS_PER_FRAME],
-) -> [u32; GPS_WORDS_PER_FRAME] {
-    let mut ret = [0u32; GPS_WORDS_PER_FRAME];
+    words: &[u32; GPS_SUBFRAME_WORDS],
+) -> [u32; GPS_SUBFRAME_WORDS] {
+    let mut ret = [0u32; GPS_SUBFRAME_WORDS];
     let mut prev = 0u32;
 
     for (i, word) in words.iter().enumerate() {
@@ -532,14 +532,14 @@ pub(crate) fn to_polarity_corrected(
 }
 
 /// u-blox words, converted back to the transmitted words.
-pub(crate) fn on_air(words: [u32; GPS_WORDS_PER_FRAME]) -> [u32; GPS_WORDS_PER_FRAME] {
+pub(crate) fn on_air(words: [u32; GPS_SUBFRAME_WORDS]) -> [u32; GPS_SUBFRAME_WORDS] {
     from_polarity_corrected(&words)
 }
 
 /// Packs 10 transmitted words (30-bit, right aligned) into the 38 bytes
 /// that [crate::Message::decode] expects (4 null padding bits).
-pub(crate) fn words_to_bytes(words: &[u32; GPS_WORDS_PER_FRAME]) -> [u8; GPS_FRAME_BYTES] {
-    let mut bytes = [0u8; GPS_FRAME_BYTES];
+pub(crate) fn words_to_bytes(words: &[u32; GPS_SUBFRAME_WORDS]) -> [u8; GPS_SUBFRAME_BYTES] {
+    let mut bytes = [0u8; GPS_SUBFRAME_BYTES];
 
     for (i, word) in words.iter().enumerate() {
         write_bits(&mut bytes, i * GPS_WORD_BITS, *word, GPS_WORD_BITS).unwrap();
@@ -549,8 +549,8 @@ pub(crate) fn words_to_bytes(words: &[u32; GPS_WORDS_PER_FRAME]) -> [u8; GPS_FRA
 }
 
 /// Mirror operation of [words_to_bytes].
-pub(crate) fn bytes_to_words(bytes: &[u8]) -> [u32; GPS_WORDS_PER_FRAME] {
-    let mut words = [0u32; GPS_WORDS_PER_FRAME];
+pub(crate) fn bytes_to_words(bytes: &[u8]) -> [u32; GPS_SUBFRAME_WORDS] {
+    let mut words = [0u32; GPS_SUBFRAME_WORDS];
 
     for (i, word) in words.iter_mut().enumerate() {
         *word = read_bits(bytes, i * GPS_WORD_BITS, GPS_WORD_BITS).unwrap();
@@ -577,7 +577,7 @@ mod test {
     fn words_bytes_reciprocal() {
         for frame in [UBLOX_EPH1, UBLOX_EPH2, UBLOX_EPH3] {
             let bytes = words_to_bytes(&frame);
-            assert_eq!(bytes[GPS_FRAME_BYTES - 1] & 0x0f, 0);
+            assert_eq!(bytes[GPS_SUBFRAME_BYTES - 1] & 0x0f, 0);
             assert_eq!(bytes_to_words(&bytes), frame);
         }
     }

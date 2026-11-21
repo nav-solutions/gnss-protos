@@ -4,8 +4,9 @@ use crate::{
     gps::{
         test_vectors::{on_air, words_to_bytes, UBLOX_EPH3},
         tests::assert_valid_subframe,
-        GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame3, GpsQzssFrameId, GpsQzssHow, GpsQzssSubframe,
-        GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES,
+        GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframe3, GpsQzssSubframeId, GpsQzssHow,
+        GpsQzssTelemetry, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES,
+        GpsQzssSubframeEnum,
     },
     tests::init_logger,
     BigEndian, Message,
@@ -17,7 +18,7 @@ use bitbuffer::BitWriteStream;
 fn test1() {
     init_logger();
 
-    let frame = GpsQzssFrame::default()
+    let frame = GpsQzssSubframe::default()
         .with_telemetry(
             GpsQzssTelemetry::default()
                 .with_message(0x1999)
@@ -30,8 +31,8 @@ fn test1() {
                 .with_alert_bit()
                 .with_anti_spoofing(),
         )
-        .with_subframe(GpsQzssSubframe::Ephemeris3(
-            GpsQzssFrame3::default()
+        .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris3(
+            GpsQzssSubframe3::default()
                 .with_iode(0x32)
                 .with_cic_radians(1.2e-7)
                 .with_cis_radians(1.2e-7)
@@ -43,27 +44,27 @@ fn test1() {
                 .with_omega_dot_semicircles_s(8e-9),
         ));
 
-    let mut encoded = [0; GPS_FRAME_BYTES];
+    let mut encoded = [0; GPS_SUBFRAME_BYTES];
 
     assert_eq!(
         frame.encode(&mut encoded).unwrap_or_else(|e| {
             panic!("Failed to encode EPH-3: {}", e);
         }),
-        GPS_FRAME_BYTES
+        GPS_SUBFRAME_BYTES
     );
 
     assert_eq!(encoded[0], 0x8B, "does not start with preamble bits");
     assert_valid_subframe(&encoded);
 
     // reciprocal (Message)
-    let decoded = GpsQzssFrame::decode(&encoded).unwrap();
+    let decoded = GpsQzssSubframe::decode(&encoded).unwrap();
     assert_eq!(decoded, frame, "reciprocal failed, got {:#?}", decoded);
-    assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris3);
+    assert_eq!(decoded.how.frame_id, GpsQzssSubframeId::Ephemeris3);
 
     // reciprocal (decoder)
     let mut decoder = GpsQzssDecoder::default();
     let (consumed, decoded) = decoder.decode(&encoded, 0);
-    assert_eq!(consumed, GPS_FRAME_BITS);
+    assert_eq!(consumed, GPS_SUBFRAME_BITS);
     assert_eq!(decoded, Some(frame));
 }
 
@@ -109,7 +110,7 @@ fn reciprocal() {
         let mut how = GpsQzssHow::default().with_tow_seconds(*tow);
         let mut telemetry = GpsQzssTelemetry::default().with_message(*message);
 
-        let subframe = GpsQzssFrame3::default()
+        let subframe = GpsQzssSubframe3::default()
             .with_cic_radians(*cic)
             .with_crc_meters(*crc)
             .with_iode(*iode)
@@ -132,12 +133,12 @@ fn reciprocal() {
             telemetry = telemetry.with_reserved_bit();
         }
 
-        let frame = GpsQzssFrame::default()
+        let frame = GpsQzssSubframe::default()
             .with_telemetry(telemetry)
             .with_hand_over_word(how)
-            .with_subframe(GpsQzssSubframe::Ephemeris3(subframe));
+            .with_subframe_enum(GpsQzssSubframeEnum::Ephemeris3(subframe));
 
-        let mut encoded = [0; GPS_FRAME_BYTES];
+        let mut encoded = [0; GPS_SUBFRAME_BYTES];
 
         frame.encode(&mut encoded).unwrap_or_else(|e| {
             panic!("Failed to encode frame #{}: {}", test_num, e);
@@ -145,14 +146,14 @@ fn reciprocal() {
 
         assert_valid_subframe(&encoded);
 
-        let decoded = GpsQzssFrame::decode(&encoded).unwrap_or_else(|e| {
+        let decoded = GpsQzssSubframe::decode(&encoded).unwrap_or_else(|e| {
             panic!("Failed to decode frame #{}: {}", test_num, e);
         });
 
         assert_eq!(decoded, frame, "reciprocal failed");
 
         // bit exact
-        let mut reencoded = [0; GPS_FRAME_BYTES];
+        let mut reencoded = [0; GPS_SUBFRAME_BYTES];
         decoded.encode(&mut reencoded).unwrap();
         assert_eq!(
             reencoded, encoded,
@@ -170,10 +171,10 @@ fn stream_of_frames() {
 
     let mut frames = Vec::with_capacity(NUM_FRAMES);
 
-    let mut frame = GpsQzssFrame::default()
+    let mut frame = GpsQzssSubframe::default()
         .with_telemetry(GpsQzssTelemetry::model())
-        .with_hand_over_word(GpsQzssHow::model(GpsQzssFrameId::Ephemeris3))
-        .with_subframe(GpsQzssSubframe::model(GpsQzssFrameId::Ephemeris3));
+        .with_hand_over_word(GpsQzssHow::model(GpsQzssSubframeId::Ephemeris3))
+        .with_subframe_enum(GpsQzssSubframeEnum::model(GpsQzssSubframeId::Ephemeris3));
 
     for _ in 0..NUM_FRAMES {
         frames.push(frame);
@@ -225,12 +226,12 @@ fn stream_of_frames() {
 fn ublox() {
     init_logger();
 
-    let frame = GpsQzssFrame::decode(&words_to_bytes(&on_air(UBLOX_EPH3))).unwrap();
+    let frame = GpsQzssSubframe::decode(&words_to_bytes(&on_air(UBLOX_EPH3))).unwrap();
 
     assert_eq!(frame.telemetry.message, 0x13E);
     assert!(!frame.telemetry.integrity);
     assert!(!frame.telemetry.reserved_bit);
     assert!(!frame.how.alert);
     assert!(frame.how.anti_spoofing);
-    assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris3);
+    assert_eq!(frame.how.frame_id, GpsQzssSubframeId::Ephemeris3);
 }

@@ -1,7 +1,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/nav-solutions/.github/master/logos/logo2.jpg"
 )]
-#![doc = include_str!("../README.md")]
+// #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /*
@@ -32,28 +32,6 @@ mod errors;
 
 pub use buffer::{Buffer, StaticBuffer};
 pub use errors::{BufferingError, Error};
-
-#[cfg(feature = "gps")]
-pub use gps::{
-    GpsError, GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssConfigHealth, GpsQzssDecoder,
-    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame4, GpsQzssFrame5,
-    GpsQzssFrameId, GpsQzssHow, GpsQzssIonosphereUtc, GpsQzssMessage, GpsQzssNmct,
-    GpsQzssReservedPage, GpsQzssSatelliteHealth, GpsQzssSpecialMessage, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_INVERTED_PREAMBLE_BYTE,
-    GPS_PREAMBLE_BYTE, GPS_SUBFRAME_DATA_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES,
-    GPS_WORD_DATA_BITS,
-};
-
-#[cfg(feature = "galileo")]
-pub use galileo::{
-    GalileoError, GalileoInavDecoder, GalileoInavPage, GalileoInavPageType, GalileoInavWord,
-    GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3, GalileoInavWord4,
-    GalileoInavWord5, GalileoInavWord6, GalileoSignalHealth, GalileoSisa,
-    GALILEO_INAV_DEFAULT_MAX_SYMBOL_ERRORS, GALILEO_INAV_PAGE_BYTES, GALILEO_INAV_PAGE_SYMBOLS,
-    GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYMBOL_RATE, GALILEO_INAV_SYNC_PATTERN,
-    GALILEO_INAV_SYNC_SYMBOLS, GALILEO_INAV_WORD0_SPARE_BYTES, GALILEO_INAV_WORD_BITS,
-    GALILEO_INAV_WORD_BYTES, GALILEO_IONO_REGIONS,
-};
 
 pub use bitbuffer::{
     BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,

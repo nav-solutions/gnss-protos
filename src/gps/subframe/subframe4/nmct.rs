@@ -1,7 +1,7 @@
 //! Navigation Message Correction Table (subframe 4, page 13, SV ID 52).
 
 use crate::{
-    gps::{GPS_QZSS_DATA_ID, GPS_SUBFRAME_DATA_BYTES, GPS_WORD_DATA_BITS},
+    gps::{GPS_LNAV_CONFIG_DID, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -35,12 +35,12 @@ pub struct GpsQzssNmct {
     pub erd: [i8; GPS_NMCT_ERD_COUNT],
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssNmct, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssNmct, 24); // TODO improve defs
 
 impl Default for GpsQzssNmct {
     fn default() -> Self {
         Self {
-            data_id: GPS_QZSS_DATA_ID,
+            data_id: GPS_LNAV_CONFIG_DID,
             availability: 0,
             erd: [GPS_NMCT_ERD_NOT_AVAILABLE; GPS_NMCT_ERD_COUNT],
         }
@@ -49,7 +49,7 @@ impl Default for GpsQzssNmct {
 
 impl Message<BigEndian> for GpsQzssNmct {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24
     }
 
     fn encoding_bits(&self) -> usize {

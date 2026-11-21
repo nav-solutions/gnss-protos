@@ -6,9 +6,9 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
-/// [GpsQzssFrame2] Ephemeris #2 frame interpretation.
+/// [GpsQzssSubframe2] Ephemeris #2 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
-pub struct GpsQzssFrame2 {
+pub struct GpsQzssSubframe2 {
     /// Time of issue of ephemeris (in seconds of week)
     /// at instant of transmission of the next MSB.
     /// Must be a multiple of 16 to correctly be encoded.
@@ -45,9 +45,9 @@ pub struct GpsQzssFrame2 {
     pub aodo: u8,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssFrame2, crate::gps::GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssSubframe2, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
-impl Message<BigEndian> for GpsQzssFrame2 {
+impl Message<BigEndian> for GpsQzssSubframe2 {
     fn encoding_size(&self) -> usize {
         8 * GPS_WORD_DATA_BITS / 8
     }
@@ -57,7 +57,7 @@ impl Message<BigEndian> for GpsQzssFrame2 {
     }
 }
 
-impl BitWrite<BigEndian> for GpsQzssFrame2 {
+impl BitWrite<BigEndian> for GpsQzssSubframe2 {
     /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
@@ -87,7 +87,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame2 {
     }
 }
 
-impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
+impl BitRead<'_, BigEndian> for GpsQzssSubframe2 {
     /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     /// Parameters split over two words by the ICD (M0, e, sqrt(A)) are contiguous here.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
@@ -129,7 +129,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame2 {
     }
 }
 
-impl GpsQzssFrame2 {
+impl GpsQzssSubframe2 {
     #[cfg(test)]
     pub fn model() -> Self {
         Self::default()
@@ -146,90 +146,90 @@ impl GpsQzssFrame2 {
             .with_fit_interval_flag()
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated time of issue of Ephemeris
+    /// Copies and returns [GpsQzssSubframe2] with updated time of issue of Ephemeris
     /// in seconds of week.
     pub fn with_toe_seconds(mut self, toe_seconds: u32) -> Self {
         self.toe = toe_seconds;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated IODE value.
+    /// Copies and returns [GpsQzssSubframe2] with updated IODE value.
     pub fn with_iode(mut self, iode: u8) -> Self {
         self.iode = iode;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly (in semicircles) at reference time.
+    /// Copies and returns [GpsQzssSubframe2] with updated mean anomaly (in semicircles) at reference time.
     pub fn with_mean_anomaly_semicircles(mut self, m0_semicircles: f64) -> Self {
         self.m0 = m0_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean anomaly (in radians) at reference time.
+    /// Copies and returns [GpsQzssSubframe2] with updated mean anomaly (in radians) at reference time.
     pub fn with_mean_anomaly_radians(self, m0_rad: f64) -> Self {
         self.with_mean_anomaly_semicircles(rad_to_semicircles(m0_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in semicircles)
+    /// Copies and returns [GpsQzssSubframe2] with updated mean motion difference (in semicircles)
     pub fn with_mean_motion_difference_semicircles(mut self, dn_semicircles: f64) -> Self {
         self.dn = dn_semicircles;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated mean motion difference (in radians)
+    /// Copies and returns [GpsQzssSubframe2] with updated mean motion difference (in radians)
     pub fn with_mean_motion_difference_radians(self, dn_rad: f64) -> Self {
         self.with_mean_motion_difference_semicircles(rad_to_semicircles(dn_rad))
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated semi-major axis (in meters)
+    /// Copies and returns [GpsQzssSubframe2] with updated semi-major axis (in meters)
     pub fn with_semi_major_axis_meters(mut self, semi_major_m: f64) -> Self {
         self.sqrt_a = semi_major_m.sqrt();
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated square root of semi-major axis (in square root meters)
+    /// Copies and returns [GpsQzssSubframe2] with updated square root of semi-major axis (in square root meters)
     pub fn with_square_root_semi_major_axis(mut self, sqrt_semi_major_m: f64) -> Self {
         self.sqrt_a = sqrt_semi_major_m;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated orbit eccentricity.
+    /// Copies and returns [GpsQzssSubframe2] with updated orbit eccentricity.
     pub fn with_eccentricity(mut self, e: f64) -> Self {
         self.e = e;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated 5-bit AODO mask.
+    /// Copies and returns [GpsQzssSubframe2] with updated 5-bit AODO mask.
     pub fn with_aodo(mut self, aodo: u8) -> Self {
         self.aodo = aodo & 0x1f;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated radius (sine component) in meters.
+    /// Copies and returns [GpsQzssSubframe2] with updated radius (sine component) in meters.
     pub fn with_crs_meters(mut self, crs_m: f64) -> Self {
         self.crs = crs_m;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated latitude cosine harmnoic correction term.
+    /// Copies and returns [GpsQzssSubframe2] with updated latitude cosine harmnoic correction term.
     pub fn with_cuc_radians(mut self, cuc_rad: f64) -> Self {
         self.cuc = cuc_rad;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with updated latitude sine harmnoic correction term.
+    /// Copies and returns [GpsQzssSubframe2] with updated latitude sine harmnoic correction term.
     pub fn with_cus_radians(mut self, cus_rad: f64) -> Self {
         self.cus = cus_rad;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with fit interval flag asserted.
+    /// Copies and returns [GpsQzssSubframe2] with fit interval flag asserted.
     pub fn with_fit_interval_flag(mut self) -> Self {
         self.fit_int_flag = true;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame2] with fit interval flag deasserted.
+    /// Copies and returns [GpsQzssSubframe2] with fit interval flag deasserted.
     pub fn without_fit_interval_flag(mut self) -> Self {
         self.fit_int_flag = false;
         self
@@ -238,7 +238,7 @@ impl GpsQzssFrame2 {
 
 #[cfg(test)]
 mod frame2 {
-    use crate::{gps::GpsQzssFrame2, Message};
+    use crate::{gps::GpsQzssSubframe2, Message};
 
     #[test]
     fn reciprocal() {
@@ -256,7 +256,7 @@ mod frame2 {
                 4800, 11, 9.78E-1, 6.0e-9, 9.8e-7, 3.0e-6, 87.0, 0.02, 5153.65, true, 0x0f,
             ),
         ] {
-            let frame = GpsQzssFrame2 {
+            let frame = GpsQzssSubframe2 {
                 toe,
                 iode,
                 m0,
@@ -276,7 +276,7 @@ mod frame2 {
                 panic!("failed to encode frame: {}", e);
             });
 
-            let decoded = GpsQzssFrame2::decode(&buf).unwrap_or_else(|e| {
+            let decoded = GpsQzssSubframe2::decode(&buf).unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-2: {}", e);
             });
 

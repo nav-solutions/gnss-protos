@@ -83,8 +83,14 @@ between calls, so a frame may span several buffers. Positions are expressed in b
 
 ```rust
 use gnss_protos::{
-    BigEndian, BitWriteStream, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow,
-    GPS_FRAME_BITS,
+    BigEndian, BitWriteStream,
+    gps::{
+        GPS_FRAME_BITS,
+        GpsQzssDecoder,
+        GpsQzssFrame,
+        GpsQzssFrameId,
+        GpsQzssHow,
+    },
 };
 
 // Stream 3 frames, contiguously, 5 bits after the start of the buffer
@@ -129,7 +135,7 @@ assert_eq!(count, 3);
 4 padding bits).
 
 ```rust
-use gnss_protos::{GpsQzssFrame, GpsQzssFrameId, Message};
+use gnss_protos::gps::{GpsQzssFrame, GpsQzssFrameId, Message};
 
 // Real EPH-1 subframe, as transmitted (300 bits, parity included)
 let bytes = [

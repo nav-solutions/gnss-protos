@@ -6,9 +6,9 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
-/// [GpsQzssFrame1] Ephemeris #1 frame interpretation.
+/// [GpsQzssSubframe1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
-pub struct GpsQzssFrame1 {
+pub struct GpsQzssSubframe1 {
     /// Rolling week counter.
     pub week: u16,
 
@@ -77,9 +77,9 @@ pub struct GpsQzssFrame1 {
     pub af0: f64,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssFrame1, crate::gps::GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssSubframe1, crate::gps::GPS_SUBFRAME_DATA_BYTES);
 
-impl Message<BigEndian> for GpsQzssFrame1 {
+impl Message<BigEndian> for GpsQzssSubframe1 {
     fn encoding_size(&self) -> usize {
         8 * GPS_WORD_DATA_BITS / 8
     }
@@ -89,7 +89,7 @@ impl Message<BigEndian> for GpsQzssFrame1 {
     }
 }
 
-impl BitWrite<BigEndian> for GpsQzssFrame1 {
+impl BitWrite<BigEndian> for GpsQzssSubframe1 {
     /// Writes the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
         // word 3
@@ -127,7 +127,7 @@ impl BitWrite<BigEndian> for GpsQzssFrame1 {
     }
 }
 
-impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
+impl BitRead<'_, BigEndian> for GpsQzssSubframe1 {
     /// Reads the 192 data bits of words 3 to 10 (parity free: parity is handled by [crate::gps::GpsQzssFrame]).
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
         // word 3
@@ -182,7 +182,7 @@ impl BitRead<'_, BigEndian> for GpsQzssFrame1 {
     }
 }
 
-impl GpsQzssFrame1 {
+impl GpsQzssSubframe1 {
     #[cfg(test)]
     pub fn model() -> Self {
         Self::default()
@@ -258,100 +258,100 @@ impl GpsQzssFrame1 {
         }
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated Week number
+    /// Copies and returns [GpsQzssSubframe1] with updated Week number
     pub fn with_week(mut self, week: u16) -> Self {
         self.week = week & 0x3ff;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated 10-bit IODC mask
+    /// Copies and returns [GpsQzssSubframe1] with updated 10-bit IODC mask
     pub fn with_iodc(mut self, iodc: u16) -> Self {
         self.iodc_lsb = iodc as u8;
         self.iodc_msb = (iodc >> 8) as u8;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with asserted L2P data flag
+    /// Copies and returns [GpsQzssSubframe1] with asserted L2P data flag
     pub fn with_l2p_flag(mut self) -> Self {
         self.l2_p_data_flag = true;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with deasserted L2P data flag
+    /// Copies and returns [GpsQzssSubframe1] with deasserted L2P data flag
     pub fn without_l2p_flag(mut self) -> Self {
         self.l2_p_data_flag = false;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated 23-bit reserved word
+    /// Copies and returns [GpsQzssSubframe1] with updated 23-bit reserved word
     pub fn with_reserved23_word(mut self, reserved: u32) -> Self {
         self.reserved_word4 = reserved & 0x7f_ffff;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated (first) 24-bit reserved word
+    /// Copies and returns [GpsQzssSubframe1] with updated (first) 24-bit reserved word
     pub fn with_reserved24_word1(mut self, reserved: u32) -> Self {
         self.reserved_word5 = reserved & 0xff_ffff;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated (second) 24-bit reserved word
+    /// Copies and returns [GpsQzssSubframe1] with updated (second) 24-bit reserved word
     pub fn with_reserved24_word2(mut self, reserved: u32) -> Self {
         self.reserved_word6 = reserved & 0xff_ffff;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated 16-bit reserved word
+    /// Copies and returns [GpsQzssSubframe1] with updated 16-bit reserved word
     pub fn with_reserved16_word(mut self, reserved: u16) -> Self {
         self.reserved_word7 = reserved;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated Healthy flags
+    /// Copies and returns [GpsQzssSubframe1] with updated Healthy flags
     pub fn healthy(mut self) -> Self {
         self.health = GpsQzssSatelliteHealth::healthy();
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated [GpsQzssSatelliteHealth] flags.
+    /// Copies and returns [GpsQzssSubframe1] with updated [GpsQzssSatelliteHealth] flags.
     pub fn with_health(mut self, health: GpsQzssSatelliteHealth) -> Self {
         self.health = health;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated time of clock in seconds.
+    /// Copies and returns [GpsQzssSubframe1] with updated time of clock in seconds.
     /// Provided value must be a multiple of 16 to be perfectly encoded.
     pub fn with_time_of_clock_seconds(mut self, toc_s: u32) -> Self {
         self.toc = toc_s;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in seconds
+    /// Copies and returns [GpsQzssSubframe1] with updated Total Group Delay (TGD) in seconds
     pub fn with_total_group_delay_seconds(mut self, tgd_s: f64) -> Self {
         self.tgd = tgd_s;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated Total Group Delay (TGD) in nanoseconds
+    /// Copies and returns [GpsQzssSubframe1] with updated Total Group Delay (TGD) in nanoseconds
     pub fn with_total_group_delay_nanos(mut self, tgd_nanos: f64) -> Self {
         self.tgd = tgd_nanos * 1e-9;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
+    /// Copies and returns [GpsQzssSubframe1] with updated User Range Accuracy
     /// in meters.
     pub fn with_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
         self.ura = Self::compute_ura(ura_m);
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated 2-bit C/A or P ON L2 mask.
+    /// Copies and returns [GpsQzssSubframe1] with updated 2-bit C/A or P ON L2 mask.
     pub fn with_ca_or_p_l2_mask(mut self, mask: u8) -> Self {
         self.ca_or_p_l2 = mask & 0x3;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated User Range Accuracy
+    /// Copies and returns [GpsQzssSubframe1] with updated User Range Accuracy
     /// from a nominal User Range Accuracy in meters.
     pub fn with_nominal_user_range_accuracy_m(mut self, ura_m: f64) -> Self {
         // For each URA index, users may compute a nominal URA value (x)
@@ -367,25 +367,25 @@ impl GpsQzssFrame1 {
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in seconds.
+    /// Copies and returns [GpsQzssSubframe1] with updated clock correction (0) term in seconds.
     pub fn with_clock_offset_seconds(mut self, a0_seconds: f64) -> Self {
         self.af0 = a0_seconds;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (0) term in nanoseconds.
+    /// Copies and returns [GpsQzssSubframe1] with updated clock correction (0) term in nanoseconds.
     pub fn with_clock_offset_nanoseconds(mut self, a0_nanos: f64) -> Self {
         self.af0 = a0_nanos * 1E-9;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (1) term (in seconds per second).
+    /// Copies and returns [GpsQzssSubframe1] with updated clock correction (1) term (in seconds per second).
     pub fn with_clock_drift_seconds_s(mut self, af1: f64) -> Self {
         self.af1 = af1;
         self
     }
 
-    /// Copies and returns [GpsQzssFrame1] with updated clock correction (2) term (in seconds per squared second).
+    /// Copies and returns [GpsQzssSubframe1] with updated clock correction (2) term (in seconds per squared second).
     pub fn with_clock_drift_rate_seconds_s2(mut self, af2: f64) -> Self {
         self.af2 = af2;
         self
@@ -395,7 +395,7 @@ impl GpsQzssFrame1 {
 #[cfg(test)]
 mod test {
     use crate::{
-        gps::{GpsQzssFrame1, GpsQzssSatelliteHealth},
+        gps::{GpsQzssSatelliteHealth, GpsQzssSubframe1},
         Message,
     };
 
@@ -428,7 +428,7 @@ mod test {
             let iodc_lsb = (iodc & 0xff) as u8;
             let iodc_msb = (iodc >> 8) as u8;
 
-            let frame = GpsQzssFrame1 {
+            let frame = GpsQzssSubframe1 {
                 week,
                 ca_or_p_l2,
                 ura,
@@ -453,7 +453,7 @@ mod test {
                 panic!("failed to encode frame: {}", e);
             });
 
-            let decoded = GpsQzssFrame1::decode(&buf).unwrap_or_else(|e| {
+            let decoded = GpsQzssSubframe1::decode(&buf).unwrap_or_else(|e| {
                 panic!("failed to decode GPS EPH-1: {}", e);
             });
 
@@ -508,14 +508,14 @@ mod test {
             (3072.1, 14),
             (4000.1, 14),
         ] {
-            let ura = GpsQzssFrame1::compute_ura(value_m);
+            let ura = GpsQzssSubframe1::compute_ura(value_m);
             assert_eq!(ura, encoded_ura, "encoded incorrect URA from {}m", value_m);
 
-            let frame1 = GpsQzssFrame1::default().with_user_range_accuracy_m(value_m);
+            let frame1 = GpsQzssSubframe1::default().with_user_range_accuracy_m(value_m);
 
             assert_eq!(frame1.ura, encoded_ura);
 
-            let expected = GpsQzssFrame1 {
+            let expected = GpsQzssSubframe1 {
                 ura: encoded_ura,
                 ..Default::default()
             };
@@ -525,7 +525,7 @@ mod test {
             // reciprocal
             let mut bytes = [0u8; 24];
             frame1.encode(&mut bytes).unwrap();
-            assert_eq!(GpsQzssFrame1::decode(&bytes).unwrap().ura, encoded_ura);
+            assert_eq!(GpsQzssSubframe1::decode(&bytes).unwrap().ura, encoded_ura);
 
             // assert_eq!(
             //     frame1.with_nominal_user_range_accuracy_m(value_m).ura,

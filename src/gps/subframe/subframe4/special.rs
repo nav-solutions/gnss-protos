@@ -1,7 +1,7 @@
 //! Special message (subframe 4, page 17, SV ID 55).
 
 use crate::{
-    gps::{GPS_QZSS_DATA_ID, GPS_SUBFRAME_DATA_BYTES, GPS_WORD_DATA_BITS},
+    gps::{GPS_LNAV_CONFIG_DID, GPS_WORD_DATA_BITS},
     Message,
 };
 
@@ -24,12 +24,12 @@ pub struct GpsQzssSpecialMessage {
     pub reserved: u8,
 }
 
-crate::bits::impl_eq_by_encoding!(GpsQzssSpecialMessage, GPS_SUBFRAME_DATA_BYTES);
+crate::bits::impl_eq_by_encoding!(GpsQzssSpecialMessage, 24); // TODO improve defs
 
 impl Default for GpsQzssSpecialMessage {
     fn default() -> Self {
         Self {
-            data_id: GPS_QZSS_DATA_ID,
+            data_id: GPS_LNAV_CONFIG_DID,
             message: [b' '; GPS_SPECIAL_MESSAGE_CHARS],
             reserved: 0,
         }
@@ -38,7 +38,7 @@ impl Default for GpsQzssSpecialMessage {
 
 impl Message<BigEndian> for GpsQzssSpecialMessage {
     fn encoding_size(&self) -> usize {
-        GPS_SUBFRAME_DATA_BYTES
+        24 // TODO improve defs
     }
 
     fn encoding_bits(&self) -> usize {
