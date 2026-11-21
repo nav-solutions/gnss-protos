@@ -162,17 +162,13 @@ impl GpsQzssSuperframe {
     }
 
     /// Returns the 5 [GpsQzssFrame]s of given page (1..=25).
-    pub fn page(&self, page: u8) -> Option<&GpsQzssMessagePage> {
-        if (1..=GPS_QZSS_ALMANACH_PAGES as u8).contains(&page) {
-            Some(&self.0[page as usize - 1])
-        } else {
-            None
-        }
-    }
-
-    /// Iterates over the 125 [GpsQzssFrame]s, in transmission order.
-    pub fn frames(&self) -> impl Iterator<Item = &GpsQzssFrame> {
-        self.0.iter().flat_map(|page| page.iter())
+    ///
+    /// ## Input
+    ///
+    /// - page number: must be <= GPS_SUPERFRAME_ITEMS otherwise
+    /// this will panic
+    pub fn page(&self, page: u8) -> &GpsQzssFrame {
+        self.0[page]
     }
 
     /// Returns the GPS time (in seconds of week) at which this rotation started.

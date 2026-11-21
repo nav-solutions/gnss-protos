@@ -7,7 +7,7 @@
 
 use crate::{
     bits::{read_bits, write_bits},
-    gps::{GPS_FRAME_BYTES, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_WORDS, GPS_WORD_BITS},
+    gps::{GPS_SUBFRAME_BYTES, GPS_SUBFRAME_WORDS, GPS_WORD_BITS},
 };
 
 /// 30-bit mask.

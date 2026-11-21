@@ -12,10 +12,3 @@ impl<const M: usize> std::io::Write for StaticBuffer<M> {
         Ok(())
     }
 }
-
-// #[cfg(feature = "std")]
-// impl<const M: usize> std::io::Read for StaticBuffer<M> {
-//     fn read(&mut self, dest: &mut [u8]) -> std::io::Result<usize> {
-//         Ok(0)
-//     }
-// }

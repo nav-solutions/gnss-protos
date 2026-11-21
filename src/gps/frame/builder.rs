@@ -111,19 +111,25 @@ impl GpsQzssFrameBuilder {
 #[cfg(test)]
 mod test {
 
-    use crate::gps::{
-        GpsQzssFrame, GpsQzssFrameBuilder, GpsQzssHow, GpsQzssSubframe, GpsQzssSubframeId,
+    use crate::{
+        gps::{
+            test_vectors::{on_air, UBLOX_G25_STREAM},
+            GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameBuilder, GpsQzssHow, GpsQzssSubframe,
+            GpsQzssSubframeId, GPS_FRAME_ITEMS, GPS_WORD_BITS,
+        },
+        tests::init_logger,
+        BigEndian, BitWriteStream,
     };
 
-    fn id_to_usize(id: GpsQzssSubframeId) -> usize {
-        match id {
-            GpsQzssSubframeId::Ephemeris1 => 0,
-            GpsQzssSubframeId::Ephemeris2 => 1,
-            GpsQzssSubframeId::Ephemeris3 => 2,
-            GpsQzssSubframeId::Almanach4 => 3,
-            GpsQzssSubframeId::Almanach5 => 4,
-        }
-    }
+    // fn id_to_usize(id: GpsQzssSubframeId) -> usize {
+    //     match id {
+    //         GpsQzssSubframeId::Ephemeris1 => 0,
+    //         GpsQzssSubframeId::Ephemeris2 => 1,
+    //         GpsQzssSubframeId::Ephemeris3 => 2,
+    //         GpsQzssSubframeId::Almanach4 => 3,
+    //         GpsQzssSubframeId::Almanach5 => 4,
+    //     }
+    // }
 
     fn usize_to_id(val: usize) -> GpsQzssSubframeId {
         match val {
@@ -256,5 +262,54 @@ mod test {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_g25_ubx() {
+        init_logger();
+
+        // the transmitted bit stream
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = BitWriteStream::new(&mut bytes, BigEndian);
+            writer.write_int(0u8, 5).unwrap();
+
+            for words in UBLOX_G25_STREAM.iter() {
+                for word in on_air(*words).iter() {
+                    writer.write_int(*word, GPS_WORD_BITS).unwrap();
+                }
+            }
+
+            writer.write_int(0u8, 8).unwrap();
+        }
+
+        let mut position = 0;
+        let mut decoder = GpsQzssDecoder::default();
+
+        let mut builder = GpsQzssFrameBuilder::default();
+
+        // consume whole stream:
+        // verifies frame builder is imune to out-of-sync start
+        //
+        // EPH-1 has a 4 page offset in this stream
+        let mut count = 0;
+
+        loop {
+            let (consumed, frame) = decoder.decode(&bytes, position);
+            position += consumed;
+
+            match frame {
+                Some(frame) => {
+                    if builder.push(frame).is_some() {
+                        count += 1;
+                        builder.reset();
+                    }
+                },
+                _ => break,
+            }
+        }
+
+        assert_eq!(count, (UBLOX_G25_STREAM.len() - 4) / GPS_FRAME_ITEMS);
     }
 }

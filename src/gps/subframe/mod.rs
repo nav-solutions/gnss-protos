@@ -1,8 +1,10 @@
 use crate::{
+    constants::SECONDS_PER_WEEK,
     gps::{
-        GpsError, GpsQzssHow, GpsQzssTelemetry, GPS_INVERTED_PREAMBLE_BYTE, GPS_PREAMBLE_BYTE,
-        GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_DATA_BYTES, GPS_SUBFRAME_WORDS,
-        GPS_WORD_BITS,
+        GpsError, GpsQzssHow, GpsQzssTelemetry, GPS_FRAME_DURATION_S, GPS_INVERTED_PREAMBLE_BYTE,
+        GPS_PREAMBLE_BYTE, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_DATA_BYTES,
+        GPS_SUBFRAME_DURATION_S, GPS_SUBFRAME_WORDS, GPS_SUPERFRAME_DURATION_S,
+        GPS_SUPERFRAME_ITEMS, GPS_WORD_BITS,
     },
     Message,
 };
@@ -439,39 +441,45 @@ impl GpsQzssSubframe {
         self
     }
 
-    // /// Returns the GPS time (in seconds of week) at which the transmission of
-    // /// this subframe started. The HOW carries the time of the next subframe.
-    // pub fn transmission_time_s(&self) -> u32 {
-    //     (self.how.tow + SECONDS_PER_WEEK - GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK
-    // }
+    /// Returns transsmission time of this very [GpsQzssSubframe],
+    /// expressed in [TimeScale::GPST] timescale.
+    pub(crate) fn week_transmission_time_s(&self) -> u32 {
+        let mut tow = self.how.tow + SECONDS_PER_WEEK;
+        tow -= GPS_SUBFRAME_DURATION_S; // HOW carries the time of the next subframe.
+        tow = tow % SECONDS_PER_WEEK;
+        tow
+    }
 
     // /// Returns the GPS time (in seconds of week) at which the frame (5 subframes)
     // /// this subframe belongs to started.
     // pub fn frame_start_time_s(&self) -> u32 {
-    //     let index = self.subframe.frame_id().encode() as u32;
-    //     (self.how.tow + SECONDS_PER_WEEK - index * GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK
     // }
 
-    // /// Returns the page number (1..=25) of the frame this subframe belongs to,
-    // /// in the 12'30" rotation: subframes 4 and 5 transmit that page
-    // /// ([crate::gps::GpsQzssSubframe4], [crate::gps::GpsQzssSubframe5]).
-    // ///
-    // /// The page number is not transmitted: it derives from the time of transmission, the
-    // /// rotation being aligned on the beginning of the week (frame 0 of the week is page 1).
-    // pub fn page_number(&self) -> u8 {
-    //     let frame = self.frame_start_time_s() / GPS_FRAME_DURATION_S;
-    //     (frame % GPS_ALMANACH_PAGES as u32) as u8 + 1
-    // }
+    /// Returns the page number (1..=25) of the frame this subframe belongs to.
+    pub fn page_number(&self) -> u8 {
+        // In the 12'30" message: subframes 4 and 5 transmit that page
+        // ([crate::gps::GpsQzssSubframe4], [crate::gps::GpsQzssSubframe5]).
+        //
+        // The page number is not transmitted: it derives from the time of transmission, the
+        // rotation being aligned on the beginning of the week (frame 0 of the week is page 1).
+        let sbf_index = self.subframe.frame_id().encode() as u32;
 
-    // /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
-    // /// of a 12'30" superframe.
-    // pub fn starts_superframe(&self) -> bool {
-    //     let start = self.transmission_time_s();
+        let start_time_s = (self.how.tow + SECONDS_PER_WEEK - sbf_index * GPS_SUBFRAME_DURATION_S)
+            % SECONDS_PER_WEEK;
 
-    //     self.subframe.frame_id() == GpsQzssFrameId::Ephemeris1
-    //         && start % GPS_QZSS_SUPERFRAME_DURATION_S == 0
-    //         && start + GPS_QZSS_SUPERFRAME_DURATION_S <= SECONDS_PER_WEEK
-    // }
+        let frame = start_time_s / GPS_FRAME_DURATION_S;
+
+        (frame % GPS_SUPERFRAME_ITEMS as u32) as u8 + 1
+    }
+
+    /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
+    /// of a 12'30" superframe.
+    pub fn starts_superframe(&self) -> bool {
+        let start = self.week_transmission_time_s();
+        self.subframe.frame_id() == GpsQzssSubframeId::Ephemeris1
+            && start % GPS_SUPERFRAME_DURATION_S == 0
+            && start + GPS_SUPERFRAME_DURATION_S <= SECONDS_PER_WEEK
+    }
 
     /// Interprets the 240 parity free data bits (30 bytes) of a frame.
     fn from_data(data: &[u8; GPS_SUBFRAME_DATA_BYTES]) -> Result<Self, GpsError> {
@@ -953,57 +961,57 @@ mod test {
         assert_eq!(decoded.subframe, frame.subframe);
     }
 
-    // #[test]
-    // fn raw_almanach_subframes() {
-    //     // raw data bits, interpreted (as reserved pages: SV ID 0 and 63)
-    //     // through the Message trait of the subframe 4 / 5 pages
-    //     let raw4: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| i as u8 * 7);
-    //     let raw5: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| 0xff - i as u8);
+    #[test]
+    fn raw_almanach_subframes() {
+        // raw data bits, interpreted (as reserved pages: SV ID 0 and 63)
+        // through the Message trait of the subframe 4 / 5 pages
+        let raw4: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| i as u8 * 7);
+        let raw5: [u8; GPS_SUBFRAME_DATA_BYTES] = core::array::from_fn(|i| 0xff - i as u8);
 
-    //     for (frame_id, subframe, expected) in [
-    //         (
-    //             GpsQzssFrameId::Almanach4,
-    //             GpsQzssSubframe::Almanach4(GpsQzssSubframe4::decode(&raw4).unwrap()),
-    //             raw4,
-    //         ),
-    //         (
-    //             GpsQzssFrameId::Almanach5,
-    //             GpsQzssSubframe::Almanach5(GpsQzssSubframe5::decode(&raw5).unwrap()),
-    //             raw5,
-    //         ),
-    //     ] {
-    //         let frame = GpsQzssFrame::model(frame_id).with_subframe(subframe);
-    //         let encoded = encode(&frame);
-    //         let decoded = GpsQzssFrame::decode(&encoded).unwrap();
+        for (frame_id, subframe, expected) in [
+            (
+                GpsQzssSubframeId::Almanach4,
+                GpsQzssSubframeEnum::Almanach4(GpsQzssSubframe4::decode(&raw4).unwrap()),
+                raw4,
+            ),
+            (
+                GpsQzssSubframeId::Almanach5,
+                GpsQzssSubframeEnum::Almanach5(GpsQzssSubframe5::decode(&raw5).unwrap()),
+                raw5,
+            ),
+        ] {
+            let frame = GpsQzssSubframe::model(frame_id).with_subframe_enum(subframe);
+            let encoded = encode(&frame);
+            let decoded = GpsQzssSubframe::decode(&encoded).unwrap();
 
-    //         // the 2 last bits of word 10 (t-bits) are solved for the parity:
-    //         // they are decoded as zeros
-    //         let mut raw = [0u8; GPS_SUBFRAME_DATA_BYTES];
+            // the 2 last bits of word 10 (t-bits) are solved for the parity:
+            // they are decoded as zeros
+            let mut raw = [0u8; GPS_SUBFRAME_DATA_BYTES];
 
-    //         match (decoded.subframe, subframe) {
-    //             (GpsQzssSubframe::Almanach4(a), GpsQzssSubframe::Almanach4(b)) => {
-    //                 assert!(a.as_reserved().is_some());
-    //                 assert_eq!(a, b);
-    //                 a.encode(&mut raw).unwrap();
-    //             },
-    //             (GpsQzssSubframe::Almanach5(a), GpsQzssSubframe::Almanach5(b)) => {
-    //                 assert!(a.as_reserved().is_some());
-    //                 assert_eq!(a, b);
-    //                 a.encode(&mut raw).unwrap();
-    //             },
-    //             _ => panic!("wrong subframe type"),
-    //         };
+            match (decoded.subframe, subframe) {
+                (GpsQzssSubframeEnum::Almanach4(a), GpsQzssSubframeEnum::Almanach4(b)) => {
+                    assert!(a.as_reserved().is_some());
+                    assert_eq!(a, b);
+                    a.encode(&mut raw).unwrap();
+                },
+                (GpsQzssSubframeEnum::Almanach5(a), GpsQzssSubframeEnum::Almanach5(b)) => {
+                    assert!(a.as_reserved().is_some());
+                    assert_eq!(a, b);
+                    a.encode(&mut raw).unwrap();
+                },
+                _ => panic!("wrong subframe type"),
+            };
 
-    //         assert_eq!(raw[..23], expected[..23]);
-    //         assert_eq!(raw[23], expected[23] & 0xfc);
+            assert_eq!(raw[..23], expected[..23]);
+            assert_eq!(raw[23], expected[23] & 0xfc);
 
-    //         // the bit stream is preserved
-    //         assert_eq!(encode(&decoded), encoded);
+            // the bit stream is preserved
+            assert_eq!(encode(&decoded), encoded);
 
-    //         // and decoding is now stable
-    //         assert_eq!(GpsQzssFrame::decode(&encode(&decoded)).unwrap(), decoded);
-    //     }
-    // }
+            // and decoding is now stable
+            assert_eq!(GpsQzssSubframe::decode(&encode(&decoded)).unwrap(), decoded);
+        }
+    }
 
     #[test]
     fn random_data_bits_reciprocal() {

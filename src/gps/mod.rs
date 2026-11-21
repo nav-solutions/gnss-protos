@@ -104,10 +104,8 @@ mod how;
 mod subframe;
 // mod superframe;
 mod tlm;
-
-// #[cfg(feature = "hifitime")]
 // mod time;
-//
+
 pub use almanach::GpsQzssAlmanach;
 pub use decoder::GpsQzssDecoder;
 pub use errors::GpsError;
@@ -117,8 +115,6 @@ pub use how::GpsQzssHow;
 pub use subframe::*;
 // pub use superframe::*;
 pub use tlm::GpsQzssTelemetry;
-
-// #[cfg(feature = "hifitime")]
 // use time::GpsQzssLnavTemporalPosition;
 
 #[cfg(test)]
@@ -127,15 +123,68 @@ pub(crate) mod test_vectors;
 #[cfg(test)]
 mod tests;
 
+use hifitime::{Epoch, TimeScale};
+
+/// Half of the GPS Week Rollover, used in week counter unwrapping process
+const GPS_HALF_WEEK_ROLLOVER: i64 = GPS_WEEK_ROLLOVER as i64 / 2;
+
+/// 10-bit GPS/QZSS week count unwrapping algorithm.
+/// Unwraps the 10-bit week count, as transported by
+/// the GPS/QZSS navigation messages, to be further used in required calculations.
+/// To unwrap the week number correctly, we need a reference point in time which lies
+/// in the same 10-bit rollover period, which lasts for more than 19 years.
+/// If you use the decoding instant or intended transmission time, you are more then fine.
+///
+/// ## Input
+///
+/// - t_ref: Reference point in time, expressed as [Epoch], any [TimeScale] accepted here,
+/// this method is not limited to GPST or QZSST.
+/// - week_10b: 10b wrapped week counter
+/// - seconds: elapsed in current GPS/QZSS week
+///
+/// ## Output
+///
+/// - (unrapped week, seconds): as (u32, u32)
+pub fn week_10b_unwrapping(t_ref: Epoch, week_10b: u32) -> u32 {
+    // we can safely convert to GPST only here,
+    // because both timescale give the same results.
+    // QZSST is locked to GPST.
+    let t_gpst = t_ref.to_time_scale(TimeScale::GPST);
+
+    let reference_week = t_gpst.to_time_of_week().0 as i64;
+    let wn = (week_10b as i64) % GPS_WEEK_ROLLOVER as i64;
+
+    // candidate within the same 1024 week cycle as the reference
+    let mut week = reference_week - reference_week.rem_euclid(GPS_WEEK_ROLLOVER as i64) + wn;
+
+    // pick closest candidate
+    let delta = week - reference_week;
+
+    if delta > GPS_HALF_WEEK_ROLLOVER {
+        week -= GPS_WEEK_ROLLOVER as i64;
+    } else if delta < -GPS_HALF_WEEK_ROLLOVER {
+        week += GPS_WEEK_ROLLOVER as i64;
+    }
+
+    // weeks prior GPST origin do not exist
+    let unwrapped_week = week.max(0) as u32;
+
+    unwrapped_week
+}
+
 #[cfg(test)]
 mod test {
     use crate::gps::{
-        GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_FRAME_DURATION_S, GPS_FRAME_ITEMS,
-        GPS_INVERTED_PREAMBLE_BYTE, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES, GPS_SUBFRAME_DATA_BYTES,
-        GPS_SUBFRAME_DURATION_S, GPS_SUBFRAME_WORDS, GPS_SUPERFRAME_BITS, GPS_SUPERFRAME_BYTES,
-        GPS_SUPERFRAME_DURATION_S, GPS_SUPERFRAME_ITEMS, GPS_WEEK_ROLLOVER, GPS_WORD_BITS,
-        GPS_WORD_BYTES,
+        week_10b_unwrapping, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_FRAME_DURATION_S,
+        GPS_FRAME_ITEMS, GPS_INVERTED_PREAMBLE_BYTE, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES,
+        GPS_SUBFRAME_DATA_BYTES, GPS_SUBFRAME_DURATION_S, GPS_SUBFRAME_WORDS, GPS_SUPERFRAME_BITS,
+        GPS_SUPERFRAME_BYTES, GPS_SUPERFRAME_DURATION_S, GPS_SUPERFRAME_ITEMS, GPS_WEEK_ROLLOVER,
+        GPS_WORD_BITS, GPS_WORD_BYTES,
     };
+
+    use hifitime::Epoch;
+
+    use std::str::FromStr;
 
     #[test]
     fn gps_binary_constants() {
@@ -163,5 +212,16 @@ mod test {
         assert_eq!(GPS_SUPERFRAME_BITS, 37_500);
         assert_eq!(GPS_SUPERFRAME_BYTES, 4_688);
         assert_eq!(GPS_SUPERFRAME_DURATION_S, 750);
+    }
+
+    #[test]
+    fn week_count_unwrapping() {
+        for (epoch_str, week10b, week) in [
+            ("2026-11-20 10:04:17 UTC", 397, 2445),
+            ("2026-11-22 00:00:00 GPST", 397, 2445),
+        ] {
+            let epoch = Epoch::from_str(epoch_str).unwrap();
+            assert_eq!(week_10b_unwrapping(epoch, week10b), week);
+        }
     }
 }

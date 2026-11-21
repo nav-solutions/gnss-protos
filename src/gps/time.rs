@@ -18,9 +18,6 @@ pub enum Error {
     InvalidEpoch,
 }
 
-/// Half of the GPS Week Rollover, used in week counter unwrapping process
-const GPS_HALF_WEEK_ROLLOVER: i64 = GPS_WEEK_ROLLOVER as i64 / 2;
-
 const SUBFRAME_NS: u128 = GPS_SUBFRAME_DURATION_S as u128 * NANOSECONDS_PER_SECOND as u128; // 300 bits à 50 bit/s
 const FRAME_NS: u128 = GPS_FRAME_DURATION_S as u128 * SUBFRAME_NS; // 5 sous-trames = 1 page
 const SUPERFRAME_NS: u128 = GPS_QZSS_ALMANACH_PAGES as u128 * FRAME_NS; // 750 s = 12'30"
@@ -196,52 +193,6 @@ impl Into<Duration> for GpsQzssLnavTimePrecision {
 //         // arc designing
 //     }
 // 
-//     /// 10-bit GPS/QZSS week count unwrapping algorithm.
-//     /// Unwraps the 10-bit week count, as transported by
-//     /// the GPS/QZSS navigation messages, to be further used in required calculations.
-//     /// To unwrap the week number correctly, we need a reference point in time which lies
-//     /// in the same 10-bit rollover period, which lasts for more than 19 years.
-//     /// If you use the decoding instant or intended transmission time, you are more then fine.
-//     /// 
-//     /// ## Input
-//     ///
-//     /// - t_ref: Reference point in time, expressed as [Epoch], any [TimeScale] accepted here,
-//     /// this method is not limited to GPST or QZSST.
-//     ///
-//     /// - week_10b: 10b wrapped week counter
-//     /// - seconds: elapsed in current GPS/QZSS week
-//     ///
-//     /// ## Output
-//     ///
-//     /// - (unrapped week, seconds): as (u32, u32)
-//     pub fn week_10b_unwrapping(t_ref: Epoch, week_10b: u32, seconds: u32) -> (u32, u32) {
-// 
-//         let t_gpst = t_ref.to_time_scale(TimeScale::GPST);
-// 
-//         let reference_week = t_gpst.to_time_of_week().0 as i64;
-//         let wn = (wn as i64) % GPS_WEEK_ROLLOVER as i64;
-// 
-//         // candidate within the same 1024 week cycle as the reference
-//         let mut week = reference_week - reference_week.rem_euclid(GPS_WEEK_ROLLOVER as i64) + wn;
-// 
-//         // pick closest candidate
-//         let delta = week - reference_week;
-// 
-//         if delta > GPS_HALF_WEEK_ROLLOVER {
-//             week -= GPS_WEEK_ROLLOVER as i64;
-//         } else if delta < -GPS_HALF_WEEK_ROLLOVER {
-//             week += GPS_WEEK_ROLLOVER as i64;
-//         }
-// 
-//         // weeks prior GPST origin do not exist
-//         if week < 0 {
-//             week += GPS_WEEK_ROLLOVER as i64;
-//         }
-// 
-//         week as u32
-//         (unwrapped_week, seconds)
-//     }
-// }
 // 
 // impl From<Epoch> for GpsQzssLnavTimeSync {
 //     /// Calculates [GpsQzssLnavTemporalPosition] from any transmission time,

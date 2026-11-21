@@ -581,4 +581,47 @@ mod test {
 
         assert_eq!(messages, vec![first, second]);
     }
+    
+    #[test]
+    fn test_g25_ubx() {
+        init_logger();
+
+        // the transmitted bit stream
+        let mut bytes = Vec::new();
+
+        {
+            let mut writer = BitWriteStream::new(&mut bytes, BigEndian);
+            writer.write_int(0u8, 5).unwrap();
+
+            for words in UBLOX_G25_STREAM.iter() {
+                for word in on_air(*words).iter() {
+                    writer.write_int(*word, GPS_WORD_BITS).unwrap();
+                }
+            }
+
+            writer.write_int(0u8, 8).unwrap();
+        }
+
+        let mut position = 0;
+        let mut decoder = GpsQzssDecoder::default();
+
+        let mut builder = GpsQzssFrameBuilder::default();
+
+        // consume whole stream:
+        // verifies frame builder is imune to out-of-sync start
+        loop {
+            let (consumed, frame) = decoder.decode(&bytes, position);
+            position += consumed;
+
+            match frame {
+                Some(frame) => {
+                    assert!(builder.push(frame).is_none());
+                }
+            }
+        }
+
+        // builder waited for Page1 (4 pages offset) and collected the whole stream
+        assert_eq!(builder.len(), UBLOX_G25_STREAM.len() -4 *5);
+    }
+}
 }

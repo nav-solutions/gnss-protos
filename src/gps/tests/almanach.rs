@@ -4,25 +4,25 @@ use crate::{
     gps::{
         test_vectors::{on_air, words_to_bytes, UBLOX_ALMANACH_PAGES, UBLOX_G25_STREAM},
         tests::assert_valid_subframe,
-        GpsQzssDecoder, GpsQzssFrame, GpsQzssFrame4, GpsQzssFrame5, GpsQzssFrameId,
-        GpsQzssMessageBuilder, GpsQzssSubframe, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_WORD_BITS,
+        GpsQzssDecoder, GpsQzssSubframe, GpsQzssSubframe4, GpsQzssSubframe5, GpsQzssSubframeEnum,
+        GpsQzssSubframeId, GPS_SUBFRAME_BITS, GPS_SUBFRAME_BYTES, GPS_WORD_BITS,
     },
     tests::init_logger,
     BigEndian, BitWriteStream, Message,
 };
 
-fn decode(words: [u32; 10]) -> (GpsQzssFrame, [u8; GPS_FRAME_BYTES]) {
+fn decode(words: [u32; 10]) -> (GpsQzssSubframe, [u8; GPS_SUBFRAME_BYTES]) {
     let bytes = words_to_bytes(&on_air(words));
     assert_valid_subframe(&bytes);
-    (GpsQzssFrame::decode(&bytes).unwrap(), bytes)
+    (GpsQzssSubframe::decode(&bytes).unwrap(), bytes)
 }
 
-fn frame4(frame: &GpsQzssFrame) -> GpsQzssFrame4 {
-    frame.subframe.as_alm4().expect("not a subframe 4")
+fn frame4(sbf: &GpsQzssSubframe) -> GpsQzssSubframe4 {
+    sbf.subframe.as_alm4().expect("not a subframe 4")
 }
 
-fn frame5(frame: &GpsQzssFrame) -> GpsQzssFrame5 {
-    frame.subframe.as_alm5().expect("not a subframe 5")
+fn frame5(sbf: &GpsQzssSubframe) -> GpsQzssSubframe5 {
+    sbf.subframe.as_alm5().expect("not a subframe 5")
 }
 
 #[test]
@@ -38,18 +38,19 @@ fn real_pages_bit_exact() {
         let page = frame.page_number();
 
         match frame.subframe {
-            GpsQzssSubframe::Almanach4(f) => {
+            GpsQzssSubframeEnum::Almanach4(f) => {
                 assert!(f.matches_page(page), "{}: page {}", description, page)
             },
-            GpsQzssSubframe::Almanach5(f) => {
+            GpsQzssSubframeEnum::Almanach5(f) => {
                 assert!(f.matches_page(page), "{}: page {}", description, page)
             },
             _ => panic!("{}: not an almanac page", description),
         }
 
         // bit exact re-encoding, parity included
-        let mut encoded = [0u8; GPS_FRAME_BYTES];
+        let mut encoded = [0u8; GPS_SUBFRAME_BYTES];
         frame.encode(&mut encoded).unwrap();
+
         assert_eq!(encoded, bytes, "{}", description);
     }
 }
@@ -188,7 +189,6 @@ fn real_stream() {
     }
 
     let mut decoder = GpsQzssDecoder::default();
-    let mut builder = GpsQzssMessageBuilder::default();
     let mut frames = Vec::new();
     let mut position = 0;
 
@@ -198,7 +198,6 @@ fn real_stream() {
 
         match frame {
             Some(frame) => {
-                assert!(builder.push(frame).is_none());
                 frames.push(frame);
             },
             None => break,
@@ -208,26 +207,25 @@ fn real_stream() {
     assert_eq!(frames.len(), UBLOX_G25_STREAM.len());
 
     // starts with EPH-1 of page 22 (TOW 455880)
-    assert_eq!(frames[0].transmission_time_s(), 455_880);
+    assert_eq!(frames[0].week_transmission_time_s(), 455_880);
     assert_eq!(frames[0].page_number(), 22);
 
     // the builder waited for page 1 (4 pages later), and collected the rest
-    assert_eq!(builder.len(), UBLOX_G25_STREAM.len() - 4 * 5);
     assert_eq!(frames[20].page_number(), 1);
-    assert!(frames[20].starts_rotation());
+    assert!(frames[20].starts_superframe());
 
     let mut pages4 = Vec::new();
 
     for (k, frame) in frames.iter().enumerate() {
         // subframes in sequence
         assert_eq!(frame.subframe.frame_id().encode() as usize, k % 5 + 1);
-        assert_eq!(frame.transmission_time_s(), 455_880 + 6 * k as u32);
+        assert_eq!(frame.week_transmission_time_s(), 455_880 + 6 * k as u32);
 
         let page = frame.page_number();
 
         // every page matches the IS-GPS-200 pagination
         match frame.subframe {
-            GpsQzssSubframe::Almanach4(f) => {
+            GpsQzssSubframeEnum::Almanach4(f) => {
                 assert!(
                     f.matches_page(page),
                     "SF4 page {}: SV ID {}",
@@ -236,7 +234,7 @@ fn real_stream() {
                 );
                 pages4.push((page, f.sv_id()));
             },
-            GpsQzssSubframe::Almanach5(f) => {
+            GpsQzssSubframeEnum::Almanach5(f) => {
                 assert!(
                     f.matches_page(page),
                     "SF5 page {}: SV ID {}",
@@ -273,9 +271,11 @@ fn real_stream() {
     }
 
     assert_eq!(reencoded, bytes);
+
     assert_eq!(
         bytes.len(),
-        (5 + UBLOX_G25_STREAM.len() * GPS_FRAME_BITS + 8 + 7) / 8
+        (5 + UBLOX_G25_STREAM.len() * GPS_SUBFRAME_BITS + 8 + 7) / 8
     );
-    assert_eq!(frames[3].subframe.frame_id(), GpsQzssFrameId::Almanach4);
+
+    assert_eq!(frames[3].subframe.frame_id(), GpsQzssSubframeId::Almanach4);
 }
