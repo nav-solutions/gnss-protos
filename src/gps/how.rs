@@ -30,8 +30,8 @@ pub struct GpsQzssHow {
     /// For other satellite, this indicates A/S is active.
     pub anti_spoofing: bool,
 
-    /// Following Frame ID (to decode following data words)
-    pub frame_id: GpsQzssSubframeId,
+    /// Indenfities binary content to follow
+    pub sbf_id: GpsQzssSubframeId,
 }
 
 impl Message<BigEndian> for GpsQzssHow {
@@ -50,18 +50,18 @@ impl BitRead<'_, BigEndian> for GpsQzssHow {
         let tow_count = stream.read_int::<u32>(17)?;
         let alert = stream.read_bool()?;
         let anti_spoofing = stream.read_bool()?;
-        let frame_id = stream.read_int::<u8>(3)?;
+        let sbf_id = stream.read_int::<u8>(3)?;
         let _t = stream.read_int::<u8>(2)?; // solved for parity, no meaning
 
-        match GpsQzssSubframeId::decode(frame_id) {
-            Ok(frame_id) => Ok(Self {
+        match GpsQzssSubframeId::decode(sbf_id) {
+            Ok(sbf_id) => Ok(Self {
                 alert,
-                frame_id,
+                sbf_id,
                 anti_spoofing,
                 tow: tow_count * 6,
             }),
             Err(_) => Err(BitError::UnmatchedDiscriminant {
-                discriminant: frame_id as usize,
+                discriminant: sbf_id as usize,
                 enum_name: "frame-id".to_string(),
             }),
         }
@@ -75,7 +75,7 @@ impl BitWrite<BigEndian> for GpsQzssHow {
         stream.write_int((self.tow / 6) & 0x1ffff, 17)?;
         stream.write_bool(self.alert)?;
         stream.write_bool(self.anti_spoofing)?;
-        stream.write_int(self.frame_id.encode() & 0x07, 3)?;
+        stream.write_int(self.sbf_id.encode() & 0x07, 3)?;
         stream.write_int(0u8, 2)?;
         Ok(())
     }
@@ -87,7 +87,7 @@ impl Default for GpsQzssHow {
         Self {
             tow: Default::default(),
             alert: Default::default(),
-            frame_id: Default::default(),
+            sbf_id: Default::default(),
             anti_spoofing: Default::default(),
         }
     }
@@ -98,16 +98,16 @@ impl core::fmt::Display for GpsQzssHow {
         write!(
             f,
             "{} TOW={} - ALERT={} - A/S={}",
-            self.frame_id, self.tow, self.alert, self.anti_spoofing,
+            self.sbf_id, self.tow, self.alert, self.anti_spoofing,
         )
     }
 }
 
 impl GpsQzssHow {
     #[cfg(test)]
-    pub fn model(frame_id: GpsQzssSubframeId) -> Self {
+    pub fn model(sbf_id: GpsQzssSubframeId) -> Self {
         Self::default()
-            .with_subframe_id(frame_id)
+            .with_subsbf_id(sbf_id)
             .with_tow_seconds(15_000)
             .with_alert_bit()
             .with_anti_spoofing()
@@ -122,8 +122,8 @@ impl GpsQzssHow {
     }
 
     /// Copies and returns [GpsQzssHow] with updated [GpsQzssSubframeId]
-    pub fn with_subframe_id(mut self, frame_id: GpsQzssSubframeId) -> Self {
-        self.frame_id = frame_id;
+    pub fn with_subsbf_id(mut self, sbf_id: GpsQzssSubframeId) -> Self {
+        self.sbf_id = sbf_id;
         self
     }
 
@@ -153,17 +153,17 @@ impl GpsQzssHow {
 
     /// Constructs a default EPH-1 [GpsQzssHow]
     pub fn ephemeris1() -> Self {
-        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris1)
+        Self::default().with_subsbf_id(GpsQzssSubframeId::Ephemeris1)
     }
 
     /// Constructs a default EPH-2 [GpsQzssHow]
     pub fn ephemeris2() -> Self {
-        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris1)
+        Self::default().with_subsbf_id(GpsQzssSubframeId::Ephemeris1)
     }
 
     /// Constructs a default EPH-3 [GpsQzssHow]
     pub fn ephemeris3() -> Self {
-        Self::default().with_subframe_id(GpsQzssSubframeId::Ephemeris3)
+        Self::default().with_subsbf_id(GpsQzssSubframeId::Ephemeris3)
     }
 }
 
@@ -194,7 +194,7 @@ mod test {
 
     #[test]
     fn reciprocal() {
-        for (tow, frame_id, alert, anti_spoofing) in [
+        for (tow, sbf_id, alert, anti_spoofing) in [
             (0x05DC, GpsQzssSubframeId::Ephemeris1, true, false),
             (0x0708, GpsQzssSubframeId::Ephemeris1, false, false),
             (0x0_1194, GpsQzssSubframeId::Ephemeris1, false, true),
@@ -203,7 +203,7 @@ mod test {
         ] {
             let how = GpsQzssHow {
                 tow,
-                frame_id,
+                sbf_id,
                 anti_spoofing,
                 alert,
             };
@@ -218,7 +218,7 @@ mod test {
 
             assert_eq!(decoded.tow, tow);
             assert_eq!(decoded.alert, alert);
-            assert_eq!(decoded.frame_id, frame_id);
+            assert_eq!(decoded.sbf_id, sbf_id);
             assert_eq!(decoded.anti_spoofing, anti_spoofing);
         }
     }

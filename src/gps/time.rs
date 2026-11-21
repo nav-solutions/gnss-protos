@@ -29,7 +29,7 @@ const WEEK_NS: u128 = SECONDS_PER_WEEK as u128 * SUBFRAME_NS;
 #[derive(Debug, Clone, Copy)]
 pub enum GpsQzssLnavTimePrecision {
     /// [GpsQzssLnavTimePrecision::SuperFrame] gives a 12'30s precision,
-    /// which is best suited when working at the GPS/QZSS sideral period,
+    /// which is best suited when working at the GPS/QZSS period,
     /// for example in GPS/QZSS constellation Almanach analysis and synthesis.
     #[default]
     SuperFrame,
@@ -177,15 +177,15 @@ impl Into<Duration> for GpsQzssLnavTimePrecision {
 //     ///
 //     /// - temporal arc, expressed as [TimeSeries] 
 //     ///
-//     pub fn next_gps_sideral_arc(num_superframes: u32) -> TimeSeries {
+//     pub fn next_gps__(num_superframes: u32) -> TimeSeries {
 //         // round to nearest superframe t0
 // 
 //         // arc designing
 //     }
 // 
-//     /// [Self::next_gps_sideral_arc] except that each output point is expressed
+//     /// [Self::next_gps__] except that each output point is expressed
 //     /// in [TimeScale::QZSST] timescale.
-//     pub fn next_qzss_sidecar_arc(t_start: Epoch, num_superframes: u32) -> TimeSeries {
+//     pub fn next_qzss__arc(t_start: Epoch, num_superframes: u32) -> TimeSeries {
 //         let t_qzsst = t_start.to_time_scale(TimeScale::QZSST);
 //         
 //         // round to nearest superframe t0

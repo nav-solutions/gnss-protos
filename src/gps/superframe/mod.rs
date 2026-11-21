@@ -7,9 +7,16 @@ use crate::{
         GpsQzssHow, GpsQzssIonosphereUtc, GpsQzssNmct, GpsQzssSatelliteHealth,
         GpsQzssSpecialMessage, GpsQzssSubframe, GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_ITEMS,
         GPS_SUBFRAME_DURATION_S, GPS_SUPERFRAME_BITS, GPS_SUPERFRAME_BYTES, GPS_SUPERFRAME_ITEMS,
+        GpsQzssSubframe4,
+        GpsQzssSubframe5,
+        GpsQzssSubframeEnum,
     },
     BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream, Message,
 };
+
+mod builder;
+
+pub use builder::*;
 
 /// [GpsQzssSuperFrame] is a convenient structures to work at the
 /// GPS/QZSS Alamanach level, which is described with 25 frames in 12'30s.
@@ -91,16 +98,13 @@ impl GpsQzssSuperframe {
     /// which must follow the correct almanach pagination.
     /// Currently, this framework only verifies the subframe classes progression,
     /// not the temporal progression.
-    pub fn from_frame_slice(slice: [GpsQzssFrame; GPS_SUPERFRAME_ITEMS]) -> Result<Self, GpsError> {
-    }
-
-    /// Builds a [GpsQzssSupframe] from a consecutive [GpsQzssSubframe]s (6s recordings),
-    /// which must follow the correct 30s rotation and almanach pagination.
-    /// Currently, this framework only verifies the subframe classes progression,
-    /// not the temporal progression.
-    pub fn from_subframe_slices(
-        slices: [[GpsQzssSubframe; GPS_FRAME_ITEMS]; GPS_SUPERFRAME_ITEMS],
-    ) -> Result<Self, GpsError> {
+    ///
+    /// To facilitate real world-applications,
+    /// we propose [GpsQzssFrameBuilder] to collect the subframe sequence.
+    /// If any component of the proposed slice here were collected using
+    /// our [GpsQzssFrameBuilder], the proposed slice is garanteed to be correct.
+    pub fn from_frame_slice(slice: [GpsQzssFrame; GPS_SUPERFRAME_ITEMS]) -> Self {
+        Self(slice)
     }
 
     /// Returns the underlying [GpsQzssFrame].
@@ -112,54 +116,54 @@ impl GpsQzssSuperframe {
         &self.0[index]
     }
 
-    /// Builds a coherent [GpsQzssMessage] from its content: the rotation starts at
-    /// `start_tow_seconds` (a multiple of 750 s, see [GpsQzssFrame::starts_rotation]),
-    /// every subframe uses the `header` [GpsQzssTelemetry] and [GpsQzssHow] (alert and
-    /// anti-spoofing flags), with its own time of week and frame ID,
-    /// the `ephemeris` are repeated on every page, and `almanach` gives
-    /// the content of the 25 pages of subframes 4 and 5.
-    ///
-    /// The resulting message is valid ([Self::validate]) as long as the start time
-    /// is aligned and the pages contents match the IS-GPS-200 pagination
-    /// ([GpsQzssFrame4::matches_page], [GpsQzssFrame5::matches_page]).
-    pub fn from_pages(
-        start_tow_seconds: u32,
-        header: (GpsQzssTelemetry, GpsQzssHow),
-        ephemeris: (GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3),
-        almanach: (
-            [GpsQzssFrame4; GPS_QZSS_ALMANACH_PAGES],
-            [GpsQzssFrame5; GPS_QZSS_ALMANACH_PAGES],
-        ),
-    ) -> Self {
-        let (telemetry, how) = header;
-        let (eph1, eph2, eph3) = ephemeris;
-        let (frame4, frame5) = almanach;
+    // /// Builds a coherent [GpsQzssMessage] from its content: the rotation starts at
+    // /// `start_tow_seconds` (a multiple of 750 s, see [GpsQzssFrame::starts_rotation]),
+    // /// every subframe uses the `header` [GpsQzssTelemetry] and [GpsQzssHow] (alert and
+    // /// anti-spoofing flags), with its own time of week and frame ID,
+    // /// the `ephemeris` are repeated on every page, and `almanach` gives
+    // /// the content of the 25 pages of subframes 4 and 5.
+    // ///
+    // /// The resulting message is valid ([Self::validate]) as long as the start time
+    // /// is aligned and the pages contents match the IS-GPS-200 pagination
+    // /// ([GpsQzssFrame4::matches_page], [GpsQzssFrame5::matches_page]).
+    // pub fn from_pages(
+    //     start_tow_seconds: u32,
+    //     header: (GpsQzssTelemetry, GpsQzssHow),
+    //     ephemeris: (GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3),
+    //     almanach: (
+    //         [GpsQzssFrame4; GPS_QZSS_ALMANACH_PAGES],
+    //         [GpsQzssFrame5; GPS_QZSS_ALMANACH_PAGES],
+    //     ),
+    // ) -> Self {
+    //     let (telemetry, how) = header;
+    //     let (eph1, eph2, eph3) = ephemeris;
+    //     let (frame4, frame5) = almanach;
 
-        let mut pages =
-            [[GpsQzssFrame::default(); GPS_QZSS_ROTATION_ITEMS]; GPS_QZSS_ALMANACH_PAGES];
+    //     let mut pages =
+    //         [[GpsQzssFrame::default(); GPS_QZSS_ROTATION_ITEMS]; GPS_QZSS_ALMANACH_PAGES];
 
-        for (p, page) in pages.iter_mut().enumerate() {
-            let subframes = [
-                GpsQzssSubframe::Ephemeris1(eph1),
-                GpsQzssSubframe::Ephemeris2(eph2),
-                GpsQzssSubframe::Ephemeris3(eph3),
-                GpsQzssSubframe::Almanach4(frame4[p]),
-                GpsQzssSubframe::Almanach5(frame5[p]),
-            ];
+    //     for (p, page) in pages.iter_mut().enumerate() {
+    //         let subframes = [
+    //             GpsQzssSubframe::Ephemeris1(eph1),
+    //             GpsQzssSubframe::Ephemeris2(eph2),
+    //             GpsQzssSubframe::Ephemeris3(eph3),
+    //             GpsQzssSubframe::Almanach4(frame4[p]),
+    //             GpsQzssSubframe::Almanach5(frame5[p]),
+    //         ];
 
-            for (k, (frame, subframe)) in page.iter_mut().zip(subframes.iter()).enumerate() {
-                let index = (p * GPS_QZSS_ROTATION_ITEMS + k + 1) as u32;
-                let tow = (start_tow_seconds + index * GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK;
+    //         for (k, (frame, subframe)) in page.iter_mut().zip(subframes.iter()).enumerate() {
+    //             let index = (p * GPS_QZSS_ROTATION_ITEMS + k + 1) as u32;
+    //             let tow = (start_tow_seconds + index * GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK;
 
-                *frame = GpsQzssFrame::default()
-                    .with_telemetry(telemetry)
-                    .with_hand_over_word(how.with_tow_seconds(tow))
-                    .with_subframe(*subframe);
-            }
-        }
+    //             *frame = GpsQzssFrame::default()
+    //                 .with_telemetry(telemetry)
+    //                 .with_hand_over_word(how.with_tow_seconds(tow))
+    //                 .with_subframe(*subframe);
+    //         }
+    //     }
 
-        Self(pages)
-    }
+    //     Self(pages)
+    // }
 
     /// Returns the 5 [GpsQzssFrame]s of given page (1..=25).
     ///
@@ -167,39 +171,39 @@ impl GpsQzssSuperframe {
     ///
     /// - page number: must be <= GPS_SUPERFRAME_ITEMS otherwise
     /// this will panic
-    pub fn page(&self, page: u8) -> &GpsQzssFrame {
-        self.0[page]
+    pub fn page(&self, page: usize) -> &GpsQzssFrame {
+        &self.0[page]
     }
 
-    /// Returns the GPS time (in seconds of week) at which this rotation started.
-    pub fn start_tow_s(&self) -> u32 {
-        self.0[0][0].transmission_time_s()
+    /// Returns transmission start time in seconds of current week.
+    pub fn week_transmission_time_s(&self) -> u32 {
+        self.0[0].eph_1().week_transmission_time_s()
     }
 
     /// Returns the subframe 4 content of given page (1..=25).
-    pub fn frame4(&self, page: u8) -> Option<&GpsQzssFrame4> {
+    pub fn frame4(&self, page: u8) -> Option<&GpsQzssSubframe4> {
         match &self.page(page)?[3].subframe {
-            GpsQzssSubframe::Almanach4(frame4) => Some(frame4),
+            GpsQzssSubframeEnum::Almanach4(frame4) => Some(frame4),
             _ => None,
         }
     }
 
     /// Returns the subframe 5 content of given page (1..=25).
-    pub fn frame5(&self, page: u8) -> Option<&GpsQzssFrame5> {
+    pub fn frame5(&self, page: u8) -> Option<&GpsQzssSubframe5> {
         match &self.page(page)?[4].subframe {
-            GpsQzssSubframe::Almanach5(frame5) => Some(frame5),
+            GpsQzssSubframeEnum::Almanach5(frame5) => Some(frame5),
             _ => None,
         }
     }
 
     /// Iterates over the 25 subframe 4 pages, with their page number.
     pub fn frames4(&self) -> impl Iterator<Item = (u8, &GpsQzssFrame4)> {
-        (1..=GPS_QZSS_ALMANACH_PAGES as u8).filter_map(move |p| Some((p, self.frame4(p)?)))
+        (1..=GPS_SUPERFRAME_ITEMS as u8).filter_map(move |p| Some((p, self.frame4(p)?)))
     }
 
     /// Iterates over the 25 subframe 5 pages, with their page number.
     pub fn frames5(&self) -> impl Iterator<Item = (u8, &GpsQzssFrame5)> {
-        (1..=GPS_QZSS_ALMANACH_PAGES as u8).filter_map(move |p| Some((p, self.frame5(p)?)))
+        (1..=GPS_SUPERFRAME_ITEMS as u8).filter_map(move |p| Some((p, self.frame5(p)?)))
     }
 
     /// Returns the [GpsQzssAlmanach] of satellite `prn`, if transmitted in this rotation.
@@ -253,7 +257,7 @@ impl GpsQzssSuperframe {
 
     /// Returns the ephemeris (EPH-1, 2, 3) of the last page of this rotation.
     pub fn ephemeris(&self) -> Option<(GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3)> {
-        let page = &self.0[GPS_QZSS_ALMANACH_PAGES - 1];
+        let page = &self.0[GPS_SUPERFRAME_ITEMS- 1];
         Some((
             page[0].subframe.as_eph1()?,
             page[1].subframe.as_eph2()?,
@@ -261,17 +265,19 @@ impl GpsQzssSuperframe {
         ))
     }
 
-    /// Verifies that this [GpsQzssMessage] is a valid 12'30" rotation:
+    /// Verifies that this [GpsQzssSuperframe] is a valid 12'30" period:
     /// - it starts with EPH-1 of page 1 ([GpsQzssFrame::starts_rotation])
     /// - subframes are in sequence: subframe IDs 1 to 5 and continuous time of week
     /// - the content of subframes 4 and 5 matches the IS-GPS-200 pagination
     ///   ([GpsQzssFrame4::matches_page], [GpsQzssFrame5::matches_page])
-    pub fn validate(&self) -> Result<(), GpsError> {
-        if !self.0[0][0].starts_rotation() {
+    ///
+    /// This can only be true for [GpsQzssSuperframe]s built using our 
+    /// [GpsQzssSuperframeBuilder].
+    pub fn validate_period(&self) -> Result<(), GpsError> {
+
+        if self.0[0].eph_1().page_number() != 0 {
             return Err(GpsError::MessageAlignment);
         }
-
-        let mut previous: Option<&GpsQzssFrame> = None;
 
         for (index, frame) in self.frames().enumerate() {
             if let Some(previous) = previous {
@@ -297,7 +303,7 @@ impl GpsQzssSuperframe {
         Ok(())
     }
 
-    /// Generates a realistic, valid, rotation for testing purposes.
+    /// Generates a realistic and valid 12'30" period, for testing purposes.
     #[cfg(test)]
     pub(crate) fn model(start_tow_seconds: u32) -> Self {
         Self::from_pages(
@@ -307,7 +313,7 @@ impl GpsQzssSuperframe {
                 GpsQzssHow::model(crate::gps::GpsQzssFrameId::Ephemeris1),
             ),
             (
-                GpsQzssFrame1::model(),
+                GpsQzssSubframe1::model(),
                 GpsQzssFrame2::model(),
                 GpsQzssFrame3::model(),
             ),
@@ -343,23 +349,15 @@ impl BitWrite<BigEndian> for GpsQzssSuperframe {
 
 impl BitRead<'_, BigEndian> for GpsQzssSuperframe {
     /// Reads the 12'30" rotation that must exist in provided buffer.
-    /// When no gap bits exist between frames, the minimum buffer size is
-    /// [GpsQzssSuperframe::encoding_size].
-    ///
-    /// This method allows discontinuity, noise and gap bits between successive
-    /// [GpsQzssFrame]s (and inner [GpsQzssSubframe]s), any number of bits, but the complete message rotation
-    /// must exist in the buffer.
-    ///
-    /// This method will align itself with the correct first EPH-1 subframe
-    /// of the GPS sideral broadcast conveniently. Which is convenient for
-    /// real world recorders. All you need to do is provide at least 12'30s of recordings.
-    /// In otherwords, 24' of correct recording will always pass using this method.
+    /// This method will automatically lock itself to the first GPS period start
+    /// encountered, and supports gaps between each subframe, which is compatible
+    /// with real-word applications.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let mut builder = GpsQzssMessageBuilder::default();
+        let mut builder = GpsQzssSuperframeBuilder::default();
         let mut pos = stream.pos();
 
         loop {
-            let missing_bits = (GPS_QZSS_MESSAGE_FRAMES - builder.len()) * GPS_FRAME_BITS;
+            let missing_bits = (GPS_SUPERFRAME_BITS -
             let bits_left = stream.bits_left();
 
             if bits_left < missing_bits {

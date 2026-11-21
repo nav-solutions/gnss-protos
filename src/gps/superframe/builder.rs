@@ -11,22 +11,36 @@ use crate::{
         GPS_SUPERFRAME_BITS,
         GPS_SUPERFRAME_BYTES,
         GPS_FRAME_ITEMS,
+        GPS_SUPERFRAME_ITEMS,
+        GpsQzssFrame,
+        GPS_SUBFRAME_DURATION_S,
+        GPS_FRAME_DURATION_S,
     },
     constants::SECONDS_PER_WEEK,
     BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream, Message,
 };
 
-/// [GpsQzssMessageBuilder] collects a [GpsQzssMessage] progressively, one [GpsQzssFrame]
-/// at a time, typically from the [crate::gps::GpsQzssDecoder] output.
-///
-/// The builder waits for the beginning of a rotation (EPH-1 of page 1, see
-/// [GpsQzssFrame::starts_rotation]), then accumulates the subframes as long as they
-/// follow each other (subframe ID and time of week). Any discontinuity restarts the
-/// collection. The complete [GpsQzssMessage] is returned on the 125th subframe.
+#[cfg(feature = "log")]
+use log::error;
+
+/// [GpsQzssSuperframeBuilder] collects a [GpsQzssFrame]s (30s cycles) consecutively,
+/// and aligns itself to the Page-1 in the frame pagination.
+/// Therefore, the resulting super frame is correctly aligned and starts
+/// with Page-1 EPH-1.
 ///
 /// ```
-/// use gnss_protos::{GpsQzssFrame, GpsQzssHow, GpsQzssMessage};
-/// use gnss_protos::gps::GpsQzssMessageBuilder;
+/// use gnss_protos::gps::{
+///     GpsQzssSubframe, 
+///     GpsQzssHow, 
+///     GpsQzssSuperframeBuilder,
+/// };
+///
+/// // reads one of our real-world data stream
+/// // each file contains several 12'30s 
+/// // this example demonstrates GpsQzssSuperframeBuilder did
+/// // synchronize correctly to EPH-1 page-1
+/// 
+/// todo
 ///
 /// let mut builder = GpsQzssMessageBuilder::default();
 ///
@@ -40,83 +54,134 @@ use crate::{
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct GpsQzssSuperframeBuilder {
-    pages: [GpsQzssMessagePage; GPS_QZSS_ALMANACH_PAGES],
-    len: usize,
+    // number of subframes collected
+    sbf: usize,
+
+    // latest frame type
+    latest_id: Option<GpsQzssSubframeId>,
+
+    // latest frame collected
+    buffer: [GpsQzssFrame; GPS_SUPERFRAME_ITEMS],
 }
 
 impl GpsQzssMessageBuilder {
+    // Use this method to collected several [GpsQzssSuperframe]s in a row,
+    // using the same builder without reallocation.
+    pub fn reset(&mut self) {
+        self.sbf = 0;
+        self.latest_id = None;
+    }
+
     /// Returns true if `next` immediately follows `previous` in the GPS/QZSS stream.
     fn follows(previous: &GpsQzssFrame, next: &GpsQzssFrame) -> bool {
-        let expected_id = previous.subframe.frame_id().encode() % GPS_QZSS_ROTATION_ITEMS as u8 + 1;
+
+
+        let expected_id = self.latest_id.encode() % GPS_FRAME_ITEMS as u8 + 1;
 
         next.subframe.frame_id().encode() == expected_id
             && next.transmission_time_s()
                 == (previous.transmission_time_s() + GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK
     }
 
-    /// Returns the number of subframes collected so far (0 to 124).
-    pub fn len(&self) -> usize {
-        self.len
+    /// Returns the total of subframes (6s messages) collected so far.
+    pub fn total_subframes(&self) -> usize {
+        self.sbf
+    }
+    
+    /// Returns the total of frames (30s messages) collected so far.
+    pub fn total_frames(&self) -> usize {
+        self.sbf / GPS_FRAME_ITEMS
     }
 
     /// Returns true if no subframe has been collected yet.
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.sbf.len == 0
     }
 
-    /// Returns the time (in seconds) left before the rotation is complete,
-    /// once collection has started.
-    pub fn remaining_s(&self) -> Option<u32> {
+    /// Returns total number of seconds remaining before the super frame completes
+    /// (recording of ALM-5 page 25).
+    pub fn seconds_to_end_of_period(&self) -> Option<u32> {
         if self.len == 0 {
             None
         } else {
-            Some(GPS_QZSS_MESSAGE_DURATION_S - self.len as u32 * GPS_SUBFRAME_DURATION_S)
+            Some(GPS_SUPERFRAME_DURATION_S - self.sbf as u32 * GPS_SUBFRAME_DURATION_S)
         }
     }
 
-    /// Restarts the collection.
-    pub fn reset(&mut self) {
-        self.len = 0;
-    }
-
-    fn last(&self) -> Option<&GpsQzssFrame> {
-        if self.len == 0 {
+    /// Use this method when working at the [GpsQzssSubframe] (GPS/QZSS LNAV 6s core element).
+    /// Method returns [GpsQzssSuperframe] if the builder has been locked for 124 subframes
+    /// and this last subframe completes a 12'30" period.
+    ///
+    /// This is most convenient when working with our [GpsQzssDecoder] and your application
+    /// intends to collect 12'30s periods.
+    pub fn push_subframe(&mut self, subf: GpsQzssSubframe) -> Option<GpsQzssSuperframe> {
+        if self.sbf == 0 {
+            // waits for EPH-1 Page-1
+            if subf.starts_superframe_period() {
+                self.buffer[self.sbf] = subf;
+                self.latest_id = Some(subf.how.sbf_id);
+                self.sbf = 1;
+            }
             None
         } else {
-            let index = self.len - 1;
-            Some(&self.pages[index / GPS_QZSS_ROTATION_ITEMS][index % GPS_QZSS_ROTATION_ITEMS])
-        }
-    }
 
-    fn store(&mut self, frame: GpsQzssFrame) {
-        self.pages[self.len / GPS_QZSS_ROTATION_ITEMS][self.len % GPS_QZSS_ROTATION_ITEMS] = frame;
-        self.len += 1;
-    }
+            let latest_sbfid = self.latest_id.unwrap();
+            let current_frame = self.buffer[self.sbf / GPS_FRAME_ITEMS];
 
-    /// Pushes a new [GpsQzssFrame]. Returns the complete [GpsQzssMessage]
-    /// when this frame completes the rotation (the builder then restarts).
-    pub fn push(&mut self, frame: GpsQzssFrame) -> Option<GpsQzssMessage> {
-        let follows = match self.last() {
-            Some(last) => Self::follows(last, &frame),
-            None => false,
-        };
+            let latest_sbf = match latest_sbfid {
+                GpsQzssSubframeId::Ephemeris1 => current_frame.eph_1(),
+                GpsQzssSubframeId::Ephemeris2 => current_frame.eph_2(),
+                GpsQzssSubframeId::Ephemeris3 => current_frame.eph_3(),
+                GpsQzssSubframeId::Almanach4 => current_frame.alm_4(),
+                GpsQzssSubframeId::Almanach5 => current_frame.alm_5(),
+            };
 
-        if !follows {
-            self.reset();
+            let expected_id = GpsQzssSubframeId::decode((latest_sbf.how.frame_id.encode() +1) % GPS_FRAME_ITEMS)
+                .unwrap();
 
-            if !frame.starts_rotation() {
-                return None;
+            if subf.how.frame_id == expected_id {
+
+                if subf.how.frame_id == GpsQzssSubframeId::Almanach5 {
+                    // completes a new frame
+                    self.buffer[self.sbf / GPS_FRAME_ITEMS] = GpsQzssFrame::from_parts(
+                        current_frame.eph_1(), 
+                        current_frame.eph_2(), 
+                        current_frame.eph_3(), 
+                        current_frame.alm_4(), 
+                        current_frame.alm_5(), 
+                    )
+                        .unwrap_or_else(|e| {
+                            panic!("internal error");
+                        });
+                }
+
+                // guards against corrupted streams
+                self.sbf = (self.sbf +1) % GPS_SUPERFRAME_ITEMS; 
+
+                if subf.ends_superframe_period() {
+                    // completes the frame period
+                    self.reset();
+                    Some(GpsQzssSuperframe(self.buffer))
+                } else {
+                    None
+                }
+                
+            } else {
+                self.reset();
+                None
             }
         }
+    }
 
-        self.store(frame);
-
-        if self.len == GPS_QZSS_MESSAGE_FRAMES {
-            self.reset();
-            Some(GpsQzssMessage(self.pages))
-        } else {
-            None
-        }
+    /// Use this method if your decoding process works at the 30s cycle scale,
+    /// otherwise prefer [Self::push_subframe], especially when working with our
+    /// [GpsQzssDecoder].
+    pub fn push_frame(&mut self, frame: GpsQzssFrame) -> Option<GpsQzssSuperframe> {
+        let _ = self.push_subframe(frame.0[0])?;  
+        let _ = self.push_subframe(frame.0[1])?;  
+        let _ = self.push_subframe(frame.0[2])?;  
+        let _ = self.push_subframe(frame.0[3])?;  
+        self.push_subframe(frame.0[4])
     }
 }
 
@@ -623,5 +688,4 @@ mod test {
         // builder waited for Page1 (4 pages offset) and collected the whole stream
         assert_eq!(builder.len(), UBLOX_G25_STREAM.len() -4 *5);
     }
-}
 }

@@ -102,7 +102,7 @@ mod frame;
 mod health;
 mod how;
 mod subframe;
-// mod superframe;
+mod superframe;
 mod tlm;
 // mod time;
 
@@ -113,7 +113,7 @@ pub use frame::*;
 pub use health::GpsQzssSatelliteHealth;
 pub use how::GpsQzssHow;
 pub use subframe::*;
-// pub use superframe::*;
+pub use superframe::*;
 pub use tlm::GpsQzssTelemetry;
 // use time::GpsQzssLnavTemporalPosition;
 

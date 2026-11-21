@@ -441,8 +441,7 @@ impl GpsQzssSubframe {
         self
     }
 
-    /// Returns transsmission time of this very [GpsQzssSubframe],
-    /// expressed in [TimeScale::GPST] timescale.
+    /// Returns transmission start time in seconds of current week.
     pub(crate) fn week_transmission_time_s(&self) -> u32 {
         let mut tow = self.how.tow + SECONDS_PER_WEEK;
         tow -= GPS_SUBFRAME_DURATION_S; // HOW carries the time of the next subframe.
@@ -474,11 +473,17 @@ impl GpsQzssSubframe {
 
     /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
     /// of a 12'30" superframe.
-    pub fn starts_superframe(&self) -> bool {
-        let start = self.week_transmission_time_s();
-        self.subframe.frame_id() == GpsQzssSubframeId::Ephemeris1
-            && start % GPS_SUPERFRAME_DURATION_S == 0
-            && start + GPS_SUPERFRAME_DURATION_S <= SECONDS_PER_WEEK
+    pub fn starts_superframe_period(&self) -> bool {
+        // let start = self.week_transmission_time_s();
+        // self.subframe.frame_id() == GpsQzssSubframeId::Ephemeris1
+        //     && start % GPS_SUPERFRAME_DURATION_S == 0
+        //     && start + GPS_SUPERFRAME_DURATION_S <= SECONDS_PER_WEEK
+        self.subframe.frame_id() == GpsQzssSubframeId::Ephemeris1 && self.page_number() == 0
+    }
+
+    /// Returns true if this subframe terminates a 12'30s superframe period.
+    pub fn ends_superframe_period(&self) -> bool {
+        self.subframe.frame_id() == GpsQzssSubframeId::Almanach5 && self.page_number() == GPS_SUPERFRAME_ITEMS
     }
 
     /// Interprets the 240 parity free data bits (30 bytes) of a frame.

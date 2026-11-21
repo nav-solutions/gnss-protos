@@ -26,8 +26,9 @@ pub struct GpsQzssFrameBuilder {
 
 impl GpsQzssFrameBuilder {
     /// Reset mutable self. You may use this method in a real-world continuous application,
-    /// once a new [GpsQzssFrame] has been correctly received, and you want to move-on to the
-    /// next frame without new memory allocation.
+    ///
+    /// Note that you don't have to reset upon [GpsQzssFrame] collection: the object does it for you
+    /// at return time.
     pub fn reset(&mut self) {
         self.frame_id = None;
     }
@@ -57,8 +58,7 @@ impl GpsQzssFrameBuilder {
                         self.frame_id = Some(new_id);
                         self.buffer[1] = subframe;
                     } else {
-                        // reset
-                        self.frame_id = None;
+                        self.reset();
                     }
                     None
                 },
@@ -67,8 +67,7 @@ impl GpsQzssFrameBuilder {
                         self.frame_id = Some(new_id);
                         self.buffer[2] = subframe;
                     } else {
-                        // reset
-                        self.frame_id = None;
+                        self.reset();
                     }
                     None
                 },
@@ -77,8 +76,7 @@ impl GpsQzssFrameBuilder {
                         self.frame_id = Some(new_id);
                         self.buffer[3] = subframe;
                     } else {
-                        // reset
-                        self.frame_id = None;
+                        self.reset();
                     }
                     None
                 },
@@ -86,6 +84,7 @@ impl GpsQzssFrameBuilder {
                     if new_id == GpsQzssSubframeId::Almanach5 {
                         self.frame_id = Some(new_id);
                         self.buffer[4] = subframe;
+                        self.reset();
                         match GpsQzssFrame::from_slice(self.buffer.clone()) {
                             Ok(frame) => Some(frame),
                             Err(_e) => {
