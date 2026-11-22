@@ -453,7 +453,7 @@ impl GpsQzssLnavSubframe {
     }
 
     /// Returns transmission start time in seconds of current week.
-    pub(crate) fn week_transmission_time_s(&self) -> u32 {
+    pub fn week_transmission_time_s(&self) -> u32 {
         let mut tow = self.how.tow + SECONDS_PER_WEEK;
         tow -= GPS_LNAV_SUBFRAME_DURATION_S; // HOW carries the time of the next subframe.
         tow = tow % SECONDS_PER_WEEK;

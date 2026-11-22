@@ -1,10 +1,13 @@
 use crate::{
     bits::{from_scaled, to_scaled, write_signed, write_unsigned},
-    gps::lnav::{GPS_LNAV_CONFIG_DID, GPS_LNAV_WORD_DATA_BITS},
+    gps::lnav::{GPS_LNAV_WORD_DATA_BITS},
     Message,
 };
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
+
+#[cfg(test)]
+use crate::gps::lnav::GPS_LNAV_CONFIG_DID;
 
 /// [GpsQzssLnavAlmanach] found in SF-5 pages 1 to 24,
 /// and SF-4 pages 2 to 5 and 7 to 10 (IS-GPS-200 §20.3.3.5.1.2).
