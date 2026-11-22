@@ -1,6 +1,6 @@
 use crate::{
     bits::{from_scaled, to_scaled, write_signed, write_unsigned},
-    gps::lnav::{GPS_LNAV_WORD_DATA_BITS},
+    gps::lnav::GPS_LNAV_WORD_DATA_BITS,
     Message,
 };
 

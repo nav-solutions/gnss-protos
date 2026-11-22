@@ -183,9 +183,32 @@ assert_eq!(encoded, bytes);
 
 3. `GpsQzssLnavFrame` represents the EPH-1, 2, 3, ALM-4 and ALM-5 subframes rotation
 broadcasted by every satellite every 30s. This is the information you need to decode
-for real-time navigation. We propose `GpssQzssLnavFrameDecoder` which decodes
-those 1500 bits and locks itself to the sync byte of every subframe: it will
-only decode valid bursts. This is best suited for people interested in real-time navigation.
+for real-time navigation. By combining the previous `GpsQzssLnavSubfDecoder`
+and the proposed `GpsQzssLnavFrameBuilder`, you can create an application
+that collects 30s frames correctly. The builder locks itself to
+each 30s burst start, marked by an EPH-1 frame, and it will returns
+every completed 30s cycles: 
+
+```
+use gnss_protos::gps::lnav::{
+    GpsQzssLnavSubframe,
+    GpsQzssLnavSubfDecoder,
+    GpsQzssLnavFrameBuilder,
+};
+
+// extracted from our test suite
+// this dataset was streamed by a UBX v8 for G25 satellite,
+// the first EPH-1 happens to be data word #4, 
+// so we have 3 datawords to be rejected before starting
+// and then completing a valid 30s cycle
+let words = [
+    0u32,
+    1u32,
+];
+
+// parse every 6s subframe, and collect a 30s frame
+// TODO
+```
 
 4. `GpsQzssLnavSuperframe` is the 25 pages broadcasted every 12'30" by every satellite.
 We propose `GpsQzssLnavSpfDecoder` to decode these 37k bits, it will lock itself

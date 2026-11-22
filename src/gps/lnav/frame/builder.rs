@@ -36,14 +36,16 @@ impl GpsQzssLnavFrameBuilder {
     }
 
     /// Push a new [GpsQzssLnavSubframe] to the [GpsQzssLnavFrameBuilder].
-    /// If this frame completes a 30s correctly
+    /// If provided subframe breaks the 30s cycle, the builder will reset
+    /// and wait for a new EPH-1 (or this one, if that's an EPH-1).
+    /// If provided subframe terminates a 30s cycle, we return an [GpsQzssLnavFrame].
     ///
-    /// Remember that this API only verifies the frame class progression,
-    /// not the temporal progression.
+    /// Currently this API verifies the frame class progression,
+    /// it does not verify the temporal progression.
     ///
-    /// If this subframe completes a 30s cycle, you may [Self::reset] and move-on
-    /// to the following frames without new memory allocation.
-    pub fn push(&mut self, subframe: GpsQzssLnavSubframe) -> Option<GpsQzssLnavFrame> {
+    /// Any time a 30s is concluded, the builder automatically resets itself
+    /// and you can continue providing subframes, to collect a new 30s frame.
+    pub fn push_sbf(&mut self, subframe: GpsQzssLnavSubframe) -> Option<GpsQzssLnavFrame> {
         let new_id = subframe.how.sbf_id;
 
         match self.frame_id {
@@ -155,7 +157,7 @@ mod test {
                     subframe: Default::default(),
                 };
 
-                let ret = builder.push(sbf);
+                let ret = builder.push_sbf(sbf);
 
                 if i < 4 {
                     assert!(ret.is_none(), "builder has completed too early");
@@ -217,7 +219,7 @@ mod test {
                         subframe: Default::default(),
                     };
 
-                    let ret = builder.push(sbf);
+                    let ret = builder.push_sbf(sbf);
 
                     if frame_id != GpsQzssLnavSubframeId::Almanach5 {
                         assert!(ret.is_none(), "builder has completed too early");
@@ -298,12 +300,12 @@ mod test {
         let mut count = 0;
 
         loop {
-            let (consumed, frame) = decoder.decode(&bytes, position);
+            let (consumed, sbf) = decoder.decode(&bytes, position);
             position += consumed;
 
-            match frame {
-                Some(frame) => {
-                    if builder.push(frame).is_some() {
+            match sbf {
+                Some(sbf) => {
+                    if builder.push_sbf(sbf).is_some() {
                         count += 1;
                         builder.reset();
                     }
