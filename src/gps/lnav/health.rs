@@ -1,0 +1,80 @@
+use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
+
+/// Health mask for a single satellite
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub struct GpsQzssLnavSatelliteHealth {
+    /// 6-bit mask
+    inner: u8,
+}
+
+impl From<u8> for GpsQzssLnavSatelliteHealth {
+    fn from(value: u8) -> Self {
+        Self {
+            inner: value & 0x3f,
+        }
+    }
+}
+
+impl Into<u8> for GpsQzssLnavSatelliteHealth {
+    fn into(self) -> u8 {
+        self.inner
+    }
+}
+
+impl BitWrite<BigEndian> for GpsQzssLnavSatelliteHealth {
+    fn write(&self, stream: &mut BitWriteStream<'_, BigEndian>) -> Result<(), BitError> {
+        stream.write_int(self.inner & 0x3f, 6)
+    }
+}
+
+impl BitRead<'_, BigEndian> for GpsQzssLnavSatelliteHealth {
+    fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
+        let value = stream.read_int::<u8>(6)?;
+        Ok(Self::from(value))
+    }
+}
+
+impl GpsQzssLnavSatelliteHealth {
+    /// True if this mask marks a healthy satellite.
+    pub fn is_healthy(&self) -> bool {
+        self.inner == 0
+    }
+
+    pub fn is_unavailable(&self) -> bool {
+        self.inner == 0x1C
+    }
+
+    pub fn under_maintenance(&self) -> bool {
+        self.inner == 0x1D
+    }
+
+    pub fn has_transmission_issues(&self) -> bool {
+        !self.is_healthy()
+            && !self.is_unavailable()
+            && !self.under_maintenance()
+            && self.inner != 0x1E
+            && self.inner != 0x1F
+    }
+
+    /// Returns a healthy [GpsQzssLnavSatelliteHealth] mask.
+    pub fn healthy() -> Self {
+        Self::from(0u8)
+    }
+
+    /// Returns a [GpsQzssLnavSatelliteHealth] mask marking satellite
+    /// unavailability.
+    pub fn unavailable() -> Self {
+        Self::from(0x1C)
+    }
+
+    /// Returns a [GpsQzssLnavSatelliteHealth] mask marking pending satellite
+    /// maintenance operations.
+    pub fn maintenance() -> Self {
+        Self::from(0x1D)
+    }
+
+    /// Returns a [GpsQzssLnavSatelliteHealth] mask marking satellite transmission issues.
+    pub fn transmission_issues() -> Self {
+        Self::from(0x0C)
+    }
+}

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[cfg(feature = "gps")]
-use crate::gps::GpsError;
+use crate::gps::lnav::GpsError;
 
 #[cfg(feature = "galileo")]
 use crate::galileo::GalileoError;
