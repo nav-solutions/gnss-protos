@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::BufferingError;
 
+/// GPS/QZSS L1 C/A message decoding/encoding errors
 #[derive(Error, Debug)]
 pub enum GpsError {
     /// Not a valid GPS preamble

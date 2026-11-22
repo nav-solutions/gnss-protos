@@ -19,11 +19,11 @@ fn decode(words: [u32; 10]) -> (GpsQzssLnavSubframe, [u8; GPS_LNAV_SUBFRAME_BYTE
 }
 
 fn frame4(sbf: &GpsQzssLnavSubframe) -> GpsQzssLnavSubframe4 {
-    sbf.subframe.as_alm4().expect("not a subframe 4")
+    *sbf.subframe.as_alm4().expect("not a subframe 4")
 }
 
 fn frame5(sbf: &GpsQzssLnavSubframe) -> GpsQzssLnavSubframe5 {
-    sbf.subframe.as_alm5().expect("not a subframe 5")
+    *sbf.subframe.as_alm5().expect("not a subframe 5")
 }
 
 #[test]

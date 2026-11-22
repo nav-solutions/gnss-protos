@@ -1,77 +1,203 @@
-use crate::gps::{GpsQzssFrame, GPS_BYTES_PER_FRAME, GPS_WORDS_PER_FRAME};
+//! GPS / QZSS L1 C/A spreading modulation (IS-GPS-200 §3.2.1.3 and §3.3.2.3, IS-QZSS-PNT)
+
+use crate::{
+    modulation::{bpsk, packed_chip, set_packed_chip},
+    Modulation, ModulationError,
+};
+
+#[cfg(doc)]
+use crate::gps::lnav::{GpsQzssLnavFrame, GpsQzssLnavSuperframe};
+
+const CODE_LEN: usize = 1023;
+const CHIP_RATE: usize = 1_023_000;
+const DATA_RATE: usize = 50;
+const CODES_PER_BIT: usize = 20;
+
+pub const GPS_L1_CA_CHIPS_PER_BIT: usize = CODES_PER_BIT * CODE_LEN;
+
+/// Number of bytes needed to store a packed C/A code.
+const CODE_BYTES: usize = (CODE_LEN + 7) / 8;
+
+/// G2 delays (in chips) of GPS PRN 1 to 32 (IS-GPS-200 table 3-Ia).
+const GPS_G2_DELAYS: [u16; 32] = [
+    5, 6, 7, 8, 17, 18, 139, 140, 141, 251, 252, 254, 255, 256, 257, 258, 469, 470, 471, 472, 473,
+    474, 509, 512, 513, 514, 515, 516, 859, 860, 861, 862,
+];
+
+/// G2 delays (in chips) of QZSS PRN 193 to 202 (IS-QZSS-PNT table 3.2.2-2).
+const QZSS_G2_DELAYS: [u16; 10] = [339, 208, 711, 189, 263, 537, 663, 942, 173, 900];
+
+const QZSS_FIRST_PRN: u8 = 193;
 
 /// [GpsQzssLnavModulator] applies the L1/CA CDMA modulation
 /// to any bit sequence (regardless of its content).
+///
+/// The typical application is to modulate every 6s [GpsQzssLnavSubframe]s
+/// which is the building block of the data stream.
+/// But you could also modulate 30s [GpsQzssLnavFrame]s or 12'30s periods
+/// with [GpsQzssLnavSuperframe]s.
+///
 /// The stream then becomes compatible with transmission over the air.
-/// GPS/QZSS must be transmitted at 50 bits per second, one [GpsQzssLnavSubframe]
-/// every 6 seconds. We propose [GpsQzssLnavTimeSync] to help you synchronize
+/// GPS/QZSS must be transmitted at 50 bits per second, one bit every 20ms,
+/// one [GpsQzssLnavSubframe] every 6 seconds.
+///
+/// We propose [GpsQzssLnavTimeSync] to help you synchronize
 /// your modulator.
+///
+/// Each bit (20ms at 50 bit/s) is spread over 20 periods of the satellite C/A code
+/// (1023 chips at 1023 kHz), that is 20_460 chips per data bit.
+/// The output chip is mapped to +1 or -1 BPSK logic.
+///
+/// [GpsQzssLnavModulator] does not interpret the data: it applies to any bit sequence, so you may
+/// also use it on your own (possibly corrupted) bit stream. It is stateless, so
+/// a stream may be modulated in as many pieces as you want, one data bit at least.
+///
+/// ```
+/// use gnss_protos::{
+///     gps::lnav::{
+///         GpsQzssLnavModulator,
+///         GpsQzssLnavSubframe,
+///         GpsQzssLnavHow,
+///         GPS_LNAV_SUBFRAME_BITS,
+///         GPS_L1_CA_CHIPS_PER_BIT,
+///     },
+/// };
+///
+/// // 1. generate dumumy SBF
+/// let sbf = GpsQzssLnavSubframe::default()
+///     .with_hand_over_word(
+///         GpsQzssLnavHow::default()
+///             .with_tow_seconds(259_956)
+///     );
+///
+/// // GPS/QZSS works one bit at a time
+/// let mut bits = [0u8; 38];
+///
+/// sbf.encode(&mut bits, 0).unwrap();
+///
+/// // 2. C/A spreading like SV25
+/// let modulator = GpsQzssLnavModulator::new(25)
+///     .unwrap();
+///
+/// let mut chips = vec![0i8; GPS_LNAV_SUBFRAME_BITS * GPS_L1_CA_CHIPS_PER_BIT];
+///
+/// let size = modulator.modulate(&bits, 0, GPS_SUBFRAME_BITS, &mut chips)
+///     .unrap();
+///
+/// // 6 seconds of signal @ 1023kHz
+/// assert_eq!(size, 6 * 1_023_000);
+/// assert_eq!(modulator.sample_rate_hz(), 1.023E6);
+/// ```
 #[derive(Copy, Clone, PartialEq)]
 pub struct GpsQzssLnavModulator {
-    /// SV ID
-    sat_id: u8,
+    /// SV ID/PRN number
+    prn: u8,
 
-    /// single allocation
-    r1: [i32; GPS_WORDS_PER_FRAME],
-    
-    /// single allocation
-    g1: [i32; GPS_L1_CA_CODE_LEN],
-    
-    /// single allocation
-    r2: [i32; GPS_WORDS_PER_FRAME],
-
-    /// single allocation
-    g2: [i32; GPS_L1_CA_CODE_LEN],
+    /// C/A code
+    ca_code: [u8; CODE_BYTES],
 }
 
-impl Default for GpsQzssLnavModulator {
-    /// Builds a default [GpsQzssLnavModulator] ready to scramble like SV01
-    fn default() -> Self {
-        Self {
-            sat_id: 1,
-            r1: [-1i32; GPS_WORDS_PER_FRAME],
-            r2: [-1i32; GPS_WORDS_PER_FRAME],
-            g1: [0; GPS_L1_CA_CODE_LEN],
-            g2: [0; GPS_L1_CA_CODE_LEN],
-        }
+/// Generates the C/A code of a satellite, from its G2 delay (IS-GPS-200 figure 3-11).
+///
+/// - G1 = 1 + x^3 + x^10
+/// - G2 = 1 + x^2 + x^3 + x^6 + x^8 + x^9 + x^10
+///
+/// Both registers start with all stages set. The code is G1 ⊕ G2, G2 being delayed.
+fn ca_code(g2_delay: usize) -> [u8; CODE_BYTES] {
+    let mut g1 = [0u8; CODE_BYTES];
+    let mut g2 = [0u8; CODE_BYTES];
+
+    // stage n (1..=10) is bit (n-1)
+    let mut r1 = 0x3ffu16;
+    let mut r2 = 0x3ffu16;
+
+    let stage = |r: u16, n: u16| (r >> (n - 1)) & 0x1;
+
+    for i in 0..CODE_LEN {
+        set_packed_chip(&mut g1, i, stage(r1, 10) > 0);
+        set_packed_chip(&mut g2, i, stage(r2, 10) > 0);
+
+        let f1 = stage(r1, 3) ^ stage(r1, 10);
+
+        let f2 = stage(r2, 2)
+            ^ stage(r2, 3)
+            ^ stage(r2, 6)
+            ^ stage(r2, 8)
+            ^ stage(r2, 9)
+            ^ stage(r2, 10);
+
+        r1 = ((r1 << 1) | f1) & 0x3ff;
+        r2 = ((r2 << 1) | f2) & 0x3ff;
     }
+
+    let mut code = [0u8; CODE_BYTES];
+
+    for i in 0..CODE_LEN {
+        let delayed = (i + CODE_LEN - g2_delay) % CODE_LEN;
+        set_packed_chip(
+            &mut code,
+            i,
+            packed_chip(&g1, i) ^ packed_chip(&g2, delayed),
+        );
+    }
+
+    code
 }
 
 impl GpsQzssLnavModulator {
-    /// Creates a new [GpsQzssLnavModulator] ready to scramble a stream of bits
-    /// like a specific satellite.
-    ///
-    /// Although this method is infallible, you should use ID# between
-    /// 1 and 32 here (both included), as GPS / QZSS does not supported other satellites.
-    /// If you provid an incorrect ID, the modulator will be preset for SV01
-    /// and you will obtain unexpected results.
-    pub fn from_satellite_id(sat_id: u8) -> Self {
-        let mut default = Self::default();
+    /// Creates a [GpsQZssLnavModulator] for one satellite, identified by its PRN number:
+    /// 1 to 32 for GPS, 193 to 202 for QZSS.
+    pub fn from_satellite_id(prn: u8) -> Result<Self, ModulationError> {
+        let delay = match prn {
+            1..=32 => GPS_G2_DELAYS[prn as usize - 1],
+            193..=202 => QZSS_G2_DELAYS[(prn - QZSS_FIRST_PRN) as usize],
+            _ => return Err(ModulationError::InvalidPRN(prn)),
+        };
 
-        if sat_id > 0 && sat_id < 33 {
-            self.sat_id = sat_id;
-        }
+        Ok(Self {
+            prn,
+            ca_code: ca_code(delay as usize),
+        })
     }
 
-    /// Encode read-only buffer into tx (transmission) buffer.
-    ///
-    /// You should preallocate the tx buffer with zeros to obtain
-    /// a correct transmission.
-    ///
-    /// Correct GPS / QZSS transmission synchronous stream transmission.
-    ///
-    /// ## Input
-    /// - rx: read-only buffer to encoded
-    /// - tx: transmission, encoded buffer
-    /// - size: number of bytes contained in rx buffer
-    ///
-    /// ## Returns
-    /// - total number of _bits_ encoded in tx buffer.
-    ///
-    /// Since this method does not care for actual data content and simply applies
-    /// the modulation logic, you can use it on your own buffer. Especially if
-    /// you have a complete signal model (not only the [GpsQzssFrame] model that we provide).
-    ///
+    pub const fn prn(&self) -> u8 {
+        self.prn
+    }
+
+    pub const fn is_qzss(&self) -> bool {
+        self.prn >= QZSS_FIRST_PRN
+    }
+}
+
+impl Modulation for GpsQzssLnavModulator {
+    fn symbol_rate_hz(&self) -> f64 {
+        DATA_RATE as f64
+    }
+
+    fn sample_rate_hz(&self) -> f64 {
+        CHIP_RATE as f64
+    }
+
+    fn samples_per_symbol(&self) -> usize {
+        GPS_L1_CA_CHIPS_PER_BIT
+    }
+
+    fn prn_number(&self) -> u8 {
+        self.prn
+    }
+
+    fn period_samples(&self) -> usize {
+        CODE_LEN
+    }
+
+    fn replica_sample(&self, index: usize) -> i8 {
+        bpsk(packed_chip(&self.ca_code, index))
+    }
+
+    fn secondary_code(&self) -> &'static [bool] {
+        &[false; CODES_PER_BIT]
+    }
+
     /// Example:
     /// ```
     /// use gnss_protos::{GpsQzssFrame, GpsQzssLnavModulator};
@@ -95,47 +221,25 @@ impl GpsQzssLnavModulator {
     ///     // so at this point you know the complete frame was modulated (1024 >37.5)
     /// }
     /// ```
-    pub fn modulate(rx: &[u8], rx_size: usize, tx: &mut [u8], tx_size: usize) -> usize {
-        const TAPS : [usize; 32] = [
-            5, 6, 7, 8, 17, 18, 139, 140, 141, 251,
-            252, 254, 255, 256, 257, 258, 469, 470, 471, 472,
-            473, 474, 509, 512, 513, 514, 515, 516, 859, 860,
-            861, 862,
-        ];
-
-        if tx_size < GPS_L1_CA_CODE_LEN {
-            return 0; // must fit entirely
+    fn modulate_symbol(&self, bit: bool, out: &mut [i8]) -> Result<usize, ModulationError> {
+        if out.len() < GPS_L1_CA_CHIPS_PER_BIT {
+            return Err(ModulationError::WouldNotFit);
         }
 
-        // reset
-        for i in 0..GPS_WORDS_PER_FRAME {
-            self.r1[i] = -1;
-            self.r2[i] = -1;
-        }
-
-        for i in 0..GPS_L1_CA_SEQ_LEN {
-            self.g1[i] = self.r1[GPS_WORDS_PER_FRAME -1];
-            self.g2[i] = self.r2[GPS_WORDS_PER_FRAME -1];
-
-            let c1 = self.r1[2] * self.r1[9];
-            let c2 = self.r2[1] * self.r2[2] * self.r2[5] * self.r2[6] * self.r2[8] * self.r2[9];
-
-            for j in 9..0 {
-                self.r1[j] = self.r1[j -1];
-                self.r2[j] = self.r2[j -1];
+        for period in out[..GPS_L1_CA_CHIPS_PER_BIT].chunks_exact_mut(CODE_LEN) {
+            for (i, sample) in period.iter_mut().enumerate() {
+                *sample = bpsk(bit ^ packed_chip(&self.ca_code, i));
             }
-
-            self.r1[0] = c1;
-            self.r2[0] = c2;
         }
-    
-        let mut j = GPS_L1_CA_CODE_LEN - TAPS[self.sat_id -1];
 
-        for i in 0..GPS_L1_CA_CODE_LEN {
-            
-            j += 1;
-        }
-        
-        GPS_L1_CA_CODE_LEN
+        Ok(GPS_L1_CA_CHIPS_PER_BIT)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test {
+    /// Packs `count` (<= 32) chips of a code, starting at `start`, MSB first.
+    pub(crate) fn chips_word(chip: impl Fn(usize) -> bool, start: usize, count: usize) -> u32 {
+        (start..start + count).fold(0u32, |acc, i| (acc << 1) | chip(i) as u32)
     }
 }

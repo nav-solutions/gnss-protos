@@ -102,22 +102,25 @@ pub const GPS_LNAV_SUPERFRAME_DURATION_S: u32 =
 pub const GPS_LNAV_CONFIG_DID: u8 = 1;
 
 mod almanach;
+mod cdma;
 mod errors;
 mod frame;
 mod health;
 mod how;
 mod subframe;
-// mod superframe;
+mod superframe;
 mod tlm;
 // mod time;
 
 pub use almanach::GpsQzssLnavAlmanach;
+pub use cdma::GpsQzssLnavModulator;
+pub use cdma::*;
 pub use errors::GpsError;
 pub use frame::*;
 pub use health::GpsQzssLnavSatelliteHealth;
 pub use how::GpsQzssLnavHow;
 pub use subframe::*;
-// pub use superframe::*;
+pub use superframe::*;
 pub use tlm::GpsQzssLnavTelemetry;
 // use time::GpsQzssLnavTemporalPosition;
 

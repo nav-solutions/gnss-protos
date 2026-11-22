@@ -55,6 +55,21 @@ Messages written one after the other form a valid bit (or symbol) stream, ready 
 The library is strictly reciprocal: decoding then re-encoding any valid message gives back
 the very same bits. Equality between messages is "bit true": two messages are equal when they encode to the same bits.
 
+Message modulations
+===================
+
+The previously encoded messages are usually not ready to be transmitted, that also depends
+on each protocol. The library offers a few modulators to directly create correct bitstreams
+ready to transmit over the air. Each modulator spreads this stream with the ranging code
+of one satellite, producing baseband chips +1 or -1. Each modulator applies its dedicated algorithm
+to any bitstream, this may apply beyond the scope of GNSS protocols or it is also possible
+to apply a different modulation than the original bitstream:
+
+- `gps` features provides `GpsQzssLnavModulator` which can code spread any message bit stream,
+previously decoded or about to transmit, 20460 chips per data bit, 1.023 MHz
+    - GPS L1 C/A code spreading algorithm to any PRN =1..32 (both included)
+    - QZSS L1 C/A code spreading algorithm to any PRN =193..202 (both included)
+
 Provided examples
 =================
 

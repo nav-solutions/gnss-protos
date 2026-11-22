@@ -1,19 +1,10 @@
 use crate::{
     constants::SECONDS_PER_WEEK,
     gps::lnav::{
-        GpsError,
-        GpsQzssLnavHow,
-        GpsQzssLnavTelemetry,
-        GPS_LNAV_FRAME_DURATION_S,
-        GPS_LNAV_INVERTED_PREAMBLE_BYTE,
-        GPS_LNAV_PREAMBLE_BYTE,
-        GPS_LNAV_SUBFRAME_BITS,
-        GPS_LNAV_SUBFRAME_BYTES,
-        GPS_LNAV_SUBFRAME_DATA_BYTES,
-        GPS_LNAV_SUBFRAME_DURATION_S,
-        GPS_LNAV_SUBFRAME_WORDS,
-        // GPS_LNAV_SUPERFRAME_DURATION_S,
-        GPS_LNAV_SUPERFRAME_ITEMS,
+        GpsError, GpsQzssLnavHow, GpsQzssLnavTelemetry, GPS_LNAV_FRAME_DURATION_S,
+        GPS_LNAV_INVERTED_PREAMBLE_BYTE, GPS_LNAV_PREAMBLE_BYTE, GPS_LNAV_SUBFRAME_BITS,
+        GPS_LNAV_SUBFRAME_BYTES, GPS_LNAV_SUBFRAME_DATA_BYTES, GPS_LNAV_SUBFRAME_DURATION_S,
+        GPS_LNAV_SUBFRAME_WORDS, GPS_LNAV_SUPERFRAME_DURATION_S, GPS_LNAV_SUPERFRAME_ITEMS,
         GPS_LNAV_WORD_BITS,
     },
     Message,
@@ -135,9 +126,9 @@ impl GpsQzssLnavSubframeEnum {
     }
 
     /// Unwraps self as [GpsQzssLnavSubframe1] reference (if feasible)
-    pub fn as_eph1(&self) -> Option<GpsQzssLnavSubframe1> {
+    pub fn as_eph1(&self) -> Option<&GpsQzssLnavSubframe1> {
         match self {
-            Self::Ephemeris1(frame) => Some(*frame),
+            Self::Ephemeris1(frame) => Some(frame),
             _ => None,
         }
     }
@@ -151,9 +142,9 @@ impl GpsQzssLnavSubframeEnum {
     }
 
     /// Unwraps self as [GpsQzssLnavSubframe2] reference (if feasible)
-    pub fn as_eph2(&self) -> Option<GpsQzssLnavSubframe2> {
+    pub fn as_eph2(&self) -> Option<&GpsQzssLnavSubframe2> {
         match self {
-            Self::Ephemeris2(frame) => Some(*frame),
+            Self::Ephemeris2(frame) => Some(frame),
             _ => None,
         }
     }
@@ -167,9 +158,9 @@ impl GpsQzssLnavSubframeEnum {
     }
 
     /// Unwraps self as [GpsQzssLnavSubframe3] reference (if feasible)
-    pub fn as_eph3(&self) -> Option<GpsQzssLnavSubframe3> {
+    pub fn as_eph3(&self) -> Option<&GpsQzssLnavSubframe3> {
         match self {
-            Self::Ephemeris3(frame) => Some(*frame),
+            Self::Ephemeris3(frame) => Some(frame),
             _ => None,
         }
     }
@@ -183,9 +174,9 @@ impl GpsQzssLnavSubframeEnum {
     }
 
     /// Unwraps self as [GpsQzssLnavSubframe4] reference (if feasible)
-    pub fn as_alm4(&self) -> Option<GpsQzssLnavSubframe4> {
+    pub fn as_alm4(&self) -> Option<&GpsQzssLnavSubframe4> {
         match self {
-            Self::Almanach4(frame) => Some(*frame),
+            Self::Almanach4(frame) => Some(frame),
             _ => None,
         }
     }
@@ -199,9 +190,9 @@ impl GpsQzssLnavSubframeEnum {
     }
 
     /// Unwraps self as [GpsQzssLnavSubframe5] reference (if feasible)
-    pub fn as_alm5(&self) -> Option<GpsQzssLnavSubframe5> {
+    pub fn as_alm5(&self) -> Option<&GpsQzssLnavSubframe5> {
         match self {
-            Self::Almanach5(frame) => Some(*frame),
+            Self::Almanach5(frame) => Some(frame),
             _ => None,
         }
     }
@@ -454,33 +445,17 @@ impl GpsQzssLnavSubframe {
 
     /// Returns transmission start time in seconds of current week.
     pub fn week_transmission_time_s(&self) -> u32 {
-        let mut tow = self.how.tow + SECONDS_PER_WEEK;
-        tow -= GPS_LNAV_SUBFRAME_DURATION_S; // HOW carries the time of the next subframe.
-        tow = tow % SECONDS_PER_WEEK;
-        tow
+        // SBF(n+1): HOW carries the time of the next subframe.
+        let mut tow = self.how.tow as u32;
+        tow += SECONDS_PER_WEEK;
+        tow -= GPS_LNAV_SUBFRAME_DURATION_S;
+        tow % SECONDS_PER_WEEK
     }
-
-    // /// Returns the GPS time (in seconds of week) at which the frame (5 subframes)
-    // /// this subframe belongs to started.
-    // pub fn frame_start_time_s(&self) -> u32 {
-    // }
 
     /// Returns the page number (1..=25) of the frame this subframe belongs to.
     pub fn page_number(&self) -> u8 {
-        // In the 12'30" message: subframes 4 and 5 transmit that page
-        // ([crate::gps::lnav::GpsQzssLnavSubframe4], [crate::gps::lnav::GpsQzssLnavSubframe5]).
-        //
-        // The page number is not transmitted: it derives from the time of transmission, the
-        // rotation being aligned on the beginning of the week (frame 0 of the week is page 1).
-        let sbf_index = self.subframe.frame_id().encode() as u32;
-
-        let start_time_s = (self.how.tow + SECONDS_PER_WEEK
-            - sbf_index * GPS_LNAV_SUBFRAME_DURATION_S)
-            % SECONDS_PER_WEEK;
-
-        let frame = start_time_s / GPS_LNAV_FRAME_DURATION_S;
-
-        (frame % GPS_LNAV_SUPERFRAME_ITEMS as u32) as u8 + 1
+        let subf = self.week_transmission_time_s() / GPS_LNAV_FRAME_DURATION_S;
+        (subf % GPS_LNAV_SUPERFRAME_ITEMS as u32) as u8 + 1
     }
 
     /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
@@ -614,7 +589,8 @@ mod test {
                 bytes_to_words, on_air, to_polarity_corrected, words_to_bytes, UBLOX_EPH1,
                 UBLOX_EPH2, UBLOX_EPH3,
             },
-            GpsError, GPS_LNAV_PREAMBLE_BYTE, GPS_LNAV_SUBFRAME_BYTES,
+            GpsError, GpsQzssLnavHow, GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId,
+            GPS_LNAV_PREAMBLE_BYTE, GPS_LNAV_SUBFRAME_BYTES,
         },
         BigEndian, Message,
     };
@@ -1087,6 +1063,56 @@ mod test {
             let mut buf = [0u8; 16];
             write_bits(&mut buf, offset, 0x2AB_CDEF5 & WORD_MASK, 30).unwrap();
             assert_eq!(read_bits(&buf, offset, 30), Some(0x2AB_CDEF5 & WORD_MASK));
+        }
+    }
+
+    #[test]
+    fn page_number() {
+        for (eph1_week_t, page_num) in [
+            (0, 1),
+            (30, 2),
+            (60, 3),
+            (90, 4),
+            (120, 5),
+            (720, 25),
+            (750, 1),
+            (780, 2),
+            (810, 3),
+            (3600, 21),
+            (86_400, 6),
+            (302_400, 6),
+            (603_750, 1),
+            (604_500, 1),
+            (604_770, 10),
+        ] {
+            for id in 1..=5 {
+                let how = GpsQzssLnavHow::default().with_tow_seconds(
+                    (eph1_week_t + id * GPS_LNAV_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK,
+                );
+
+                let sbf_id = GpsQzssLnavSubframeId::decode(id as u8).unwrap();
+
+                let sbf = match id {
+                    1 => GpsQzssLnavSubframeEnum::Ephemeris1(Default::default()),
+                    2 => GpsQzssLnavSubframeEnum::Ephemeris2(Default::default()),
+                    3 => GpsQzssLnavSubframeEnum::Ephemeris3(Default::default()),
+                    4 => GpsQzssLnavSubframeEnum::Almanach4(Default::default()),
+                    _ => GpsQzssLnavSubframeEnum::Almanach5(Default::default()),
+                };
+
+                let sbf = GpsQzssLnavSubframe::default()
+                    .with_hand_over_word(how.with_subframe_id(sbf_id))
+                    .with_subframe_enum(sbf);
+
+                println!("{:?}", sbf);
+
+                assert_eq!(
+                    sbf.week_transmission_time_s(),
+                    (eph1_week_t + (id - 1) * GPS_LNAV_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK
+                );
+
+                assert_eq!(sbf.page_number(), page_num);
+            }
         }
     }
 }

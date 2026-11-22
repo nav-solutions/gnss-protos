@@ -8,6 +8,7 @@ mod eph1;
 mod eph2;
 mod eph3;
 mod frame;
+// mod superframe;
 
 /// Verifies that `encoded` starts with a valid 300-bit GPS subframe:
 /// parity of each word, and words 2 & 10 ending with D29 = D30 = 0.

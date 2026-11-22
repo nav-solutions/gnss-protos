@@ -39,35 +39,35 @@ impl Message<BigEndian> for GpsQzssLnavFrame {
 impl GpsQzssLnavFrame {
     /// Returns the first subframe of this 30s burst, representing
     /// the first 6s of the burst, which is an EPH-1 [GpsQzssLnavSubframe].
-    pub fn eph_1(&self) -> GpsQzssLnavSubframe {
-        self.0[0]
+    pub fn eph_1(&self) -> &GpsQzssLnavSubframe {
+        &self.0[0]
     }
 
     /// Returns the second subframe of this 30s burst,
     /// as [GpsQzssLnavFrame] following the EPH-1 subframe.
-    pub fn eph_2(&self) -> GpsQzssLnavSubframe {
-        self.0[1]
+    pub fn eph_2(&self) -> &GpsQzssLnavSubframe {
+        &self.0[1]
     }
 
     /// Returns the third subframe of this 30s burst,
     /// as [GpsQzssLnavFrame] following the EPH-2 subframe
     /// and conluding the EPH subframes (first 3/5 18s of the burst).
-    pub fn eph_3(&self) -> GpsQzssLnavSubframe {
-        self.0[2]
+    pub fn eph_3(&self) -> &GpsQzssLnavSubframe {
+        &self.0[2]
     }
 
     /// Returns the fourth subframe of this 30s burst,
     /// as [GpsQzssLnavFrame] following the EPH-3 subframe
     /// and marking the first almanach subframe.
-    pub fn alm_4(&self) -> GpsQzssLnavSubframe {
-        self.0[3]
+    pub fn alm_4(&self) -> &GpsQzssLnavSubframe {
+        &self.0[3]
     }
 
     /// Returns last subframe of this 30s burst,
     /// as [GpsQzssLnavFrame] following ALM-4 subframe
     /// and concluding this 30s cycle.
-    pub fn alm_5(&self) -> GpsQzssLnavSubframe {
-        self.0[4]
+    pub fn alm_5(&self) -> &GpsQzssLnavSubframe {
+        &self.0[4]
     }
 
     /// Builds a [GpsQzssLnavFrame] correctly, if the burst sequence is correctly
@@ -183,10 +183,10 @@ mod test {
 
         let frame = GpsQzssLnavFrame::from_slice([eph_1, eph_2, eph_3, alm_4, alm_5]).unwrap();
 
-        assert_eq!(frame.eph_1(), eph_1);
-        assert_eq!(frame.eph_2(), eph_2);
-        assert_eq!(frame.eph_3(), eph_3);
-        assert_eq!(frame.alm_4(), alm_4);
-        assert_eq!(frame.alm_5(), alm_5);
+        assert_eq!(*frame.eph_1(), eph_1);
+        assert_eq!(*frame.eph_2(), eph_2);
+        assert_eq!(*frame.eph_3(), eph_3);
+        assert_eq!(*frame.alm_4(), alm_4);
+        assert_eq!(*frame.alm_5(), alm_5);
     }
 }

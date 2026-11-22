@@ -158,7 +158,7 @@ impl GpsQzssLnavHow {
 
     /// Constructs a default EPH-2 [GpsQzssLnavHow]
     pub fn ephemeris2() -> Self {
-        Self::default().with_subframe_id(GpsQzssLnavSubframeId::Ephemeris1)
+        Self::default().with_subframe_id(GpsQzssLnavSubframeId::Ephemeris2)
     }
 
     /// Constructs a default EPH-3 [GpsQzssLnavHow]
