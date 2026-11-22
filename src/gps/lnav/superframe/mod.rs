@@ -366,7 +366,6 @@ impl GpsQzssLnavSuperframe {
         let eph1_pagenum = self.0[0].eph_1().page_number();
 
         if eph1_pagenum != 1 {
-            panic!("page number is: {}", eph1_pagenum);
             return Err(GpsError::MessageAlignment);
         }
 

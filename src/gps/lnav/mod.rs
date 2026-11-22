@@ -122,7 +122,8 @@ pub use how::GpsQzssLnavHow;
 pub use subframe::*;
 pub use superframe::*;
 pub use tlm::GpsQzssLnavTelemetry;
-// use time::GpsQzssLnavTemporalPosition;
+
+// pub use time::
 
 #[cfg(test)]
 pub(crate) mod test_vectors;
@@ -152,7 +153,7 @@ const GPS_LNAV_HALF_WEEK_ROLLOVER: i64 = GPS_LNAV_WEEK_ROLLOVER as i64 / 2;
 /// ## Output
 ///
 /// - (unrapped week, seconds): as (u32, u32)
-pub fn week_10b_unwrapping(t_ref: Epoch, week_10b: u32) -> u32 {
+pub fn week_10b_unwrapping(t_ref: Epoch, week_10b: u16) -> u32 {
     // we can safely convert to GPST only here,
     // because both timescale give the same results.
     // QZSST is locked to GPST.
@@ -190,7 +191,7 @@ mod test {
         GPS_LNAV_WORD_BITS, GPS_LNAV_WORD_BYTES,
     };
 
-    use hifitime::Epoch;
+    use hifitime::{Epoch, TimeScale, NANOSECONDS_PER_SECOND};
 
     use std::str::FromStr;
 
@@ -223,7 +224,7 @@ mod test {
     }
 
     #[test]
-    fn week_count_unwrapping() {
+    fn epoch_week_count_unwrapping() {
         for (epoch_str, week10b, week) in [
             ("2026-11-20 10:04:17 UTC", 397, 2445),
             ("2026-11-22 00:00:00 GPST", 397, 2445),
@@ -231,5 +232,21 @@ mod test {
             let epoch = Epoch::from_str(epoch_str).unwrap();
             assert_eq!(week_10b_unwrapping(epoch, week10b), week);
         }
+    }
+
+    /// Builds the GPST [Epoch] located at `seconds` within `week`.
+    fn gpst_epoch(week: u32, seconds: u64) -> Epoch {
+        Epoch::from_time_of_week(week, seconds * NANOSECONDS_PER_SECOND, TimeScale::GPST)
+    }
+
+    #[test]
+    fn week10b_unwrapping() {
+        let t = |week: u32| gpst_epoch(week, 0);
+
+        assert_eq!(week_10b_unwrapping(t(2138), 90), 2138);
+        assert_eq!(week_10b_unwrapping(t(2047), 0), 2048);
+        assert_eq!(week_10b_unwrapping(t(2048), 1023), 2047);
+        // assert_eq!(week_10b_unwrapping(t(100), 1000), 1000);
+        assert_eq!(week_10b_unwrapping(t(1500), 10), 1034);
     }
 }
