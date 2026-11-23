@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[cfg(feature = "gps")]
-use crate::gps::GpsError;
+use crate::gps::lnav::GpsError;
 
 #[cfg(feature = "galileo")]
 use crate::galileo::GalileoError;
@@ -27,12 +27,32 @@ impl Into<std::io::Error> for BufferingError {
     }
 }
 
-/// GNSS-Proto error
-#[derive(Debug)]
+/// Protocol decoding / encoding errors
+#[derive(Debug, Error)]
 pub enum Error {
+    #[cfg(feature = "gps")]
+    #[error("gps error: {0}")]
     #[cfg(feature = "gps")]
     Gps(GpsError),
 
     #[cfg(feature = "galileo")]
+    #[error("galileo error: {0}")]
+    #[cfg(feature = "gps")]
     Galileo(GalileoError),
+}
+
+/// Protocol modulation errors
+#[derive(Debug, Error)]
+pub enum ModulationError {
+    #[error("output buffer too small")]
+    WouldNotFit,
+
+    #[error("not enough input bits to consume")]
+    NotEnoughBits,
+
+    #[error("not enough input samples to consume")]
+    NotEnoughSamples,
+
+    #[error("invalid PRN number {0}")]
+    InvalidPRN(u8),
 }

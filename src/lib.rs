@@ -16,6 +16,8 @@
 pub mod bits;
 pub mod constants;
 
+pub(crate) mod modulation;
+
 #[cfg(feature = "gps")]
 #[cfg_attr(docsrs, doc(cfg(feature = "gps")))]
 pub mod gps;
@@ -31,29 +33,7 @@ mod buffer;
 mod errors;
 
 pub use buffer::{Buffer, StaticBuffer};
-pub use errors::{BufferingError, Error};
-
-#[cfg(feature = "gps")]
-pub use gps::{
-    GpsError, GpsQzssAlmanach, GpsQzssAlmanachHealth, GpsQzssConfigHealth, GpsQzssDecoder,
-    GpsQzssFrame, GpsQzssFrame1, GpsQzssFrame2, GpsQzssFrame3, GpsQzssFrame4, GpsQzssFrame5,
-    GpsQzssFrameId, GpsQzssHow, GpsQzssIonosphereUtc, GpsQzssMessage, GpsQzssNmct,
-    GpsQzssReservedPage, GpsQzssSatelliteHealth, GpsQzssSpecialMessage, GpsQzssSubframe,
-    GpsQzssTelemetry, GPS_FRAME_BITS, GPS_FRAME_BYTES, GPS_INVERTED_PREAMBLE_BYTE,
-    GPS_PREAMBLE_BYTE, GPS_SUBFRAME_DATA_BYTES, GPS_WORDS_PER_FRAME, GPS_WORD_BITS, GPS_WORD_BYTES,
-    GPS_WORD_DATA_BITS,
-};
-
-#[cfg(feature = "galileo")]
-pub use galileo::{
-    GalileoError, GalileoInavDecoder, GalileoInavPage, GalileoInavPageType, GalileoInavWord,
-    GalileoInavWord0, GalileoInavWord1, GalileoInavWord2, GalileoInavWord3, GalileoInavWord4,
-    GalileoInavWord5, GalileoInavWord6, GalileoSignalHealth, GalileoSisa,
-    GALILEO_INAV_DEFAULT_MAX_SYMBOL_ERRORS, GALILEO_INAV_PAGE_BYTES, GALILEO_INAV_PAGE_SYMBOLS,
-    GALILEO_INAV_PART_SYMBOLS, GALILEO_INAV_SYMBOL_RATE, GALILEO_INAV_SYNC_PATTERN,
-    GALILEO_INAV_SYNC_SYMBOLS, GALILEO_INAV_WORD0_SPARE_BYTES, GALILEO_INAV_WORD_BITS,
-    GALILEO_INAV_WORD_BYTES, GALILEO_IONO_REGIONS,
-};
+pub use errors::{BufferingError, Error, ModulationError};
 
 pub use bitbuffer::{
     BigEndian, BitError, BitRead, BitReadBuffer, BitReadStream, BitWrite, BitWriteStream,
@@ -124,6 +104,77 @@ pub trait Message<E: Endianness>:
         let mut reader = BitReadStream::new(BitReadBuffer::new(buffer, E::endianness()));
         let decoded = reader.read::<Self>()?;
         Ok(decoded)
+    }
+}
+
+use crate::bits::get_bit;
+
+/// Generate [Modulation] trait
+pub trait Modulation {
+    /// Symbol rate, number of modulated symbols per second
+    fn symbol_rate_hz(&self) -> f64;
+
+    /// Modulator output sample rate in Hz
+    fn sample_rate_hz(&self) -> f64;
+
+    /// Number of output samples generated for each input bit/symbol
+    fn samples_per_symbol(&self) -> usize;
+
+    /// PRN number or satellite ID
+    fn prn_number(&self) -> u8;
+
+    /// Sample `index` (`0..`[Self::period_samples]) of one primary code period,
+    /// sub-carrier included, data and secondary code excluded. This is the local replica
+    /// a receiver correlates against.
+    fn replica_sample(&self, index: usize) -> i8;
+
+    /// Secondary code: one chip (logic level) per primary code period, its length
+    /// being the number of primary code periods per data bit / symbol.
+    /// GPS has no secondary code, but a data bit lasts 20 code periods: it is
+    /// described as a 20-chip null secondary code.
+    fn secondary_code(&self) -> &'static [bool];
+
+    /// Spreads a single data bit / symbol into mutable output buffer.
+    /// Returns the number of samples written (always [Self::samples_per_symbol]).
+    fn modulate_symbol(&self, symbol: bool, bufer: &mut [i8]) -> Result<usize, ModulationError>;
+
+    /// Spreads `num_symbols` data bits / symbols (depending on protocol),
+    /// from readable input buffer starting at absolute bit position
+    /// `bit_offset` (MSB first), into mutable output buffer.
+    ///
+    /// Output buffer must be able to store `num_symbols *` [Self::samples_per_symbol] samples.
+    /// Returns the number of samples written.
+    fn modulate(
+        &self,
+        input: &[u8],
+        bit_offset: usize,
+        num_symbols: usize,
+        output: &mut [i8],
+    ) -> Result<usize, ModulationError> {
+        let samples_per_symbol = self.samples_per_symbol();
+
+        if bit_offset + num_symbols > input.len() * 8 {
+            return Err(ModulationError::NotEnoughBits);
+        }
+
+        if output.len() < num_symbols * samples_per_symbol {
+            return Err(ModulationError::WouldNotFit);
+        }
+
+        for (i, chunk) in output
+            .chunks_exact_mut(samples_per_symbol)
+            .take(num_symbols)
+            .enumerate()
+        {
+            self.modulate_symbol(get_bit(input, bit_offset + i), chunk)?;
+        }
+
+        Ok(num_symbols * samples_per_symbol)
+    }
+
+    /// Number of output saples per primary code period
+    fn period_samples(&self) -> usize {
+        self.samples_per_symbol() / self.secondary_code().len()
     }
 }
 

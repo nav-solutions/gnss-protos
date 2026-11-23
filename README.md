@@ -55,6 +55,35 @@ Messages written one after the other form a valid bit (or symbol) stream, ready 
 The library is strictly reciprocal: decoding then re-encoding any valid message gives back
 the very same bits. Equality between messages is "bit true": two messages are equal when they encode to the same bits.
 
+Message modulations
+===================
+
+The previously encoded messages are usually not ready to be transmitted, that also depends
+on each protocol. The library offers a few modulators to directly create correct bitstreams
+ready to transmit over the air. Each modulator spreads this stream with the ranging code
+of one satellite, producing baseband chips +1 or -1. Each modulator applies its dedicated algorithm
+to any bitstream, this may apply beyond the scope of GNSS protocols or it is also possible
+to apply a different modulation than the original bitstream:
+
+- `gps` features provides `GpsQzssLnavModulator` which can code spread any message bit stream,
+previously decoded or about to transmit, 20460 chips per data bit, 1.023 MHz
+    - GPS L1 C/A code spreading algorithm to any PRN =1..32 (both included)
+    - QZSS L1 C/A code spreading algorithm to any PRN =193..202 (both included)
+
+Provided examples
+=================
+
+- *examples/parse_gps_lnav.rs*: `gps` feature, prints all GPS/QZSS L1 C/A frames
+decoded from local file or stdin. Use it to browse your GPS/QZSS raw files:
+
+```bash
+cargo build --release --examples
+RUST_LOG=debug ./target/release/examples/parse_gps_lnav_bin -i data/GPS/esbcdnk_g15.bin
+```
+
+- *examples/parse_gal_inav.rs*: `galileo` feature, prints all Galileo INAV frames
+decoded from local file or stdin
+
 GPS / QZSS
 ==========
 
@@ -69,39 +98,54 @@ their interpretation is work in progress.
 GPS is not aligned to bytes: a subframe is 300 bits long (10 words of 30 bits),
 each word carrying 24 data bits and 6 parity bits.
 
-- `GpsQzssFrame` is the only message that deals with the transmitted bits: parity (IS-GPS-200 §20.3.5.2),
+- `GpsQzssLnavSubframe` is the building block of the GPS/QZSS stream.
+it is also the only message that deals with the transmitted bits: parity (IS-GPS-200 §20.3.5.2),
 data inversion (D30*), bits 23-24 of words 2 and 10, inverted streams (180° carrier phase ambiguity).
 Parity is always computed when encoding, and always verified when decoding.
-- messages (`GpsQzssTelemetry`, `GpsQzssHow`, `GpsQzssFrame1`..) are read and written on the
+- messages (`GpsQzssLnavTelemetry`, `GpsQzssLnavHow`, `GpsQzssLnavSubframe1`..) are read and written on the
 240 parity free data bits. Parameters that the ICD splits over two words (M0, e, sqrt(A)...) are contiguous there.
 
-1. The `GpsQzssDecoder` is the solution when working with GPS/QZSS bit streams.
+1. `GpsQzssLnavSubfDecoder` can decode a stream of `GpsQzssLnavSubframe`s 
+with parity verification.
 It synchronizes itself on the preamble at any bit position (normal or inverted),
 verifies the parity and interprets the frame. It can be fed one bit at a time (`push_bit`, typically
 from a tracking loop) or from a byte slice at any bit offset (`decode`). The decoder state is preserved
 between calls, so a frame may span several buffers. Positions are expressed in bits, not bytes.
 
+The return type is `GpsQzssLnavSubframe`:
+
 ```rust
 use gnss_protos::{
-    BigEndian, BitWriteStream, GpsQzssDecoder, GpsQzssFrame, GpsQzssFrameId, GpsQzssHow,
-    GPS_FRAME_BITS,
+    BigEndian, BitWriteStream,
+    gps::lnav::{
+        GPS_LNAV_FRAME_BITS,
+        GpsQzssLnavSubfDecoder,
+        GpsQzssLnavSubframe,
+        GpsQzssLnavSubframeId,
+        GpsQzssLnavHow,
+        GPS_LNAV_SUBFRAME_BITS,
+    },
 };
 
 // Stream 3 frames, contiguously, 5 bits after the start of the buffer
-let frame = GpsQzssFrame::default()
-    .with_hand_over_word(GpsQzssHow::default().with_tow_seconds(259_956));
+let frame = GpsQzssLnavSubframe::default()
+    .with_hand_over_word(GpsQzssLnavHow::default().with_tow_seconds(259_956));
 
 let mut buffer = Vec::new();
 let mut writer = BitWriteStream::new(&mut buffer, BigEndian);
 
+// example offset
 writer.write_int(0u8, 5).unwrap();
 
+// create bitstream
 for _ in 0..3 {
     writer.write(&frame).unwrap();
 }
 
-// The decoder verifies the parity of each frame by default
-let mut decoder = GpsQzssDecoder::default();
+// parity verification is enabeld by default with GpsQzssLnavSubfDecoder
+// but you can decide to turn if off.
+// In anycase, the 6 parity bits must exist in the stream, after each 24 data word bits.
+let mut decoder = GpsQzssLnavSubfDecoder::default();
 let mut position = 0; // in bits!
 let mut count = 0;
 
@@ -111,25 +155,29 @@ loop {
 
     match decoded {
         Some(decoded) => {
-            // the frame started at position - GPS_FRAME_BITS
-            assert_eq!(position - GPS_FRAME_BITS, 5 + count * GPS_FRAME_BITS);
+            // the frame started at position - GPS_LNAV_SUBFRAME_BITS
+            assert_eq!(position - GPS_LNAV_SUBFRAME_BITS, 5 + count * GPS_LNAV_SUBFRAME_BITS);
             assert_eq!(decoded, frame);
             assert_eq!(decoded.how.tow, 259_956);
-            assert_eq!(decoded.how.frame_id, GpsQzssFrameId::Ephemeris1);
+            assert_eq!(decoded.how.sbf_id, GpsQzssLnavSubframeId::Ephemeris1);
             count += 1;
         },
-        None => break, // buffer exhausted
+        None => break, // end of stream
     }
 }
 
 assert_eq!(count, 3);
 ```
 
-2. `GpsQzssFrame` implements `Message`: it is decoded from / encoded to its 300 transmitted bits (38 bytes,
-4 padding bits).
+2. `GpsQzssLnavSubframe` implements `Message` which is our messaging trait and works both ways.
+In the case of LNAV GPS/QZSS here, it is 300 transmitted bits (38 bytes,
+4 padding bits). This allows you to encode the stream basic element, like any satellite:
 
 ```rust
-use gnss_protos::{GpsQzssFrame, GpsQzssFrameId, Message};
+use gnss_protos::{
+    gps::lnav::{GpsQzssLnavSubframe, GpsQzssLnavSubframeId},
+    Message,
+};
 
 // Real EPH-1 subframe, as transmitted (300 bits, parity included)
 let bytes = [
@@ -138,21 +186,56 @@ let bytes = [
     0x92, 0x50, 0x42, 0xA1, 0xFF, 0xFF, 0xA5, 0xEC, 0xED, 0x3C, 0xFC, 0xC0,
 ];
 
-let frame = GpsQzssFrame::decode(&bytes)
+let sbf = GpsQzssLnavSubframe::decode(&bytes)
     .unwrap();
 
-assert_eq!(frame.how.frame_id, GpsQzssFrameId::Ephemeris1);
-assert_eq!(frame.how.tow, 259_956);
+assert_eq!(sbf.how.sbf_id, GpsQzssLnavSubframeId::Ephemeris1);
+assert_eq!(sbf.how.tow, 259_956);
 
-let eph1 = frame.subframe.as_eph1().unwrap();
+let eph1 = sbf.subframe.as_eph1().unwrap();
 assert_eq!(eph1.week, 318);
 assert_eq!(eph1.toc, 266_400);
 
 // bit exact re-encoding (parity included)
 let mut encoded = [0u8; 38];
-frame.encode(&mut encoded).unwrap();
+sbf.encode(&mut encoded).unwrap();
 assert_eq!(encoded, bytes);
 ```
+
+3. `GpsQzssLnavFrame` represents the EPH-1, 2, 3, ALM-4 and ALM-5 subframes rotation
+broadcasted by every satellite every 30s. This is the information you need to decode
+for real-time navigation. By combining the previous `GpsQzssLnavSubfDecoder`
+and the proposed `GpsQzssLnavFrameBuilder`, you can create an application
+that collects 30s frames correctly. The builder locks itself to
+each 30s burst start, marked by an EPH-1 frame, and it will returns
+every completed 30s cycles: 
+
+```
+use gnss_protos::gps::lnav::{
+    GpsQzssLnavSubframe,
+    GpsQzssLnavSubfDecoder,
+    GpsQzssLnavFrameBuilder,
+};
+
+// extracted from our test suite
+// this dataset was streamed by a UBX v8 for G25 satellite,
+// the first EPH-1 happens to be data word #4, 
+// so we have 3 datawords to be rejected before starting
+// and then completing a valid 30s cycle
+let words = [
+    0u32,
+    1u32,
+];
+
+// parse every 6s subframe, and collect a 30s frame
+// TODO
+```
+
+4. `GpsQzssLnavSuperframe` is the 25 pages broadcasted every 12'30" by every satellite.
+We propose `GpsQzssLnavSpfDecoder` to decode these 37k bits, it will lock itself
+to each sync bytes and will only decode valid and complete periods.
+This is best suited for people interested in almanach analysis.
+
 
 Galileo
 =======
@@ -181,8 +264,12 @@ at any symbol offset (`decode`). Positions are expressed in symbols, not bytes.
 
 ```rust
 use gnss_protos::{
-    BigEndian, BitWriteStream, GalileoInavDecoder, GalileoInavPage, GalileoInavWord,
-    GalileoInavWord4, GALILEO_INAV_PAGE_SYMBOLS,
+    BigEndian, BitWriteStream, 
+    Message,
+    galileo::{
+        GalileoInavDecoder, GalileoInavPage, GalileoInavWord,
+        GalileoInavWord4, GALILEO_INAV_PAGE_SYMBOLS,
+    },
 };
 
 // Stream 3 pages, contiguously, 7 symbols after the start of the buffer
@@ -233,7 +320,10 @@ assert_eq!(count, 3);
 (63 bytes, 4 padding bits).
 
 ```rust
-use gnss_protos::{GalileoInavPage, Message};
+use gnss_protos::{
+    Message,
+    galileo::GalileoInavPage,
+};
 
 // Real E08 page (word type 4), as transmitted (500 symbols)
 let symbols = [

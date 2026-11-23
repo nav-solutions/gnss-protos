@@ -194,7 +194,7 @@ impl GalileoInavDecoder {
     /// several slices. To decode a complete buffer:
     ///
     /// ```
-    /// use gnss_protos::{GalileoInavDecoder, GALILEO_INAV_PAGE_SYMBOLS};
+    /// use gnss_protos::galileo::{GalileoInavDecoder, GALILEO_INAV_PAGE_SYMBOLS};
     ///
     /// let symbols = [0u8; 256]; // any input
     /// let mut decoder = GalileoInavDecoder::default();

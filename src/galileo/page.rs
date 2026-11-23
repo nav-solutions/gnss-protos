@@ -72,8 +72,11 @@ pub enum GalileoInavPageType {
 ///
 /// ```
 /// use gnss_protos::{
-///     BigEndian, BitReadBuffer, BitReadStream, BitWriteStream, GalileoInavPage,
-///     GALILEO_INAV_PAGE_SYMBOLS,
+///     BigEndian, BitReadBuffer, BitReadStream, BitWriteStream,
+///     galileo::{
+///         GalileoInavPage,
+///         GALILEO_INAV_PAGE_SYMBOLS,
+///     },
 /// };
 ///
 /// let page = GalileoInavPage::default()
