@@ -137,7 +137,7 @@ impl GpsQzssLnavSuperframe {
     /// the `ephemeris` are repeated on every page, and `almanach` gives
     /// the content of the 25 pages of subframes 4 and 5.
     ///
-    /// The resulting message is valid ([Self::validate]) as long as the start time
+    /// The resulting message is valid as long as the start time
     /// is aligned and the pages contents match the IS-GPS-200 pagination
     /// ([GpsQzssLnavSubframe4::matches_page], [GpsQzssLnavSubframe5::matches_page]).
     pub fn from_pages(
@@ -239,7 +239,7 @@ impl GpsQzssLnavSuperframe {
     /// - page number: must be <= GPS_LNAV_SUPERFRAME_ITEMS otherwise
     /// this will panic
     pub fn page(&self, page: usize) -> &GpsQzssLnavFrame {
-        &self.0[page]
+        &self.0[page - 1]
     }
 
     pub fn pages(&self) -> impl Iterator<Item = (u8, &GpsQzssLnavFrame)> {
@@ -411,10 +411,7 @@ impl GpsQzssLnavSuperframe {
         );
 
         s.validate_period().unwrap_or_else(|e| {
-            panic!(
-                "super frame simulation model did not create a valid 12'30'' period: {}",
-                e
-            );
+            panic!("super frame model is not a valid 12'30'' period: {}", e);
         });
 
         s
@@ -449,8 +446,9 @@ impl BitRead<'_, BigEndian> for GpsQzssLnavSuperframe {
     /// encountered, and supports gaps between each subframe, which is compatible
     /// with real-word applications.
     fn read(stream: &mut BitReadStream<'_, BigEndian>) -> Result<Self, BitError> {
-        let mut builder = GpsQzssLnavSuperframeBuilder::default();
         let mut pos = stream.pos();
+        let mut builder = GpsQzssLnavSuperframeBuilder::default();
+        println!("pos={}", pos);
 
         loop {
             let missing_bits = GPS_LNAV_SUPERFRAME_BITS - pos;
@@ -466,7 +464,6 @@ impl BitRead<'_, BigEndian> for GpsQzssLnavSuperframe {
             match GpsQzssLnavSubframe::read(stream) {
                 Ok(sbf) => {
                     pos = stream.pos();
-
                     if let Some(message) = builder.push_sbf(sbf) {
                         return Ok(message);
                     }
@@ -489,7 +486,8 @@ mod test {
         bits::read_bits,
         gps::lnav::{
             test_vectors::bytes_to_words, GpsQzssLnavHow, GpsQzssLnavReservedSubframe,
-            GPS_LNAV_FRAME_BYTES, GPS_LNAV_SUPERFRAME_ITEMS,
+            GPS_LNAV_FRAME_BYTES, GPS_LNAV_FRAME_ITEMS, GPS_LNAV_SUBFRAME_BITS,
+            GPS_LNAV_SUPERFRAME_ITEMS,
         },
         BitReadBuffer,
     };
@@ -514,15 +512,19 @@ mod test {
     }
 
     #[test]
-    fn model_is_valid() {
+    fn spf_model_validity() {
         for start in [0, 750, 2 * 750, 16 * 750] {
             let spf = GpsQzssLnavSuperframe::model(start);
 
             assert_eq!(spf.week_transmission_time_s(), start);
-            assert_eq!(spf.frames().count(), GPS_LNAV_SUPERFRAME_ITEMS);
+            assert_eq!(
+                spf.frames().count(),
+                GPS_LNAV_SUPERFRAME_ITEMS,
+                "invalid number of page"
+            );
 
-            // every subframe knows its page
             for (page, frame) in spf.pages() {
+                // SBF know their pagination
                 // assert_eq!(frame.eph_1().page_number(), page);
                 // assert_eq!(frame.eph_2().page_number(), page);
                 // assert_eq!(frame.eph_3().page_number(), page);
@@ -541,20 +543,23 @@ mod test {
 
     // #[test]
     // fn reciprocal() {
-    //     let message = GpsQzssLnavSuperframe::model(750 * 7);
-    //     let bytes = encode(&message);
+    //     for tow_s in [0, 750, 750 * 7, 750 * 9] {
+    //         let message = GpsQzssLnavSuperframe::model(tow_s);
+    //         let bytes = encode(&message);
 
-    //     // 125 contiguous subframes, each starting with the preamble
-    //     for k in 0..GPS_QZSS_MESSAGE_FRAMES {
-    //         assert_eq!(read_bits(&bytes, k * GPS_LNAV_FRAME_BITS, 8), Some(0x8B));
+    //         // 125 contiguous subframes, each starting with the preamble
+    //         for k in 0..GPS_LNAV_SUPERFRAME_ITEMS * GPS_LNAV_FRAME_ITEMS {
+    //             assert_eq!(read_bits(&bytes, k * GPS_LNAV_SUBFRAME_BITS, 8), Some(0x8B));
+    //         }
+
+    //         assert_eq!(bytes.len(), GPS_LNAV_SUPERFRAME_BYTES);
+
+    //         let decoded = GpsQzssLnavSuperframe::decode(&bytes).unwrap();
+    //         assert_eq!(decoded, message);
+
+    //         // bit exact
+    //         assert_eq!(encode(&decoded), bytes);
     //     }
-
-    //     let decoded = GpsQzssLnavSuperframe::decode(&bytes).unwrap();
-    //     assert_eq!(decoded, message);
-    //     decoded.validate().unwrap();
-
-    //     // bit exact
-    //     assert_eq!(encode(&decoded), bytes);
     // }
 
     // #[test]
