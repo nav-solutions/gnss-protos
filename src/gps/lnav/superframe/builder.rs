@@ -1,52 +1,48 @@
 //! GPS 12'30" message (25 pages of 5 subframes)
 
-use crate::gps::lnav::{
-    GpsQzssLnavFrame, GpsQzssLnavSubframe, GpsQzssLnavSubframeId, GpsQzssLnavSuperframe,
-    GPS_LNAV_FRAME_ITEMS, GPS_LNAV_SUBFRAME_DURATION_S, GPS_LNAV_SUPERFRAME_DURATION_S,
-    GPS_LNAV_SUPERFRAME_ITEMS,
+use crate::{
+    constants::SECONDS_PER_WEEK,
+    gps::lnav::{
+        GpsQzssLnavFrame, GpsQzssLnavSubframe, GpsQzssLnavSuperframe, GPS_LNAV_FRAME_ITEMS,
+        GPS_LNAV_SUBFRAME_DURATION_S, GPS_LNAV_SUPERFRAME_DURATION_S, GPS_LNAV_SUPERFRAME_ITEMS,
+    },
 };
 
-// #[cfg(feature = "log")]
-// use log::error;
+#[cfg(feature = "log")]
+use log::error;
 
-const TOTAL_SUBFRAMES: usize = GPS_LNAV_SUPERFRAME_ITEMS * GPS_LNAV_FRAME_ITEMS;
+/// Total number of subframes in a 12'30" period
+pub(crate) const TOTAL_SUBFRAMES: usize = GPS_LNAV_SUPERFRAME_ITEMS * GPS_LNAV_FRAME_ITEMS;
 
-/// [GpsQzssLnavSuperframeBuilder] collects a [GpsQzssFrame]s (30s cycles) consecutively,
-/// and aligns itself to the Page-1 in the frame pagination.
-/// Therefore, the resulting super frame is correctly aligned and starts
-/// with Page-1 EPH-1.
+/// [GpsQzssLnavSuperframeBuilder] collects [GpsQzssLnavSubframe]s (6s) or
+/// [GpsQzssLnavFrame]s (30s) consecutively, and aligns itself to EPH-1 of Page-1
+/// of the almanach pagination. Therefore, the resulting [GpsQzssLnavSuperframe]
+/// is correctly aligned and starts with Page-1 EPH-1.
+///
+/// The builder verifies both the subframe class progression (EPH-1 to ALM-5)
+/// and the temporal progression (continuous time of week). Any discontinuity
+/// drops the current collection and the builder waits for the next Page-1 EPH-1.
 ///
 /// ```
-/// use gnss_protos::gps::{
-///     GpsQzssSubframe,
-///     GpsQzssHow,
-///     GpsQzssLnavSuperframeBuilder,
+/// use gnss_protos::gps::lnav::{
+///     GpsQzssLnavHow, GpsQzssLnavSubframe, GpsQzssLnavSuperframeBuilder,
 /// };
 ///
-/// // reads one of our real-world data stream
-/// // each file contains several 12'30s
-/// // this example demonstrates GpsQzssLnavSuperframeBuilder did
-/// // synchronize correctly to EPH-1 page-1
-///
-/// todo
-///
-/// let mut builder = GpsQzssMessageBuilder::default();
+/// let mut builder = GpsQzssLnavSuperframeBuilder::default();
 ///
 /// // EPH-1 at the beginning of the week: page 1
-/// let frame = GpsQzssFrame::default()
-///     .with_hand_over_word(GpsQzssHow::default().with_tow_seconds(6));
+/// let sbf = GpsQzssLnavSubframe::default()
+///     .with_hand_over_word(GpsQzssLnavHow::ephemeris1().with_tow_seconds(6));
 ///
-/// assert!(frame.starts_rotation());
-/// assert!(builder.push(frame).is_none());
-/// assert_eq!(builder.len(), 1);
+/// assert!(sbf.starts_superframe_period());
+/// assert!(builder.push_sbf(sbf).is_none());
+/// assert_eq!(builder.total_subframes(), 1);
+/// assert_eq!(builder.seconds_to_end_of_period(), Some(744));
 /// ```
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GpsQzssLnavSuperframeBuilder {
-    // number of frames currently collected
+    // number of subframes currently collected
     sbf: usize,
-
-    // last SBF kind collected
-    last_id: Option<GpsQzssLnavSubframeId>,
 
     // subframe buffer
     buffer: [GpsQzssLnavSubframe; TOTAL_SUBFRAMES],
@@ -56,36 +52,37 @@ impl Default for GpsQzssLnavSuperframeBuilder {
     fn default() -> Self {
         Self {
             sbf: 0,
-            last_id: None,
             buffer: [GpsQzssLnavSubframe::default(); TOTAL_SUBFRAMES],
         }
     }
 }
 
 impl GpsQzssLnavSuperframeBuilder {
-    // Use this method to collected several [GpsQzssLnavSuperframe]s in a row,
-    // using the same builder without reallocation.
+    /// Drops the current collection: the builder will wait for the next Page-1 EPH-1.
+    /// You don't have to call this once a [GpsQzssLnavSuperframe] has been returned,
+    /// the builder resets itself.
     pub fn reset(&mut self) {
         self.sbf = 0;
-        self.last_id = None;
     }
 
-    // /// Returns true if `next` immediately follows `previous` in the GPS/QZSS stream.
-    // fn follows(previous: &GpsQzssFrame, next: &GpsQzssFrame) -> bool {
+    /// Returns true if `next` immediately follows `previous` in a GPS/QZSS stream:
+    /// next subframe ID (ALM-5 is followed by EPH-1) and time of week incremented by 6s
+    /// (rolling over at the end of the week).
+    pub fn follows(previous: &GpsQzssLnavSubframe, next: &GpsQzssLnavSubframe) -> bool {
+        let expected_id = previous.how.sbf_id.encode() % GPS_LNAV_FRAME_ITEMS as u8 + 1;
 
-    //     let expected_id = self.last_id.encode() % GPS_FRAME_ITEMS as u8 + 1;
-
-    //     next.subframe.frame_id().encode() == expected_id
-    //         && next.transmission_time_s()
-    //             == (previous.transmission_time_s() + GPS_SUBFRAME_DURATION_S) % SECONDS_PER_WEEK
-    // }
+        next.how.sbf_id.encode() == expected_id
+            && next.week_transmission_time_s()
+                == (previous.week_transmission_time_s() + GPS_LNAV_SUBFRAME_DURATION_S)
+                    % SECONDS_PER_WEEK
+    }
 
     /// Returns the total of subframes (6s messages) collected so far.
     pub fn total_subframes(&self) -> usize {
         self.sbf
     }
 
-    /// Returns the total of frames (30s messages) collected so far.
+    /// Returns the total of complete frames (30s messages) collected so far.
     pub fn total_frames(&self) -> usize {
         self.sbf / GPS_LNAV_FRAME_ITEMS
     }
@@ -96,7 +93,7 @@ impl GpsQzssLnavSuperframeBuilder {
     }
 
     /// Returns total number of seconds remaining before the super frame completes
-    /// (recording of ALM-5 page 25).
+    /// (end of the recording of ALM-5 page 25), or None if not locked yet.
     pub fn seconds_to_end_of_period(&self) -> Option<u32> {
         if self.sbf == 0 {
             None
@@ -105,58 +102,73 @@ impl GpsQzssLnavSuperframeBuilder {
         }
     }
 
-    /// Use this method when working at the [GpsQzssSubframe] (GPS/QZSS LNAV 6s core element).
-    /// Method returns [GpsQzssLnavSuperframe] if the builder has been locked for 124 subframes
-    /// and this last subframe completes a 12'30" period.
+    /// Use this method when working at the [GpsQzssLnavSubframe] level (GPS/QZSS LNAV 6s core element).
+    /// Returns a [GpsQzssLnavSuperframe] when this subframe completes a 12'30" period
+    /// (ALM-5 of page 25), that started with EPH-1 of page 1, without discontinuity.
     ///
-    /// This is most convenient when working with our [GpsQzssDecoder] and your application
-    /// intends to collect 12'30s periods.
+    /// This is most convenient when working with our [crate::gps::lnav::GpsQzssLnavSubfDecoder]
+    /// and your application intends to collect 12'30s periods.
     pub fn push_sbf(&mut self, sbf: GpsQzssLnavSubframe) -> Option<GpsQzssLnavSuperframe> {
+        if sbf.starts_superframe_period() {
+            // (re)locks to Page-1 EPH-1. This also handles the last period of the week,
+            // which is interrupted after 10 pages (604800 is not a multiple of 750).
+            self.buffer[0] = sbf;
+            self.sbf = 1;
+            return None;
+        }
+
         if self.sbf == 0 {
-            // waits for EPH-1 Page-1
-            if sbf.starts_superframe_period() {
-                self.buffer[self.sbf] = sbf;
-                self.last_id = Some(sbf.how.sbf_id);
-                self.sbf = 1;
-            }
-            None
-        } else {
-            let last_id = self.last_id.unwrap();
+            // waiting for Page-1 EPH-1
+            return None;
+        }
 
-            let expected_id =
-                GpsQzssLnavSubframeId::decode((last_id.encode() + 1) % GPS_LNAV_FRAME_ITEMS as u8)
-                    .unwrap();
+        if !Self::follows(&self.buffer[self.sbf - 1], &sbf) {
+            // sequence broken
+            self.reset();
+            return None;
+        }
 
-            if sbf.how.sbf_id != expected_id {
-                // breaks sequence
-                self.reset();
+        self.buffer[self.sbf] = sbf;
+        self.sbf += 1;
+
+        if self.sbf < TOTAL_SUBFRAMES {
+            return None;
+        }
+
+        // last ALM-5 of the 12'30" period
+        self.reset();
+
+        let mut frames = [GpsQzssLnavFrame::default(); GPS_LNAV_SUPERFRAME_ITEMS];
+
+        for (page, frame) in frames.iter_mut().enumerate() {
+            let mut slice = [GpsQzssLnavSubframe::default(); GPS_LNAV_FRAME_ITEMS];
+            slice.copy_from_slice(
+                &self.buffer[page * GPS_LNAV_FRAME_ITEMS..(page + 1) * GPS_LNAV_FRAME_ITEMS],
+            );
+
+            // cannot fail: the class progression has been verified
+            *frame = GpsQzssLnavFrame::from_slice(slice).ok()?;
+        }
+
+        match GpsQzssLnavSuperframe::from_frame_slice(frames) {
+            Ok(spf) => Some(spf),
+            Err(_e) => {
+                #[cfg(feature = "log")]
+                error!("(GPS/QZSS) invalid 12'30\" period: {}", _e);
                 None
-            } else {
-                // valid sequence
-
-                // guards against corrupted streams
-                self.sbf = (self.sbf + 1) % TOTAL_SUBFRAMES;
-
-                if sbf.ends_superframe_period() {
-                    // last ALM5 in 12'30"
-                    // -> terminates sequence
-                    self.reset();
-                    None
-                } else {
-                    None
-                }
-            }
+            },
         }
     }
 
     /// Use this method if your decoding process works at the 30s cycle scale,
-    /// otherwise prefer [Self::push_subframe], especially when working with our
-    /// [GpsQzssDecoder].
+    /// otherwise prefer [Self::push_sbf], especially when working with our
+    /// [crate::gps::lnav::GpsQzssLnavSubfDecoder].
     pub fn push_frame(&mut self, frame: GpsQzssLnavFrame) -> Option<GpsQzssLnavSuperframe> {
-        let _ = self.push_sbf(*frame.eph_1())?;
-        let _ = self.push_sbf(*frame.eph_2())?;
-        let _ = self.push_sbf(*frame.eph_3())?;
-        let _ = self.push_sbf(*frame.alm_4())?;
+        // only ALM-5 may complete a period
+        let _ = self.push_sbf(*frame.eph_1());
+        let _ = self.push_sbf(*frame.eph_2());
+        let _ = self.push_sbf(*frame.eph_3());
+        let _ = self.push_sbf(*frame.alm_4());
         self.push_sbf(*frame.alm_5())
     }
 }
