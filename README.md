@@ -73,9 +73,15 @@ previously decoded or about to transmit, 20460 chips per data bit, 1.023 MHz
 Provided examples
 =================
 
-- examples/parse_gps_lnav.rs: `gps` feature, prints all GPS/QZSS L1 C/A frames
-decoded from local file or stdin
-- examples/parse_gal_inav.rs: `galileo` feature, prints all Galileo INAV frames
+- *examples/parse_gps_lnav.rs*: `gps` feature, prints all GPS/QZSS L1 C/A frames
+decoded from local file or stdin. Use it to browse your GPS/QZSS raw files:
+
+```bash
+cargo build --release --examples
+RUST_LOG=debug ./target/release/examples/parse_gps_lnav_bin -i data/GPS/esbcdnk_g15.bin
+```
+
+- *examples/parse_gal_inav.rs*: `galileo` feature, prints all Galileo INAV frames
 decoded from local file or stdin
 
 GPS / QZSS
