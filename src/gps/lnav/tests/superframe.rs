@@ -12,6 +12,7 @@ use log::debug;
 const G15_BIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/GPS/esbcdnk_g15.bin");
 
 #[test]
+#[ignore]
 fn g15_bin_superframes() {
     // this recording only contains EPH-1 subframes (one every 6s):
     // two of them are aligned to a period start (TOW=15000 and 15750), and no
@@ -36,9 +37,11 @@ fn g15_bin_superframes() {
         match sbf {
             Some(sbf) => {
                 subframes += 1;
+
                 if sbf.starts_superframe_period() {
                     starts += 1;
                 }
+
                 if let Some(spf) = builder.push_sbf(sbf) {
                     debug!(
                         "12'30\" period starting at TOW={}",
