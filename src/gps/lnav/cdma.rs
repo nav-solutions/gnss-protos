@@ -8,10 +8,10 @@ use crate::{
 #[cfg(doc)]
 use crate::gps::lnav::{GpsQzssLnavFrame, GpsQzssLnavSuperframe};
 
-const CODE_LEN: usize = 1023;
 const CHIP_RATE: usize = 1_023_000;
 const DATA_RATE: usize = 50;
 const CODES_PER_BIT: usize = 20;
+const CODE_LEN: usize = 1023;
 
 pub const GPS_L1_CA_CHIPS_PER_BIT: usize = CODES_PER_BIT * CODE_LEN;
 
@@ -61,6 +61,8 @@ const QZSS_FIRST_PRN: u8 = 193;
 ///         GPS_LNAV_SUBFRAME_BITS,
 ///         GPS_L1_CA_CHIPS_PER_BIT,
 ///     },
+///     Message,
+///     Modulation,
 /// };
 ///
 /// // 1. generate dumumy SBF
@@ -73,16 +75,16 @@ const QZSS_FIRST_PRN: u8 = 193;
 /// // GPS/QZSS works one bit at a time
 /// let mut bits = [0u8; 38];
 ///
-/// sbf.encode(&mut bits, 0).unwrap();
+/// sbf.encode(&mut bits).unwrap();
 ///
 /// // 2. C/A spreading like SV25
-/// let modulator = GpsQzssLnavModulator::new(25)
+/// let modulator = GpsQzssLnavModulator::from_satellite_id(25)
 ///     .unwrap();
 ///
 /// let mut chips = vec![0i8; GPS_LNAV_SUBFRAME_BITS * GPS_L1_CA_CHIPS_PER_BIT];
 ///
-/// let size = modulator.modulate(&bits, 0, GPS_SUBFRAME_BITS, &mut chips)
-///     .unrap();
+/// let size = modulator.modulate(&bits, 0, GPS_LNAV_SUBFRAME_BITS, &mut chips)
+///     .unwrap();
 ///
 /// // 6 seconds of signal @ 1023kHz
 /// assert_eq!(size, 6 * 1_023_000);
@@ -200,24 +202,42 @@ impl Modulation for GpsQzssLnavModulator {
 
     /// Example:
     /// ```
-    /// use gnss_protos::{GpsQzssFrame, GpsQzssLnavModulator};
+    /// use gnss_protos::{
+    ///     gps::lnav::{
+    ///         GpsQzssLnavFrame,
+    ///         GpsQzssLnavModulator,
+    ///         GPS_LNAV_FRAME_BYTES,
+    ///         GPS_L1_CA_CHIPS_PER_BIT,
+    ///     },
+    ///     Message,
+    ///     Modulation,
+    /// };
     ///
-    /// let mut tx = [0; 1024]; // at least 300 bits =37.5bytes
+    /// // in this example we create a 30s GPS SV25 burst
+    /// // this is the minimal size to allocate the burst
+    /// let mut raw = [0; GPS_LNAV_FRAME_BYTES];
+    ///
+    /// // total size after scrambling
+    /// let mut tx  = [0; GPS_LNAV_FRAME_BYTES * GPS_L1_CA_CHIPS_PER_BIT];
     ///
     /// // preset and deploy a modulator
-    /// let mut modulator = GpsQzssLnavModulator::from_satellite_id(25);
+    /// let mut modulator = GpsQzssLnavModulator::from_satellite_id(25)
+    ///     .unwrap();
     ///
-    /// // create a fancy GPS/QZSS frame
-    /// let frame = GpsQzssFrame::default();
+    /// // create a fancy burst full of zeros
+    /// let frame = GpsQzssLnavFrame::default();
     ///
-    /// // encode as bit stream ("readable", incompatible with transmission)
-    /// let encoded = frame.encode_raw();
+    /// // encode burst
+    /// frame.encode(&mut raw).unwrap();
     ///
-    /// // CDMA scramble this buffer
-    /// let modulated = modulator.modulate(&encoded, encoded.len(), &mut tx);
+    /// // CDMA scrambling
+    /// let modulated = modulator.modulate(&raw, raw.len(), raw.len(), &mut tx)
+    ///     .unwrap_or_else(|e| {
+    ///         panic!("CDMA scrambling failed with: {}", e);
+    ///     });
     ///
     /// if modulated > 0 {
-    ///     // we do not supported partial modulation,
+    ///     // we do not support partial modulation,
     ///     // so at this point you know the complete frame was modulated (1024 >37.5)
     /// }
     /// ```
