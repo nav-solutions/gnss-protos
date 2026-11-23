@@ -4,7 +4,8 @@ use crate::{
         GpsError, GpsQzssLnavHow, GpsQzssLnavTelemetry, GPS_LNAV_FRAME_DURATION_S,
         GPS_LNAV_INVERTED_PREAMBLE_BYTE, GPS_LNAV_PREAMBLE_BYTE, GPS_LNAV_SUBFRAME_BITS,
         GPS_LNAV_SUBFRAME_BYTES, GPS_LNAV_SUBFRAME_DATA_BYTES, GPS_LNAV_SUBFRAME_DURATION_S,
-        GPS_LNAV_SUBFRAME_WORDS, GPS_LNAV_SUPERFRAME_ITEMS, GPS_LNAV_WORD_BITS,
+        GPS_LNAV_SUBFRAME_WORDS, GPS_LNAV_SUPERFRAME_DURATION_S, GPS_LNAV_SUPERFRAME_ITEMS,
+        GPS_LNAV_WORD_BITS,
     },
     Message,
 };
@@ -459,12 +460,11 @@ impl GpsQzssLnavSubframe {
 
     /// Returns true if this subframe is the very first subframe (EPH-1 of page 1)
     /// of a 12'30" superframe.
+    /// Note that the last period of the week (starting at 604500s) also starts with EPH-1 of page 1,
+    /// but is interrupted after 10 pages and never completes.
     pub fn starts_superframe_period(&self) -> bool {
-        // let start = self.week_transmission_time_s();
-        // self.subframe.frame_id() == GpsQzssLnavSubframeId::Ephemeris1
-        //     && start % GPS_LNAV_SUPERFRAME_DURATION_S == 0
-        //     && start + GPS_LNAV_SUPERFRAME_DURATION_S <= SECONDS_PER_WEEK
-        self.subframe.frame_id() == GpsQzssLnavSubframeId::Ephemeris1 && self.page_number() == 1
+        self.subframe.frame_id() == GpsQzssLnavSubframeId::Ephemeris1
+            && self.week_transmission_time_s() % GPS_LNAV_SUPERFRAME_DURATION_S == 0
     }
 
     /// Returns true if this subframe terminates a 12'30s superframe period.
