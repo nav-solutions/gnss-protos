@@ -1,6 +1,6 @@
 use hifitime::prelude::{Duration, Epoch, TimeScale, TimeSeries};
 
-use crate::gps::lnav::{GPS_LNAV_PERIOD_DURATION, GPS_LNAV_SUPERFRAME_DURATION_S};
+use crate::gps::lnav::GPS_LNAV_PERIOD_DURATION;
 
 /// Helper function to generate a temporal arc, expressed as [TimeSeries],
 /// which is synchronous and aligned to the GPS publication period (12'30").

@@ -8,6 +8,9 @@ use crate::{
 
 use bitbuffer::{BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream};
 
+#[cfg(doc)]
+use hifitime::TimeScale;
+
 /// [GpsQzssLnavSubframe1] Ephemeris #1 frame interpretation.
 #[derive(Debug, Default, Copy, Clone)]
 pub struct GpsQzssLnavSubframe1 {
