@@ -49,16 +49,91 @@ mod test {
 
     #[test]
     fn test_gps_periods() {
-        for (start_utc_str, expected_t0_str) in
-            [("1980-01-06T00:00:00 UTC", "1980-01-06T00:00:00 UTC")]
-        {
+        for (start_utc_str, expected_t0_str, expected_last_str) in [
+            (
+                "1980-01-06T00:00:00 UTC",
+                "1980-01-06T00:00:00 UTC",
+                "1980-01-06T00:12:30 UTC",
+            ),
+            (
+                "1980-01-06T00:05:00 UTC",
+                "1980-01-06T00:00:00 UTC",
+                "1980-01-06T00:12:30 UTC",
+            ),
+            (
+                "1980-01-06T00:06:00 UTC",
+                "1980-01-06T00:00:00 UTC",
+                "1980-01-06T00:12:30 UTC",
+            ),
+            (
+                "1980-01-06T00:06:14 UTC",
+                "1980-01-06T00:00:00 UTC",
+                "1980-01-06T00:12:30 UTC",
+            ),
+            (
+                "1980-01-06T00:06:15 UTC",
+                "1980-01-06T00:12:30 UTC",
+                "1980-01-06T00:12:30 UTC",
+            ),
+            (
+                "1980-01-06T00:12:29 UTC",
+                "1980-01-06T00:12:30 UTC",
+                "1980-01-06T00:25:00 UTC",
+            ),
+            (
+                "1980-01-06T00:12:16 UTC",
+                "1980-01-06T00:12:30 UTC",
+                "1980-01-06T00:25:00 UTC",
+            ),
+            (
+                "1985-12-13T12:34:55 UTC",
+                "1985-12-13T12:34:56 UTC",
+                "1985-12-13T12:47:26 UTC",
+            ),
+            (
+                "1995-12-09T01:10:33 UTC",
+                "1995-12-09T01:12:20 UTC",
+                "1995-12-09T01:24:50 UTC",
+            ),
+            (
+                "1999-08-21T23:52:33 UTC",
+                "1999-08-21T23:52:17 UTC",
+                "1999-08-22T00:04:47 UTC",
+            ),
+            (
+                "2000-01-01T00:00:00 UTC",
+                "1999-12-31T23:59:47 UTC",
+                "2000-01-01T00:12:17 UTC",
+            ),
+            (
+                "2005-01-22T00:38:00 UTC",
+                "2005-01-22T00:42:17 UTC",
+                "2005-01-22T00:54:47 UTC",
+            ),
+            (
+                "2019-04-07T00:01:12 UTC",
+                "2019-04-06T23:57:12 UTC",
+                "2019-04-07T00:09:42 UTC",
+            ),
+            (
+                "2026-11-28T12:28:12 UTC",
+                "2026-11-28T12:22:12 UTC",
+                "2026-11-28T12:34:42 UTC",
+            ),
+        ] {
             let start_utc = Epoch::from_str(start_utc_str).unwrap();
             let expected_t0 = Epoch::from_str(expected_t0_str).unwrap();
+            let expected_last = Epoch::from_str(expected_last_str).unwrap();
+
             let expected_t0_gpst = expected_t0.to_time_scale(TimeScale::GPST);
+            let expected_last_gpst = expected_last.to_time_scale(TimeScale::GPST);
 
             let arc = gps_temporal_arc(start_utc, GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second);
 
-            assert_eq!(arc.first_epoch(), expected_t0_gpst);
+            let (first, last) = (arc.first_epoch(), arc.last_epoch());
+
+            assert_eq!(first, expected_t0_gpst);
+            assert_eq!(last, expected_last_gpst);
         }
     }
 }
