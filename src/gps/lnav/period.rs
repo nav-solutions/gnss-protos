@@ -12,9 +12,9 @@ use crate::gps::lnav::GPS_LNAV_PERIOD_DURATION;
 /// GPST period starting point.
 ///
 /// - duration: [Duration] of the output arc
-pub fn gps_temporal_arc(start: Epoch, duration: Duration) -> TimeSeries {
+pub fn gps_temporal_arc(start: Epoch, duration: Duration, step: Duration) -> TimeSeries {
     let start = start.to_time_scale(TimeScale::GPST);
-    synchronous_temporal_arc(start, duration)
+    synchronous_temporal_arc(start, duration, step)
 }
 
 /// Helper function to generate a temporal arc, expressed as [TimeSeries],
@@ -22,18 +22,18 @@ pub fn gps_temporal_arc(start: Epoch, duration: Duration) -> TimeSeries {
 /// Considering QZSST is stirred to GPST, this will produce the same instants,
 /// but this method expresses all instants in QZSST instead.
 /// Read [gps_temporal_arc] for more information.
-pub fn qzss_temporal_arc(start: Epoch, duration: Duration) -> TimeSeries {
+pub fn qzss_temporal_arc(start: Epoch, duration: Duration, step: Duration) -> TimeSeries {
     let start = start.to_time_scale(TimeScale::QZSST);
-    synchronous_temporal_arc(start, duration)
+    synchronous_temporal_arc(start, duration, step)
 }
 
 /// Generates correct 12'30" temporal arc starting point
 /// which must be expressed in correct [TimeScale]
-fn synchronous_temporal_arc(start: Epoch, duration: Duration) -> TimeSeries {
+fn synchronous_temporal_arc(start: Epoch, duration: Duration, step: Duration) -> TimeSeries {
     let end = start + duration;
     let start = start.round(GPS_LNAV_PERIOD_DURATION);
     let end = end.round(GPS_LNAV_PERIOD_DURATION);
-    TimeSeries::inclusive(start, end, duration)
+    TimeSeries::inclusive(start, end, step)
 }
 
 #[cfg(test)]
@@ -125,7 +125,11 @@ mod test {
             let expected_t0_gpst = expected_t0.to_time_scale(TimeScale::GPST);
             let expected_last_gpst = expected_last.to_time_scale(TimeScale::GPST);
 
-            let arc = gps_temporal_arc(start_utc, GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second);
+            let arc = gps_temporal_arc(
+                start_utc,
+                GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second,
+                1.0 * Unit::Second,
+            );
 
             let (first, last) = (arc.first_epoch(), arc.last_epoch());
 
@@ -144,7 +148,11 @@ mod test {
             assert_eq!(last, expected_last_gpst);
 
             // verifies QZSS aswell, same instants because both timescale are "identical"
-            let arc = qzss_temporal_arc(start_utc, GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second);
+            let arc = qzss_temporal_arc(
+                start_utc,
+                GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second,
+                1.0 * Unit::Second,
+            );
 
             let (first, last) = (arc.first_epoch(), arc.last_epoch());
 
