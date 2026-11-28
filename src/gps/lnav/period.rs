@@ -33,7 +33,7 @@ fn synchronous_temporal_arc(start: Epoch, duration: Duration) -> TimeSeries {
     let end = start + duration;
     let start = start.round(GPS_LNAV_PERIOD_DURATION);
     let end = end.round(GPS_LNAV_PERIOD_DURATION);
-    TimeSeries::inclusive(start, end, GPS_LNAV_PERIOD_DURATION)
+    TimeSeries::inclusive(start, end, duration)
 }
 
 #[cfg(test)]
