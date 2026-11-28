@@ -238,9 +238,10 @@ fn ublox() {
     assert_eq!(frame.how.sbf_id, GpsQzssLnavSubframeId::Ephemeris3);
 }
 
-#[test]
-fn parse_reconstructed_g15_unsync_subf3() {
-    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/UNSYNC/ESBC00DNK_G15_eph3.bin");
+fn run_test(fullpath: &str, items: usize) {
+    let mut count = 0;
+
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new(fullpath);
     while let Some(subf3) = decoder.parse_next() {
         assert_eq!(
             subf3.how.sbf_id,
@@ -251,21 +252,16 @@ fn parse_reconstructed_g15_unsync_subf3() {
             .subframe
             .as_eph3()
             .unwrap_or_else(|| panic!("found invalid SUBF"));
+        count += 1;
     }
+    assert_eq!(count, items);
 }
 
 #[test]
+fn parse_reconstructed_g15_unsync_subf3() {
+    run_test("data/GPS/UNSYNC/ESBC00DNK_G15_eph3.bin", 2398);
+}
+#[test]
 fn parse_reconstructed_g15_sync_subf3() {
-    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/SYNC/ESBC00DNK_G15_eph3.bin");
-    while let Some(subf3) = decoder.parse_next() {
-        assert_eq!(
-            subf3.how.sbf_id,
-            GpsQzssLnavSubframeId::Ephemeris3,
-            "found invalid SUBF"
-        );
-        let _ = subf3
-            .subframe
-            .as_eph3()
-            .unwrap_or_else(|| panic!("found invalid SUBF"));
-    }
+    run_test("data/GPS/SYNC/ESBC00DNK_G15_eph3.bin", 2398);
 }

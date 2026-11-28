@@ -842,9 +842,10 @@ fn generate_bin_file() {
 //     }
 // }
 
-#[test]
-fn parse_reconstructed_g15_unsync_subf1() {
-    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/UNSYNC/ESBC00DNK_G15_eph1.bin");
+fn run_test(fullpath: &str, items: usize) {
+    let mut count = 0;
+
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new(fullpath);
     while let Some(subf1) = decoder.parse_next() {
         assert_eq!(
             subf1.how.sbf_id,
@@ -855,21 +856,16 @@ fn parse_reconstructed_g15_unsync_subf1() {
             .subframe
             .as_eph1()
             .unwrap_or_else(|| panic!("found invalid SUBF"));
+        count += 1;
     }
+    assert_eq!(count, items);
 }
 
 #[test]
+fn parse_reconstructed_g15_unsync_subf1() {
+    run_test("data/GPS/UNSYNC/ESBC00DNK_G15_eph1.bin", 2398);
+}
+#[test]
 fn parse_reconstructed_g15_sync_subf1() {
-    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/SYNC/ESBC00DNK_G15_eph1.bin");
-    while let Some(subf1) = decoder.parse_next() {
-        assert_eq!(
-            subf1.how.sbf_id,
-            GpsQzssLnavSubframeId::Ephemeris1,
-            "found invalid SUBF"
-        );
-        let _ = subf1
-            .subframe
-            .as_eph1()
-            .unwrap_or_else(|| panic!("found invalid SUBF"));
-    }
+    run_test("data/GPS/SYNC/ESBC00DNK_G15_eph1.bin", 2398);
 }

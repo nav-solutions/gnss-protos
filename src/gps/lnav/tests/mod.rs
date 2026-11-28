@@ -2,8 +2,8 @@
 //! through the [crate::Message] trait, bitbuffer streams and the [crate::gps::GpsQzssDecoder].
 
 use crate::gps::lnav::{
-    test_vectors::bytes_to_words, GpsQzssLnavSubfDecoder, GpsQzssLnavSubframe,
-    GPS_LNAV_SUBFRAME_BYTES,
+    test_vectors::bytes_to_words, GpsQzssLnavFrame, GpsQzssLnavFrameDecoder,
+    GpsQzssLnavSubfDecoder, GpsQzssLnavSubframe, GPS_LNAV_FRAME_BYTES, GPS_LNAV_SUBFRAME_BYTES,
 };
 use std::{fs::File, io::Read};
 
@@ -33,6 +33,13 @@ pub struct GpsQzssLnavSbfBinDecoder {
     buffer: [u8; GPS_LNAV_SUBFRAME_BYTES],
 }
 
+/// Structure to parse GPS/QZSS subframe from any binary file
+pub struct GpsQzssLnavFrameBinDecoder {
+    file: File,
+    decoder: GpsQzssLnavFrameDecoder,
+    buffer: [u8; GPS_LNAV_FRAME_BYTES],
+}
+
 impl GpsQzssLnavSbfBinDecoder {
     pub fn new(path: &str) -> Self {
         Self {
@@ -49,6 +56,28 @@ impl GpsQzssLnavSbfBinDecoder {
             Ok(_) => {
                 let (_, subf) = self.decoder.decode(&self.buffer, 0);
                 subf
+            },
+            Err(_) => None,
+        }
+    }
+}
+
+impl GpsQzssLnavFrameBinDecoder {
+    pub fn new(path: &str) -> Self {
+        Self {
+            buffer: [0; GPS_LNAV_FRAME_BYTES],
+            decoder: GpsQzssLnavFrameDecoder::default(),
+            file: File::open(path).unwrap_or_else(|e| {
+                panic!("failed to open file '{}': {}", path, e);
+            }),
+        }
+    }
+
+    pub fn parse_next(&mut self) -> Option<GpsQzssLnavFrame> {
+        match self.file.read_exact(&mut self.buffer) {
+            Ok(_) => {
+                let (_, frm) = self.decoder.decode(&self.buffer, 0);
+                frm
             },
             Err(_) => None,
         }

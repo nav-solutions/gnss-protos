@@ -3,13 +3,8 @@
 use crate::{
     gps::lnav::{
         test_vectors::{on_air, UBLOX_G25_STREAM},
-        // GpsQzssLnavSubframe,
-        // GpsQzssLnavSubframeId,
-        // GpsQzssLnavFrame,
-        GpsQzssLnavFrameBuilder,
-        GpsQzssLnavSubfDecoder,
-        GPS_LNAV_FRAME_ITEMS,
-        GPS_LNAV_WORD_BITS,
+        tests::GpsQzssLnavFrameBinDecoder,
+        GpsQzssLnavFrameBuilder, GpsQzssLnavSubfDecoder, GPS_LNAV_FRAME_ITEMS, GPS_LNAV_WORD_BITS,
     },
     tests::init_logger,
     BigEndian, BitWriteStream,
@@ -68,4 +63,23 @@ fn ublox_g25_stream() {
     }
     assert_eq!(frames, 18);
     assert_eq!(subframes, 18 * GPS_LNAV_FRAME_ITEMS + 4);
+}
+
+/// Verifies 30s burst (frames) rotation correctness
+fn run_30s_bin_burst_rotation_test(fullpath: &str, count: usize) {
+    let mut frames = 0;
+    let mut decoder = GpsQzssLnavFrameBinDecoder::new(fullpath);
+
+    while let Some(frame) = decoder.parse_next() {
+        debug!("parsed frame: {:?}", frame);
+        frames += 1;
+    }
+
+    assert_eq!(frames, count);
+}
+
+/// Verifies ESCB00DNK G15 (sync) burst correctness
+#[cfg(test)]
+fn parse_es() {
+    run_30s_bin_burst_rotation_test("data/GPS/SYNC/ESCB00DNK_G15.bin", 0);
 }

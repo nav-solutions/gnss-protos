@@ -8,8 +8,10 @@ use crate::{
 };
 
 mod builder;
+mod decoder;
 
 pub use builder::GpsQzssLnavFrameBuilder;
+pub use decoder::GpsQzssLnavFrameDecoder;
 
 use hifitime::{Epoch, NANOSECONDS_PER_SECOND};
 
