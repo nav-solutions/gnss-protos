@@ -30,6 +30,8 @@
 #[cfg(doc)]
 use crate::Message;
 
+use hifitime::{Duration, NANOSECONDS_PER_SECOND};
+
 /// GPS preamble (synchronization) byte
 pub const GPS_LNAV_PREAMBLE_BYTE: u8 = 0x8B;
 
@@ -97,6 +99,11 @@ pub const GPS_LNAV_SUPERFRAME_BYTES: usize = GPS_LNAV_SUPERFRAME_BITS / 8 + 1;
 pub const GPS_LNAV_SUPERFRAME_DURATION_S: u32 =
     GPS_LNAV_SUPERFRAME_ITEMS as u32 * GPS_LNAV_FRAME_DURATION_S;
 
+/// 750s = 12'30s = 25 frames
+pub const GPS_LNAV_PERIOD_DURATION: Duration = Duration::from_total_nanoseconds(
+    NANOSECONDS_PER_SECOND as i128 * GPS_LNAV_SUPERFRAME_DURATION_S as i128,
+);
+
 /// Data ID of the GPS / QZSS LNAV message (`01`), transmitted in subframes 4 and 5.
 /// Used when decoding or composing subframes 4 and 5.
 pub const GPS_LNAV_CONFIG_DID: u8 = 1;
@@ -107,6 +114,7 @@ mod errors;
 mod frame;
 mod health;
 mod how;
+mod period;
 mod subframe;
 mod superframe;
 mod tlm;
@@ -119,6 +127,7 @@ pub use errors::GpsError;
 pub use frame::*;
 pub use health::GpsQzssLnavSatelliteHealth;
 pub use how::GpsQzssLnavHow;
+pub use period::{gps_temporal_arc, qzss_temporal_arc};
 pub use subframe::*;
 pub use superframe::*;
 pub use tlm::GpsQzssLnavTelemetry;
