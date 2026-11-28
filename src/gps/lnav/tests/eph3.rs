@@ -3,7 +3,7 @@ use log::info;
 use crate::{
     gps::lnav::{
         test_vectors::{on_air, words_to_bytes, UBLOX_EPH3},
-        tests::assert_valid_subframe,
+        tests::{assert_valid_subframe, GpsQzssLnavSbfBinDecoder},
         GpsQzssLnavHow, GpsQzssLnavSubfDecoder, GpsQzssLnavSubframe, GpsQzssLnavSubframe3,
         GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId, GpsQzssLnavTelemetry,
         GPS_LNAV_SUBFRAME_BITS, GPS_LNAV_SUBFRAME_BYTES,
@@ -236,4 +236,36 @@ fn ublox() {
     assert!(!frame.how.alert);
     assert!(frame.how.anti_spoofing);
     assert_eq!(frame.how.sbf_id, GpsQzssLnavSubframeId::Ephemeris3);
+}
+
+#[test]
+fn parse_reconstructed_g15_unsync_subf3() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/UNSYNC/ESBC00DNK_G15_eph3.bin");
+    while let Some(subf3) = decoder.parse_next() {
+        assert_eq!(
+            subf3.how.sbf_id,
+            GpsQzssLnavSubframeId::Ephemeris3,
+            "found invalid SUBF"
+        );
+        let _ = subf3
+            .subframe
+            .as_eph3()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
+}
+
+#[test]
+fn parse_reconstructed_g15_sync_subf3() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/SYNC/ESBC00DNK_G15_eph3.bin");
+    while let Some(subf3) = decoder.parse_next() {
+        assert_eq!(
+            subf3.how.sbf_id,
+            GpsQzssLnavSubframeId::Ephemeris3,
+            "found invalid SUBF"
+        );
+        let _ = subf3
+            .subframe
+            .as_eph3()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
 }

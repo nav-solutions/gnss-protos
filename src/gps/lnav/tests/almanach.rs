@@ -3,7 +3,7 @@
 use crate::{
     gps::lnav::{
         test_vectors::{on_air, words_to_bytes, UBLOX_ALMANACH_PAGES, UBLOX_G25_STREAM},
-        tests::assert_valid_subframe,
+        tests::{assert_valid_subframe, GpsQzssLnavSbfBinDecoder},
         GpsQzssLnavSubfDecoder, GpsQzssLnavSubframe, GpsQzssLnavSubframe4, GpsQzssLnavSubframe5,
         GpsQzssLnavSubframeEnum, GpsQzssLnavSubframeId, GPS_LNAV_SUBFRAME_BITS,
         GPS_LNAV_SUBFRAME_BYTES, GPS_LNAV_WORD_BITS,
@@ -282,4 +282,68 @@ fn real_stream() {
         frames[3].subframe.frame_id(),
         GpsQzssLnavSubframeId::Almanach4
     );
+}
+
+#[test]
+fn parse_reconstructed_g15_unsync_alm4() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/UNSYNC/ESBC00DNK_G15_alm4.bin");
+    while let Some(subf4) = decoder.parse_next() {
+        assert_eq!(
+            subf4.how.sbf_id,
+            GpsQzssLnavSubframeId::Almanach4,
+            "found invalid SUBF"
+        );
+        let _ = subf4
+            .subframe
+            .as_alm4()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
+}
+
+#[test]
+fn parse_reconstructed_g15_unsync_alm5() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/UNSYNC/ESBC00DNK_G15_alm5.bin");
+    while let Some(subf5) = decoder.parse_next() {
+        assert_eq!(
+            subf5.how.sbf_id,
+            GpsQzssLnavSubframeId::Almanach5,
+            "found invalid SUBF"
+        );
+        let _ = subf5
+            .subframe
+            .as_alm5()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
+}
+
+#[test]
+fn parse_reconstructed_g15_sync_alm4() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/SYNC/ESBC00DNK_G15_alm4.bin");
+    while let Some(subf4) = decoder.parse_next() {
+        assert_eq!(
+            subf4.how.sbf_id,
+            GpsQzssLnavSubframeId::Almanach4,
+            "found invalid SUBF"
+        );
+        let _ = subf4
+            .subframe
+            .as_alm4()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
+}
+
+#[test]
+fn parse_reconstructed_g15_sync_alm5() {
+    let mut decoder = GpsQzssLnavSbfBinDecoder::new("data/GPS/SYNC/ESBC00DNK_G15_alm5.bin");
+    while let Some(subf5) = decoder.parse_next() {
+        assert_eq!(
+            subf5.how.sbf_id,
+            GpsQzssLnavSubframeId::Almanach5,
+            "found invalid SUBF"
+        );
+        let _ = subf5
+            .subframe
+            .as_alm5()
+            .unwrap_or_else(|| panic!("found invalid SUBF"));
+    }
 }

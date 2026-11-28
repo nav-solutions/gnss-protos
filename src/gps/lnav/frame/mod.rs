@@ -1,8 +1,8 @@
 //! GPS 30" message rotation
 use crate::{
     gps::lnav::{
-        GpsError, GpsQzssLnavSubframe, GpsQzssLnavSubframeId, GPS_LNAV_FRAME_BITS,
-        GPS_LNAV_FRAME_BYTES, GPS_LNAV_FRAME_ITEMS,
+        week_10b_unwrapping, GpsError, GpsQzssLnavSubframe, GpsQzssLnavSubframeId,
+        GPS_LNAV_FRAME_BITS, GPS_LNAV_FRAME_BYTES, GPS_LNAV_FRAME_ITEMS,
     },
     BigEndian, BitError, BitRead, BitReadStream, BitWrite, BitWriteStream, Message,
 };
@@ -10,6 +10,8 @@ use crate::{
 mod builder;
 
 pub use builder::GpsQzssLnavFrameBuilder;
+
+use hifitime::{Epoch, NANOSECONDS_PER_SECOND};
 
 /// [GpsQzssLnavFrame] represents a 30s rotation broadcasted by every satellite
 /// which consists in a rotation of EPH-1, 2, 3 then ALM4 and ALM5 subframe sequence.
@@ -68,6 +70,35 @@ impl GpsQzssLnavFrame {
     /// and concluding this 30s cycle.
     pub fn alm_5(&self) -> &GpsQzssLnavSubframe {
         &self.0[4]
+    }
+
+    /// Returns [Epoch] of transmission of SUBF1 (first bits composing this frame),
+    /// expressed in presented timescale.
+    ///
+    /// ## Input
+    ///
+    /// - t_ref: reference [Epoch] which must lie +/- 8 years from
+    /// true transmission time for this algorithm to work correctly.
+    /// You are expected to present either [TimeScale::GPST] or [TimeScale::QZSST]
+    /// but this not verified.
+    pub fn transmission_epoch(&self, t_ref: Epoch) -> Epoch {
+        let week = week_10b_unwrapping(t_ref, self.eph_1().subframe.as_eph1().unwrap().week);
+        let nanos = self.eph_1().week_transmission_time_s() as u64 * NANOSECONDS_PER_SECOND;
+        Epoch::from_time_of_week(week, nanos, t_ref.time_scale)
+    }
+
+    /// Returns [Epoch] of Issue of Ephemeris (IoE), expressed in [TimeScale::GPST] timescale.
+    /// You can transpose it to [Timescale::QZSST] if needed, they represent
+    /// the same instants because both timescales are identical "at all times".
+    ///
+    /// ## Input
+    ///
+    /// - t_ref: reference [Epoch] which must lie +/- 8 years from
+    /// true transmission time for this algorithm to work correctly.
+    pub fn epoch_of_ephemeris_issue(&self, t_ref: Epoch) -> Epoch {
+        let week = week_10b_unwrapping(t_ref, self.eph_1().subframe.as_eph1().unwrap().week);
+        let nanos = self.eph_2().subframe.as_eph2().unwrap().toe as u64 * NANOSECONDS_PER_SECOND;
+        Epoch::from_time_of_week(week, nanos, t_ref.time_scale)
     }
 
     /// Builds a [GpsQzssLnavFrame] correctly, if the burst sequence is correctly

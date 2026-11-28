@@ -1,9 +1,6 @@
-use hifitime::{
-    prelude::{Duration, Epoch, TimeScale, TimeSeries},
-    NANOSECONDS_PER_SECOND,
-};
+use hifitime::prelude::{Duration, Epoch, TimeScale, TimeSeries};
 
-use crate::gps::lnav::{GPS_LNAV_PERIOD_DURATION, GPS_LNAV_SUPERFRAME_DURATION_S};
+use crate::gps::lnav::GPS_LNAV_PERIOD_DURATION;
 
 /// Helper function to generate a temporal arc, expressed as [TimeSeries],
 /// which is synchronous and aligned to the GPS publication period (12'30").
@@ -132,7 +129,37 @@ mod test {
 
             let (first, last) = (arc.first_epoch(), arc.last_epoch());
 
+            assert_eq!(
+                first.time_scale,
+                TimeScale::GPST,
+                "expressed in invalid timescale"
+            );
             assert_eq!(first, expected_t0_gpst);
+
+            assert_eq!(
+                last.time_scale,
+                TimeScale::GPST,
+                "expressed in invalid timescale"
+            );
+            assert_eq!(last, expected_last_gpst);
+
+            // verifies QZSS aswell, same instants because both timescale are "identical"
+            let arc = qzss_temporal_arc(start_utc, GPS_LNAV_PERIOD_DURATION - 1.0 * Unit::Second);
+
+            let (first, last) = (arc.first_epoch(), arc.last_epoch());
+
+            assert_eq!(
+                first.time_scale,
+                TimeScale::QZSST,
+                "expressed in invalid timescale"
+            );
+            assert_eq!(first, expected_t0_gpst);
+
+            assert_eq!(
+                last.time_scale,
+                TimeScale::QZSST,
+                "expressed in invalid timescale"
+            );
             assert_eq!(last, expected_last_gpst);
         }
     }
